@@ -187,16 +187,31 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'FileShare <noreply@filesha
 
 
 # ── App Settings ───────────────────────────────────────────────────────────────
-
-FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
-
-MAX_FILE_SIZE_MB = int(os.getenv('MAX_FILE_SIZE_MB', 100))
+# ══════════════════════════════════════════════════════════════════════════════
+# FILE UPLOAD SETTINGS (Frontend feature: Per-user 1GB storage)
+# ══════════════════════════════════════════════════════════════════════════════
+ 
+# Maximum file size per upload (100MB)
+MAX_FILE_SIZE_MB = int(os.getenv('MAX_FILE_SIZE_MB', '100'))
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
-
-MAX_STORAGE_GB = int(os.getenv('MAX_STORAGE_GB', 1))
+ 
+# Per-user storage quota (1GB per user, not global)
+MAX_STORAGE_GB = int(os.getenv('MAX_STORAGE_GB', '1'))
 MAX_STORAGE_BYTES = MAX_STORAGE_GB * 1024 * 1024 * 1024
-
+ 
+# Password reset token expiry
 PASSWORD_RESET_EXPIRY_HOURS = 24
+ 
+# Frontend URL for share links in emails
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+ 
+# Share link expiry times (in hours)
+MIN_SHARE_EXPIRY_HOURS = 1
+MAX_SHARE_EXPIRY_HOURS = 30 * 24  # 30 days
+ 
+
+
+
 
 # Allowed file MIME types for upload
 ALLOWED_MIME_TYPES = {
@@ -229,6 +244,3 @@ ALLOWED_MIME_TYPES = {
     'text/xml',
     'application/xml',
 }
-
-
-
