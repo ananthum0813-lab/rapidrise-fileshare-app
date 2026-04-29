@@ -8,10 +8,11 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.exceptions import ValidationError
 
 from config.exceptions import success_response
 from .models import File
-from .serializers import FileSerializer, FileUploadSerializer, sanitize_filename, get_mime_type
+from .serializers import FileSerializer, sanitize_filename, get_mime_type
 from .permissions import IsFileOwner
 
 
@@ -28,27 +29,60 @@ class FileUploadView(APIView):
     def post(self, request):
         files = request.FILES.getlist('files')
         if not files:
-            from rest_framework.exceptions import ValidationError
             raise ValidationError({'files': 'No files provided.'})
 
-        serializer = FileUploadSerializer(data={'files': files}, context={'request': request})
-        serializer.is_valid(raise_exception=True)
+        user = request.user
+        
+        # Calculate current usage
+        used_bytes = File.objects.filter(
+            owner=user,
+            is_deleted=False
+        ).aggregate(total=Sum('file_size'))['total'] or 0
+        
+        total_allowed = settings.MAX_STORAGE_BYTES
+        available = total_allowed - used_bytes
 
         uploaded = []
+        errors = []
+
         for f in files:
-            record = File.objects.create(
-                owner=request.user,
-                original_name=sanitize_filename(f.name),
-                file=f,
-                file_size=f.size,
-                mime_type=get_mime_type(f),
-            )
-            uploaded.append(FileSerializer(record).data)
+            # Validate file size
+            if f.size > settings.MAX_FILE_SIZE_BYTES:
+                errors.append(f'{f.name}: Exceeds max size ({settings.MAX_FILE_SIZE_MB}MB)')
+                continue
+
+            # Validate user storage
+            if f.size > available:
+                errors.append(f'{f.name}: Not enough storage space')
+                continue
+
+            # Validate MIME type
+            mime_type = get_mime_type(f)
+            if mime_type not in settings.ALLOWED_MIME_TYPES:
+                errors.append(f'{f.name}: File type not allowed')
+                continue
+
+            try:
+                record = File.objects.create(
+                    owner=user,
+                    original_name=sanitize_filename(f.name),
+                    file=f,
+                    file_size=f.size,
+                    mime_type=mime_type,
+                )
+                uploaded.append(FileSerializer(record).data)
+                available -= f.size
+            except Exception as e:
+                errors.append(f'{f.name}: Upload failed - {str(e)}')
 
         return success_response(
-            data={'uploaded': uploaded, 'count': len(uploaded)},
-            message=f'{len(uploaded)} file(s) uploaded successfully.',
-            status_code=status.HTTP_201_CREATED,
+            data={
+                'uploaded': uploaded,
+                'errors': errors if errors else None,
+                'count': len(uploaded),
+            },
+            message=f'{len(uploaded)} file(s) uploaded successfully.' if uploaded else 'Upload failed.',
+            status_code=status.HTTP_201_CREATED if uploaded else status.HTTP_400_BAD_REQUEST,
         )
 
 
@@ -59,15 +93,18 @@ class FileListView(APIView):
     def get(self, request):
         qs = File.objects.filter(owner=request.user, is_deleted=False)
 
+        # Search
         search = request.query_params.get('search', '').strip()
         if search:
             qs = qs.filter(original_name__icontains=search)
 
+        # Ordering
         ordering = request.query_params.get('ordering', '-uploaded_at')
         valid_orderings = ['uploaded_at', '-uploaded_at', 'original_name', '-original_name', 'file_size', '-file_size']
         if ordering in valid_orderings:
             qs = qs.order_by(ordering)
 
+        # Pagination
         paginator = FilePagination()
         page = paginator.paginate_queryset(qs, request)
 
@@ -91,12 +128,15 @@ class FileDetailView(APIView):
         return obj
 
     def get(self, request, pk):
-        return success_response(data=FileSerializer(self.get_object(pk)).data)
+        """Get file details."""
+        file_obj = self.get_object(pk)
+        return success_response(data=FileSerializer(file_obj).data)
 
     def delete(self, request, pk):
-        file = self.get_object(pk)
-        name = file.original_name
-        file.delete_file()
+        """Delete a file (soft delete)."""
+        file_obj = self.get_object(pk)
+        name = file_obj.original_name
+        file_obj.delete_file()
         return success_response(message=f"'{name}' deleted successfully.")
 
 
@@ -105,28 +145,33 @@ class FileDownloadView(APIView):
     permission_classes = [IsAuthenticated, IsFileOwner]
 
     def get(self, request, pk):
-        file = get_object_or_404(File, pk=pk, is_deleted=False)
-        self.check_object_permissions(request, file)
+        file_obj = get_object_or_404(File, pk=pk, is_deleted=False)
+        self.check_object_permissions(request, file_obj)
 
-        if not file.file or not file.file.name:
+        if not file_obj.file or not file_obj.file.name:
             raise Http404('File not found on storage.')
 
         try:
-            path = file.file.path
+            path = file_obj.file.path
         except Exception:
             raise Http404('File not found on storage.')
 
         if not os.path.exists(path):
             raise Http404('File not found on storage.')
 
+        # Efficient streaming download
         response = FileResponse(
             open(path, 'rb'),
-            content_type=file.mime_type or 'application/octet-stream',
+            content_type=file_obj.mime_type or 'application/octet-stream',
         )
-        response['Content-Disposition'] = f'attachment; filename="{file.original_name}"'
-        response['Content-Length'] = file.file_size
+        response['Content-Disposition'] = f'attachment; filename="{file_obj.original_name}"'
+        response['Content-Length'] = file_obj.file_size
         response['X-Content-Type-Options'] = 'nosniff'
         response['Content-Security-Policy'] = "default-src 'none'"
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        
         return response
 
 
