@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+  body { @apply bg-gray-50 text-gray-900 font-sans; min-height: 100vh; }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0px 1000px #fff inset;
+    -webkit-text-fill-color: #111827;
+    transition: background-color 9999s ease-in-out 0s;
+  }
+}
+
+@layer components {
+  .field {
+    @apply w-full px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white
+           text-gray-900 text-sm placeholder-gray-400 outline-none
+           transition-all duration-150
+           focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15;
+  }
+  .field-error {
+    @apply border-red-400 focus:border-red-400 focus:ring-red-400/15;
+  }
+  .field-msg { @apply text-xs text-red-500 mt-1; }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5
+           rounded-xl font-display font-semibold text-sm transition-all
+           duration-150 outline-none focus:ring-2 focus:ring-offset-2
+           disabled:opacity-60 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-brand-600 text-white hover:bg-brand-700
+           focus:ring-brand-500 shadow-brand active:scale-[0.98];
+  }
+  .btn-ghost {
+    @apply btn text-gray-500 hover:text-gray-800 hover:bg-gray-100 focus:ring-gray-300;
+  }
+  .btn-danger {
+    @apply btn bg-red-500 text-white hover:bg-red-600 focus:ring-red-400;
+  }
+
+  .card { @apply bg-white rounded-2xl border border-gray-100 shadow-card; }
+  .badge { @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium; }
+}
+
+.delay-1 { animation-delay: 60ms; }
+.delay-2 { animation-delay: 120ms; }
+.delay-3 { animation-delay: 180ms; }
