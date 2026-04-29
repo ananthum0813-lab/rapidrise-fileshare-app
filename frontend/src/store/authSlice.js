@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
-import { loginUser, registerUser, logoutUser, getProfile } from '@/api/authApi'
+import { loginUser, registerUser, logoutUser, getProfile, updateProfile } from '@/api/authApi'
 
 // ── Thunks ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +55,19 @@ export const verifySession = createAsyncThunk(
       return data.data // user object
     } catch (err) {
       return rejectWithValue('Session expired.')
+    }
+  }
+)
+
+// UPDATE PROFILE — update user profile information
+export const editProfile = createAsyncThunk(
+  'auth/editProfile',
+  async (profileData, { rejectWithValue }) => {
+    try {
+      const { data } = await updateProfile(profileData)
+      return data.data
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || 'Profile update failed.')
     }
   }
 )
@@ -177,6 +190,21 @@ const authSlice = createSlice({
       state.fieldErrors = null
       clearTokens()
     })
+
+    // ── Edit Profile ───────────────────────────────────────────────────────
+    builder
+      .addCase(editProfile.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(editProfile.fulfilled, (state, { payload }) => {
+        state.loading = false
+        state.user = payload
+      })
+      .addCase(editProfile.rejected, (state, { payload }) => {
+        state.loading = false
+        state.error = payload
+      })
 
   },
 })

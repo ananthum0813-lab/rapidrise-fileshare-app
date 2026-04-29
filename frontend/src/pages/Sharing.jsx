@@ -62,9 +62,9 @@ export default function Sharing() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100/50">
+    <div className="min-h-screen bg-slate-50">
       <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8">
             <div>
@@ -85,7 +85,7 @@ export default function Sharing() {
 
           {/* Share Form */}
           {showForm && (
-            <div className="card p-4 sm:p-6 mb-6 sm:mb-8 border-l-4 border-brand-500">
+            <div className="bg-white rounded-[2rem] p-6 mb-6 sm:mb-8 shadow-sm border border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Share a file</h2>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -147,8 +147,8 @@ export default function Sharing() {
                   </div>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
-                  <p className="font-semibold mb-1">📧 Automatic Email</p>
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-sm text-blue-900">
+                  <p className="font-semibold mb-2">📧 Automatic Email</p>
                   <p>The recipient will receive an email with the download link automatically (no manual sending needed).</p>
                 </div>
 
@@ -166,7 +166,7 @@ export default function Sharing() {
 
           {/* Shares List */}
           {shares.length === 0 ? (
-            <div className="text-center py-12 card">
+            <div className="text-center py-12 bg-white rounded-[2rem] shadow-sm border border-gray-200">
               <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                   d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
@@ -174,9 +174,9 @@ export default function Sharing() {
               <p className="text-gray-500 text-sm">No active shares. Create one above.</p>
             </div>
           ) : (
-            <div className="space-y-3 sm:space-y-4">
+            <div className="space-y-4">
               {shares.map((s) => (
-                <div key={s.id} className="card p-4 sm:p-6 hover:shadow-card transition-shadow">
+                <div key={s.id} className="bg-white rounded-[1.75rem] p-5 sm:p-6 border border-gray-200 hover:shadow-lg transition-shadow">
                   {/* Header */}
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
                     <div className="flex-1">

@@ -22,5 +22,9 @@ export const downloadFile = (id) =>
 export const deleteFile = (id) =>
   api.delete(`${FILES}/${id}/`)
 
+export const renameFile = (id, newName) =>
+  api.post(`${FILES}/${id}/rename/`, { new_name: newName })
+
 export const getStorageInfo = () =>
+  api.get(`${FILES}/storage/`)
   api.get(`${FILES}/storage/`)

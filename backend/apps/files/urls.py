@@ -8,4 +8,5 @@ urlpatterns = [
     path('storage/', views.StorageInfoView.as_view(), name='storage-info'),
     path('<uuid:pk>/', views.FileDetailView.as_view(), name='file-detail'),
     path('<uuid:pk>/download/', views.FileDownloadView.as_view(), name='file-download'),
+    path('<uuid:pk>/rename/', views.FileRenameView.as_view(), name='file-rename'),
 ]

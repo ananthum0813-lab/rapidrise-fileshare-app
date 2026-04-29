@@ -61,14 +61,14 @@ export default function Dashboard() {
   const activeShares = shares.filter((s) => s.status === 'active').length
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100/50">
+    <div className="min-h-screen bg-slate-50">
       {/* Top Section */}
       <div className="px-4 md:px-8 lg:px-10 py-8 lg:py-10">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="mb-10">
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-              👋 {greeting}, {user?.first_name ?? 'Guest'}!
+              {greeting}, {user?.first_name ?? 'Guest'}
             </h1>
             <p className="text-gray-500 text-sm md:text-base">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -78,7 +78,7 @@ export default function Dashboard() {
           {/* Stats Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-8 lg:mb-10">
             {/* Total Files */}
-            <div className="bg-white rounded-2xl p-5 lg:p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs lg:text-sm font-medium text-gray-500 uppercase tracking-wide mb-1">Total Files</p>
@@ -92,7 +92,7 @@ export default function Dashboard() {
             </div>
 
             {/* Active Shares */}
-            <div className="bg-white rounded-2xl p-5 lg:p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs lg:text-sm font-medium text-gray-500 uppercase tracking-wide mb-1">Active Shares</p>
@@ -106,7 +106,7 @@ export default function Dashboard() {
             </div>
 
             {/* Storage Used */}
-            <div className="bg-white rounded-2xl p-5 lg:p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs lg:text-sm font-medium text-gray-500 uppercase tracking-wide mb-1">Storage Used</p>
@@ -120,7 +120,7 @@ export default function Dashboard() {
             </div>
 
             {/* Storage Percentage */}
-            <div className="bg-white rounded-2xl p-5 lg:p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs lg:text-sm font-medium text-gray-500 uppercase tracking-wide mb-1">Usage</p>
@@ -140,7 +140,7 @@ export default function Dashboard() {
             <div className="lg:col-span-1 space-y-6">
               {/* Storage Visualization */}
               {storage && (
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-200">
                   <h2 className="text-lg font-bold text-gray-900 mb-6">Storage Usage</h2>
 
                   {/* Circular Progress */}
@@ -197,7 +197,7 @@ export default function Dashboard() {
               )}
 
               {/* Quick Actions */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-200">
                 <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
                 <div className="space-y-3">
                   <Link
@@ -241,7 +241,7 @@ export default function Dashboard() {
 
             {/* Right Column - Recent Files */}
             <div className="lg:col-span-2">
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-200">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-lg font-bold text-gray-900">Recent Files</h2>
                   <Link

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { fetchFiles, upload, remove, fetchStorage } from '@/store/filesSlice'
+import { fetchFiles, upload, remove, fetchStorage, rename } from '@/store/filesSlice'
 import Alert from '@/components/ui/Alert'
 import Button from '@/components/ui/Button'
 
@@ -9,6 +9,7 @@ const TrashIcon = () => <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" strok
 const DownloadIcon = () => <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
 const EyeIcon = () => <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
 const FileIcon = () => <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+const EditIcon = () => <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
 
 export default function Files() {
   const dispatch = useDispatch()
@@ -18,6 +19,8 @@ export default function Files() {
   const [selectedFiles, setSelectedFiles] = useState([])
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [previewFile, setPreviewFile] = useState(null)
+  const [renameFile, setRenameFile] = useState(null)
+  const [newFileName, setNewFileName] = useState('')
   const fileInputRef = useRef()
 
   useEffect(() => {
@@ -71,10 +74,27 @@ export default function Files() {
     dispatch(fetchStorage())
   }
 
+  const handleRename = async () => {
+    if (!newFileName.trim()) return
+    await dispatch(rename({ fileId: renameFile.id, newName: newFileName }))
+    setRenameFile(null)
+    setNewFileName('')
+  }
+
+  const getFileExtension = (filename) => {
+    const parts = filename.split('.')
+    return parts.length > 1 ? '.' + parts[parts.length - 1] : ''
+  }
+
+  const getFileNameWithoutExtension = (filename) => {
+    const ext = getFileExtension(filename)
+    return ext ? filename.slice(0, -ext.length) : filename
+  }
+
   const usedPercentage = storage ? Math.round((storage.used_bytes / storage.total_bytes) * 100) : 0
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100/50">
+    <div className="min-h-screen bg-slate-50">
       <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
@@ -87,7 +107,7 @@ export default function Files() {
 
           {/* Storage Progress */}
           {storage && (
-            <div className="card p-4 sm:p-6 mb-6 sm:mb-8">
+            <div className="bg-white rounded-[2rem] p-6 mb-6 sm:mb-8 shadow-sm border border-gray-200">
               <div className="flex justify-between items-end mb-3">
                 <p className="text-sm font-semibold text-gray-800">Storage Usage</p>
                 <p className="text-sm font-bold text-gray-600">{usedPercentage}%</p>
@@ -112,8 +132,8 @@ export default function Files() {
             onDragLeave={handleDrag}
             onDragOver={handleDrag}
             onDrop={handleDrop}
-            className={`card p-6 sm:p-8 lg:p-12 text-center border-2 border-dashed transition-all duration-200 mb-6 sm:mb-8 cursor-pointer
-              ${dragActive ? 'border-brand-400 bg-brand-50' : 'border-gray-300 hover:border-gray-400'}`}
+            className={`bg-white rounded-[2rem] p-6 sm:p-8 lg:p-12 text-center border-2 border-dashed transition-all duration-200 mb-6 sm:mb-8 cursor-pointer
+              ${dragActive ? 'border-brand-400 bg-brand-50/40' : 'border-gray-300 hover:border-gray-400 bg-white'}`}
             onClick={() => fileInputRef.current?.click()}
           >
             <input
@@ -137,7 +157,7 @@ export default function Files() {
 
           {/* Selected Files Preview - SHOW UPLOAD BUTTON */}
           {selectedFiles.length > 0 && (
-            <div className="card p-4 sm:p-6 mb-6 sm:mb-8 border-l-4 border-brand-500 bg-brand-50">
+            <div className="bg-white rounded-[1.75rem] p-5 sm:p-6 mb-6 sm:mb-8 border border-brand-100 shadow-sm">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">
                 Ready to upload ({selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''})
               </h3>
@@ -192,7 +212,7 @@ export default function Files() {
                 setSearch(e.target.value)
                 dispatch(fetchFiles({ search: e.target.value }))
               }}
-              className="field w-full"
+              className="field w-full max-w-2xl"
             />
           </div>
 
@@ -213,9 +233,9 @@ export default function Files() {
           ) : (
             <div className="space-y-2 sm:space-y-3">
               {files.map((file) => (
-                <div key={file.id} className="card p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:shadow-card transition-shadow">
-                  <div className="flex items-center gap-3 flex-1 min-w-0 w-full">
-                    <div className="w-10 h-10 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 text-xs font-medium">
+                  <div key={file.id} className="bg-white rounded-[1.5rem] p-4 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-gray-200 hover:shadow-lg transition-shadow">
+                    <div className="flex items-center gap-3 flex-1 min-w-0 w-full">
+                      <div className="w-10 h-10 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 text-xs font-medium">
                       {file.original_name.split('.').pop()?.toUpperCase().slice(0, 3)}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -244,6 +264,16 @@ export default function Files() {
                       <DownloadIcon />
                     </button>
                     <button
+                      onClick={() => {
+                        setRenameFile(file)
+                        setNewFileName(getFileNameWithoutExtension(file.original_name))
+                      }}
+                      className="flex-1 sm:flex-none p-2 sm:p-2.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                      title="Rename"
+                    >
+                      <EditIcon />
+                    </button>
+                    <button
                       onClick={() => setDeleteConfirm(file.id)}
                       className="flex-1 sm:flex-none p-2 sm:p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       title="Delete"
@@ -259,7 +289,7 @@ export default function Files() {
           {/* Delete Confirmation */}
           {deleteConfirm && (
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-              <div className="card p-6 max-w-sm w-full">
+              <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full shadow-xl border border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete file?</h3>
                 <p className="text-sm text-gray-500 mb-6">This cannot be undone.</p>
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -268,6 +298,61 @@ export default function Files() {
                   </Button>
                   <Button variant="danger" fullWidth onClick={() => handleDelete(deleteConfirm)}>
                     Delete
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Rename Modal */}
+          {renameFile && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full shadow-xl border border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Rename file</h3>
+                
+                {/* Extension Notice */}
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-xs font-semibold text-blue-900 mb-1">📌 File extension protected</p>
+                  <p className="text-xs text-blue-800">
+                    Extension <code className="bg-white px-1.5 py-0.5 rounded font-mono font-bold">{getFileExtension(renameFile.original_name)}</code> is automatically preserved to maintain file integrity.
+                  </p>
+                </div>
+
+                {/* Filename Input */}
+                <div className="mb-6">
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Filename (without extension)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newFileName}
+                      onChange={(e) => setNewFileName(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleRename()}
+                      placeholder="Enter new filename"
+                      className="field flex-1"
+                      autoFocus
+                    />
+                    <span className="text-sm font-medium text-gray-600">
+                      {getFileExtension(renameFile.original_name)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Original: <code className="bg-gray-100 px-1 py-0.5 rounded text-gray-700 font-mono">{renameFile.original_name}</code>
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button variant="ghost" fullWidth onClick={() => setRenameFile(null)}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    variant="primary" 
+                    fullWidth 
+                    onClick={handleRename}
+                    disabled={!newFileName.trim()}
+                  >
+                    Rename
                   </Button>
                 </div>
               </div>

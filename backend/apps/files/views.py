@@ -147,9 +147,57 @@ class FileDownloadView(APIView):
     def get(self, request, pk):
         file_obj = get_object_or_404(File, pk=pk, is_deleted=False)
         self.check_object_permissions(request, file_obj)
+        file_path = file_obj.file.path
+        if os.path.exists(file_path):
+            response = FileResponse(open(file_path, 'rb'), as_attachment=True, filename=file_obj.original_name)
+            return response
+        raise NotFound('File not found on server.')
 
-        if not file_obj.file or not file_obj.file.name:
-            raise Http404('File not found on storage.')
+
+class FileRenameView(APIView):
+    """
+    Rename a file. Only the owner can rename.
+    
+    SECURITY: Only allows changing the filename part, NOT the extension.
+    This prevents users from renaming a PNG as PDF and causing integrity issues.
+    The original file extension is always preserved.
+    """
+    permission_classes = [IsAuthenticated, IsFileOwner]
+
+    def post(self, request, pk):
+        file_obj = get_object_or_404(File, pk=pk, is_deleted=False)
+        self.check_object_permissions(request, file_obj)
+        
+        new_name = request.data.get('new_name', '').strip()
+        if not new_name:
+            raise ValidationError({'new_name': 'New filename is required.'})
+        
+        # Extract original file extension
+        original_name = file_obj.original_name
+        if '.' in original_name:
+            original_ext = '.' + original_name.rsplit('.', 1)[1]
+        else:
+            original_ext = ''
+        
+        # Remove extension from new_name if user provided one
+        if '.' in new_name:
+            new_name = new_name.rsplit('.', 1)[0]
+        
+        # Sanitize and reconstruct: filename + original_extension
+        new_name = sanitize_filename(new_name)
+        new_name = new_name + original_ext
+        
+        # Prevent no-op renames
+        if new_name == original_name:
+            raise ValidationError({'new_name': 'New filename is the same as current.'})
+        
+        file_obj.original_name = new_name
+        file_obj.save()
+        
+        return success_response(
+            data=FileSerializer(file_obj).data,
+            message=f"Renamed '{original_name}' to '{new_name}'."
+        )
 
         try:
             path = file_obj.file.path

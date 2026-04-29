@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
-import { getFiles, uploadFiles, deleteFile, getStorageInfo } from '@/api/filesApi'
+import { getFiles, uploadFiles, deleteFile, getStorageInfo, renameFile } from '@/api/filesApi'
 
 // ── Thunks ────────────────────────────────────────────────────────────────────
 
@@ -48,6 +48,18 @@ export const fetchStorage = createAsyncThunk(
       return data.data
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || 'Failed to fetch storage info.')
+    }
+  }
+)
+
+export const rename = createAsyncThunk(
+  'files/rename',
+  async ({ fileId, newName }, { rejectWithValue }) => {
+    try {
+      const { data } = await renameFile(fileId, newName)
+      return data.data
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || 'Rename failed.')
     }
   }
 )
@@ -131,6 +143,24 @@ const filesSlice = createSlice({
         state.storage = payload
       })
       .addCase(fetchStorage.rejected, (state, { payload }) => {
+        state.loading = false
+        state.error = payload
+      })
+
+    // ── Rename File ─────────────────────────────────────────────────────
+    builder
+      .addCase(rename.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(rename.fulfilled, (state, { payload }) => {
+        state.loading = false
+        const index = state.files.findIndex((f) => f.id === payload.id)
+        if (index !== -1) {
+          state.files[index] = payload
+        }
+      })
+      .addCase(rename.rejected, (state, { payload }) => {
         state.loading = false
         state.error = payload
       })

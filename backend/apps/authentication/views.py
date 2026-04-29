@@ -65,6 +65,30 @@ class ProfileView(APIView):
         return success_response(data=UserSerializer(request.user).data)
 
 
+class UpdateProfileView(APIView):
+    """Update the authenticated user's profile."""
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request):
+        user = request.user
+        first_name = request.data.get('first_name')
+        last_name = request.data.get('last_name')
+        date_of_birth = request.data.get('date_of_birth')
+        
+        if first_name is not None:
+            user.first_name = first_name
+        if last_name is not None:
+            user.last_name = last_name
+        if date_of_birth is not None:
+            user.date_of_birth = date_of_birth
+        
+        user.save()
+        return success_response(
+            data=UserSerializer(user).data,
+            message='Profile updated successfully.'
+        )
+
+
 class ChangePasswordView(APIView):
     """Change password for authenticated user."""
     permission_classes = [IsAuthenticated]
