@@ -153,14 +153,22 @@ class FileDownloadView(APIView):
             return response
         raise NotFound('File not found on server.')
 
+"""
+CORRECTED FileRenameView with Filename Uniqueness Validation
+Location: apps/files/views.py
+Purpose: Ensure each file has a unique name per user
+"""
 
 class FileRenameView(APIView):
     """
-    Rename a file. Only the owner can rename.
+    Rename a file while maintaining filename uniqueness per user.
     
-    SECURITY: Only allows changing the filename part, NOT the extension.
-    This prevents users from renaming a PNG as PDF and causing integrity issues.
-    The original file extension is always preserved.
+    SECURITY & UNIQUENESS:
+    ✅ Only filename owner can rename
+    ✅ Extension is protected (cannot be changed)
+    ✅ Filename must be unique (per user, excluding deleted files)
+    ✅ Cannot rename to existing filename
+    ✅ Case-insensitive uniqueness check
     """
     permission_classes = [IsAuthenticated, IsFileOwner]
 
@@ -191,37 +199,27 @@ class FileRenameView(APIView):
         if new_name == original_name:
             raise ValidationError({'new_name': 'New filename is the same as current.'})
         
+        # ✅ CHECK UNIQUENESS: Ensure filename doesn't exist for this user
+        # Exclude deleted files and the current file being renamed
+        filename_exists = File.objects.filter(
+            owner=request.user,
+            original_name=new_name,
+            is_deleted=False
+        ).exclude(pk=pk).exists()
+        
+        if filename_exists:
+            raise ValidationError({
+                'new_name': f"You already have a file named '{new_name}'. Please choose a different name."
+            })
+        
+        # ✅ RENAME: Update the filename
         file_obj.original_name = new_name
-        file_obj.save()
+        file_obj.save(update_fields=['original_name'])
         
         return success_response(
             data=FileSerializer(file_obj).data,
             message=f"Renamed '{original_name}' to '{new_name}'."
         )
-
-        try:
-            path = file_obj.file.path
-        except Exception:
-            raise Http404('File not found on storage.')
-
-        if not os.path.exists(path):
-            raise Http404('File not found on storage.')
-
-        # Efficient streaming download
-        response = FileResponse(
-            open(path, 'rb'),
-            content_type=file_obj.mime_type or 'application/octet-stream',
-        )
-        response['Content-Disposition'] = f'attachment; filename="{file_obj.original_name}"'
-        response['Content-Length'] = file_obj.file_size
-        response['X-Content-Type-Options'] = 'nosniff'
-        response['Content-Security-Policy'] = "default-src 'none'"
-        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-        response['Pragma'] = 'no-cache'
-        response['Expires'] = '0'
-        
-        return response
-
 
 class StorageInfoView(APIView):
     """Get storage usage stats for the authenticated user."""

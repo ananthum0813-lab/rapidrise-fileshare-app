@@ -35,7 +35,9 @@ api.interceptors.response.use(
       if (!refreshToken) {
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
-        window.location.href = '/login'
+        if (window.location.pathname !== '/login') {
+          window.location.replace('/login')
+        }
         return Promise.reject(error)
       }
 
@@ -67,7 +69,9 @@ api.interceptors.response.use(
         processQueue(err, null)
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
-        window.location.href = '/login'
+        if (window.location.pathname !== '/login') {
+          window.location.replace('/login')
+        }
         return Promise.reject(err)
       } finally {
         isRefreshing = false

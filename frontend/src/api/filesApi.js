@@ -27,4 +27,3 @@ export const renameFile = (id, newName) =>
 
 export const getStorageInfo = () =>
   api.get(`${FILES}/storage/`)
-  api.get(`${FILES}/storage/`)
