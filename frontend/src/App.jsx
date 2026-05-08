@@ -2,7 +2,6 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { verifySession } from '@/store/authSlice'
-
 import ProtectedRoute from '@/components/layout/ProtectedRoute'
 import AppLayout from '@/components/layout/AppLayout'
 
@@ -17,6 +16,8 @@ import Dashboard from '@/pages/Dashboard'
 import Files from '@/pages/Files'
 import Sharing from '@/pages/Sharing'
 import Settings from '@/pages/Settings'
+import Starred from '@/pages/Starred'   // ← ADD THIS
+import Trash from '@/pages/Trash'       // ← ADD THIS
 import NotFound from '@/pages/NotFound'
 
 // Handles the root "/" — redirects based on auth state
@@ -47,18 +48,20 @@ function AppRoutes() {
       <Route path="/" element={<RootRedirect />} />
 
       {/* Public auth pages */}
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route path="/login"           element={<Login />} />
+      <Route path="/register"        element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/reset-password"  element={<ResetPassword />} />
 
-      {/* Protected app pages — ProtectedRoute waits for sessionChecked */}
+      {/* Protected app pages */}
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/files" element={<Files />} />
-          <Route path="/sharing" element={<Sharing />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/files"     element={<Files />} />
+          <Route path="/sharing"   element={<Sharing />} />
+          <Route path="/starred"   element={<Starred />} />  {/* ← ADD THIS */}
+          <Route path="/trash"     element={<Trash />} />    {/* ← ADD THIS */}
+          <Route path="/settings"  element={<Settings />} />
         </Route>
       </Route>
 
