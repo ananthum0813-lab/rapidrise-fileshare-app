@@ -1,5 +1,4 @@
 import os
-
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Count
@@ -21,6 +20,10 @@ class FilePagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 100
 
+
+# ═══════════════════════════════════════════════════════════════════
+# EXISTING VIEWS (Keep all original functionality)
+# ═══════════════════════════════════════════════════════════════════
 
 class FileUploadView(APIView):
     """Upload one or multiple files (multipart/form-data, field name: 'files')."""
@@ -151,13 +154,8 @@ class FileDownloadView(APIView):
         if os.path.exists(file_path):
             response = FileResponse(open(file_path, 'rb'), as_attachment=True, filename=file_obj.original_name)
             return response
-        raise NotFound('File not found on server.')
+        raise Http404('File not found on server.')
 
-"""
-CORRECTED FileRenameView with Filename Uniqueness Validation
-Location: apps/files/views.py
-Purpose: Ensure each file has a unique name per user
-"""
 
 class FileRenameView(APIView):
     """
@@ -200,7 +198,6 @@ class FileRenameView(APIView):
             raise ValidationError({'new_name': 'New filename is the same as current.'})
         
         # ✅ CHECK UNIQUENESS: Ensure filename doesn't exist for this user
-        # Exclude deleted files and the current file being renamed
         filename_exists = File.objects.filter(
             owner=request.user,
             original_name=new_name,
@@ -218,8 +215,9 @@ class FileRenameView(APIView):
         
         return success_response(
             data=FileSerializer(file_obj).data,
-            message=f"Renamed '{original_name}' to '{new_name}'."
+            message=f"Renamed to '{new_name}'."
         )
+
 
 class StorageInfoView(APIView):
     """Get storage usage stats for the authenticated user."""
@@ -242,3 +240,147 @@ class StorageInfoView(APIView):
             'usage_percent': round((used / total) * 100, 2) if total else 0,
             'file_count': result['file_count'],
         })
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ✨ NEW VIEWS FOR NEW FEATURES
+# ═══════════════════════════════════════════════════════════════════
+
+class ToggleFavoriteView(APIView):
+    """Toggle file favorite status. ⭐"""
+    permission_classes = [IsAuthenticated, IsFileOwner]
+    
+    def post(self, request, pk):
+        file_obj = get_object_or_404(File, pk=pk, is_deleted=False)
+        self.check_object_permissions(request, file_obj)
+        
+        file_obj.toggle_favorite()
+        return success_response(
+            data=FileSerializer(file_obj).data,
+            message=f"{'⭐ Added to favorites' if file_obj.is_favorite else '✓ Removed from favorites'}."
+        )
+
+
+class FavoritesListView(APIView):
+    """List all favorite files. 🌟"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        qs = File.objects.filter(
+            owner=request.user, 
+            is_deleted=False, 
+            is_favorite=True
+        ).order_by('-uploaded_at')
+        paginator = FilePagination()
+        page = paginator.paginate_queryset(qs, request)
+        
+        return success_response(data={
+            'results': FileSerializer(page, many=True).data,
+            'count': paginator.page.paginator.count,
+            'total_pages': paginator.page.paginator.num_pages,
+            'current_page': paginator.page.number,
+        })
+
+
+class TrashListView(APIView):
+    """List deleted (trashed) files. 🗑️"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        qs = File.objects.filter(owner=request.user, is_deleted=True).order_by('-deleted_at')
+        paginator = FilePagination()
+        page = paginator.paginate_queryset(qs, request)
+        
+        return success_response(data={
+            'results': FileSerializer(page, many=True).data,
+            'count': paginator.page.paginator.count,
+            'total_pages': paginator.page.paginator.num_pages,
+            'current_page': paginator.page.number,
+        })
+
+
+class RestoreFileView(APIView):
+    """Restore a file from trash. ↩️"""
+    permission_classes = [IsAuthenticated, IsFileOwner]
+    
+    def post(self, request, pk):
+        file_obj = get_object_or_404(File, pk=pk, is_deleted=True)
+        self.check_object_permissions(request, file_obj)
+        
+        file_obj.restore_file()
+        return success_response(
+            data=FileSerializer(file_obj).data,
+            message=f"✓ '{file_obj.original_name}' restored from trash."
+        )
+
+
+class EmptyTrashView(APIView):
+    """Permanently delete all trashed files. ⚠️"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        trashed_files = File.objects.filter(owner=request.user, is_deleted=True)
+        count = trashed_files.count()
+        
+        for file_obj in trashed_files:
+            file_obj.permanently_delete()
+        
+        return success_response(message=f"✓ Permanently deleted {count} file(s) from trash.")
+
+
+class PermanentlyDeleteView(APIView):
+    """Permanently delete a single file from trash. ⚠️"""
+    permission_classes = [IsAuthenticated, IsFileOwner]
+    
+    def post(self, request, pk):
+        file_obj = get_object_or_404(File, pk=pk, is_deleted=True)
+        self.check_object_permissions(request, file_obj)
+        
+        name = file_obj.original_name
+        file_obj.permanently_delete()
+        
+        return success_response(message=f"✓ Permanently deleted '{name}'.")
+
+
+class BatchDeleteView(APIView):
+    """Delete multiple files at once. 🗑️"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        file_ids = request.data.get('file_ids', [])
+        if not file_ids:
+            raise ValidationError({'file_ids': 'At least one file ID is required.'})
+        
+        files = File.objects.filter(
+            owner=request.user,
+            id__in=file_ids,
+            is_deleted=False
+        )
+        
+        count = files.count()
+        for file_obj in files:
+            file_obj.delete_file()
+        
+        return success_response(message=f"✓ Deleted {count} file(s).")
+
+
+class BatchRestoreView(APIView):
+    """Restore multiple files from trash at once. ↩️"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        file_ids = request.data.get('file_ids', [])
+        if not file_ids:
+            raise ValidationError({'file_ids': 'At least one file ID is required.'})
+        
+        files = File.objects.filter(
+            owner=request.user,
+            id__in=file_ids,
+            is_deleted=True
+        )
+        
+        count = files.count()
+        for file_obj in files:
+            file_obj.restore_file()
+        
+        return success_response(message=f"✓ Restored {count} file(s) from trash.")

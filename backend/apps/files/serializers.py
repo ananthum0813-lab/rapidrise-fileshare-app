@@ -29,10 +29,40 @@ def get_mime_type(file) -> str:
 class FileSerializer(serializers.ModelSerializer):
     file_size_display = serializers.ReadOnlyField()
 
+    # Returns the absolute URL to the file so the frontend can render
+    # image / video / audio previews directly (e.g. <img src={file.file} />).
+    # Requires views to pass context={'request': request} when instantiating
+    # this serializer — see the serialize_file() helper in views.py.
+    file = serializers.SerializerMethodField()
+
     class Meta:
         model = File
-        fields = ['id', 'original_name', 'file_size', 'file_size_display', 'mime_type', 'uploaded_at']
+        fields = [
+            'id',
+            'original_name',
+            'file',             # absolute URL for browser preview
+            'file_size',
+            'file_size_display',
+            'mime_type',
+            'uploaded_at',
+            'is_deleted',
+            'deleted_at',       # needed by Trash page (days-remaining counter)
+            'is_favorite',      # needed by Files & Starred pages (star toggle)
+        ]
         read_only_fields = fields
+
+    def get_file(self, obj) -> str | None:
+        """
+        Build an absolute URL so the browser can fetch the file directly.
+        Falls back to a relative URL when no request is available in context
+        (e.g. management commands, shell, tests without a request factory).
+        """
+        if not (obj.file and obj.file.name):
+            return None
+        request = self.context.get('request')
+        if request is not None:
+            return request.build_absolute_uri(obj.file.url)
+        return obj.file.url
 
 
 class FileUploadSerializer(serializers.Serializer):
@@ -51,13 +81,17 @@ class FileUploadSerializer(serializers.Serializer):
         for f in files:
             # Size check
             if f.size > max_size:
-                errors.append(f"'{f.name}' is too large. Max size is {settings.MAX_FILE_SIZE_MB}MB.")
+                errors.append(
+                    f"'{f.name}' is too large. Max size is {settings.MAX_FILE_SIZE_MB}MB."
+                )
                 continue
 
             # MIME type check against allowlist
             mime, _ = mimetypes.guess_type(f.name)
             if allowed_types and mime not in allowed_types:
-                errors.append(f"'{f.name}' — file type '{mime or 'unknown'}' is not allowed.")
+                errors.append(
+                    f"'{f.name}' — file type '{mime or 'unknown'}' is not allowed."
+                )
 
         if errors:
             raise serializers.ValidationError(errors)

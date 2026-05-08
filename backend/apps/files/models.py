@@ -23,14 +23,18 @@ class File(models.Model):
     file_size = models.BigIntegerField(help_text='Size in bytes')
     mime_type = models.CharField(max_length=100, blank=True)
     uploaded_at = models.DateTimeField(default=timezone.now)
-    is_deleted = models.BooleanField(default=False, db_index=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-
+    
+    # ✨ NEW FIELDS FOR NEW FEATURES
+    is_deleted = models.BooleanField(default=False, db_index=True)  # Soft delete for trash
+    deleted_at = models.DateTimeField(null=True, blank=True)         # When deleted
+    is_favorite = models.BooleanField(default=False, db_index=True)  # ⭐ Star/favorite
+    
     class Meta:
         db_table = 'files'
         ordering = ['-uploaded_at']
         indexes = [
             models.Index(fields=['owner', 'is_deleted']),
+            models.Index(fields=['owner', 'is_favorite']),  # ✨ For quick favorite queries
         ]
 
     def __str__(self):
@@ -57,3 +61,26 @@ class File(models.Model):
         self.is_deleted = True
         self.deleted_at = timezone.now()
         self.save(update_fields=['is_deleted', 'deleted_at'])
+
+    # ✨ NEW METHODS
+    def restore_file(self):
+        """Restore a deleted file from trash."""
+        self.is_deleted = False
+        self.deleted_at = None
+        self.save(update_fields=['is_deleted', 'deleted_at'])
+
+    def toggle_favorite(self):
+        """Toggle favorite status."""
+        self.is_favorite = not self.is_favorite
+        self.save(update_fields=['is_favorite'])
+
+    def permanently_delete(self):
+        """Permanently delete file and remove from storage (for trash cleanup)."""
+        if self.file and self.file.name:
+            try:
+                path = self.file.path
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
+        self.delete()  # Remove from database
