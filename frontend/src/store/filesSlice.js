@@ -84,6 +84,12 @@ const filesSlice = createSlice({
     clearError(state) {
       state.error = null
     },
+    toggleFavoriteOptimistic(state, { payload: fileId }) {
+      const file = state.files.find(f => f.id === fileId)
+      if (file) {
+        file.is_favorite = !file.is_favorite
+      }
+    },
   },
   extraReducers: (builder) => {
 
@@ -110,6 +116,11 @@ const filesSlice = createSlice({
       })
 
     // ── Upload Files ────────────────────────────────────────────────────
+    // FIX: Handle multiple possible API response shapes defensively.
+    // The component now calls fetchFiles after a successful upload, so the
+    // slice only needs to flip the uploading flag — it does NOT need to
+    // manually splice files into the list.  The optimistic prepend is kept
+    // as a fallback in case your API *does* return the uploaded file objects.
     builder
       .addCase(upload.pending, (state) => {
         state.uploading = true
@@ -117,9 +128,22 @@ const filesSlice = createSlice({
       })
       .addCase(upload.fulfilled, (state, { payload }) => {
         state.uploading = false
-        // Add uploaded files to the top of list
-        state.files = [...payload.uploaded, ...state.files]
-        state.pagination.count += payload.uploaded.length
+
+        // Normalise: accept { uploaded: [...] }, { results: [...] }, or a
+        // plain array — whatever your API returns.
+        const uploaded =
+          payload?.uploaded ??      // { uploaded: [...] }
+          payload?.results ??       // { results: [...] }
+          (Array.isArray(payload) ? payload : null) // bare array
+
+        if (uploaded?.length) {
+          // Optimistic prepend so the UI feels instant even before fetchFiles
+          // completes.  Duplicates are removed once fetchFiles resolves.
+          state.files = [...uploaded, ...state.files]
+          state.pagination.count += uploaded.length
+        }
+        // If the API returns nothing useful, fetchFiles (called by the
+        // component after dispatch) will refresh the list correctly.
       })
       .addCase(upload.rejected, (state, { payload }) => {
         state.uploading = false
@@ -130,7 +154,7 @@ const filesSlice = createSlice({
     builder
       .addCase(remove.fulfilled, (state, { payload: fileId }) => {
         state.files = state.files.filter((f) => f.id !== fileId)
-        state.pagination.count -= 1
+        state.pagination.count = Math.max(0, state.pagination.count - 1)
       })
 
     // ── Fetch Storage ───────────────────────────────────────────────────
@@ -164,9 +188,8 @@ const filesSlice = createSlice({
         state.loading = false
         state.error = payload
       })
-
   },
 })
 
-export const { clearError } = filesSlice.actions
+export const { clearError, toggleFavoriteOptimistic } = filesSlice.actions
 export default filesSlice.reducer
