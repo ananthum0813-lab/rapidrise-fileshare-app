@@ -190,13 +190,13 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
           >
             <i className="fas fa-download"></i> Download File
           </button>
-          <Link
+          {/* <Link
             to="/sharing"
             onClick={onClose}
             className="block w-full py-3 text-center bg-purple-50 text-purple-700 rounded-2xl font-bold hover:bg-purple-100 transition-colors text-sm"
           >
             <i className="fas fa-share-alt mr-2"></i> Share File
-          </Link>
+          </Link> */}
           <Link
             to="/files"
             onClick={onClose}

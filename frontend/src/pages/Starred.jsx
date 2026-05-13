@@ -5,7 +5,6 @@ import {
   toggleFavorite,
   deleteFile,
   downloadFile,
-  batchRestore,
 } from '@/api/filesApi'
 
 export default function Starred() {
@@ -45,9 +44,6 @@ export default function Starred() {
   useEffect(() => { fetchStarred() }, [])
 
   // ── Blob URL for auth-gated media preview ─────────────────────────────────
-  // Images/video/audio served by Django require auth headers.
-  // <img src> / <video src> never send them, so we download via axios
-  // (which attaches the JWT) and create a temporary object URL instead.
   useEffect(() => {
     if (previewBlobUrl) {
       URL.revokeObjectURL(previewBlobUrl)
@@ -74,7 +70,6 @@ export default function Starred() {
     return () => { cancelled = true }
   }, [previewFile]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Revoke blob URL on unmount
   useEffect(() => {
     return () => { if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl) }
   }, [previewBlobUrl])
@@ -108,6 +103,8 @@ export default function Starred() {
   }
 
   // ── Delete (soft → trash) ────────────────────────────────────────────────
+  // FIX: deleteFile calls DELETE /api/files/:id/ → FileDetailView.delete()
+  // → file_obj.delete_file() → soft_delete() (moves to trash, not permanent)
   const handleDelete = async (fileId) => {
     try {
       setActionLoading('delete')
@@ -177,7 +174,7 @@ export default function Starred() {
     return 'bg-gray-100'
   }
 
-  // ── Preview renderer — uses blob URL for auth-safe media ─────────────────
+  // ── Preview renderer ─────────────────────────────────────────────────────
   const renderPreview = (file) => {
     if (!file) return null
     const { mime_type } = file
@@ -191,11 +188,7 @@ export default function Starred() {
               <p className="text-xs">Loading preview…</p>
             </div>
           ) : previewBlobUrl ? (
-            <img
-              src={previewBlobUrl}
-              alt={file.original_name}
-              className="w-full max-h-72 object-contain"
-            />
+            <img src={previewBlobUrl} alt={file.original_name} className="w-full max-h-72 object-contain" />
           ) : (
             <div className="py-12 flex flex-col items-center gap-2 text-gray-400">
               <i className="fas fa-image text-4xl text-blue-300"></i>
@@ -256,7 +249,7 @@ export default function Starred() {
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#f8fafc] min-h-screen">
       <div className="max-w-6xl mx-auto">
 
-        {/* ── Header ── */}
+        {/* Header */}
         <header className="mb-6 sm:mb-8">
           <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-indigo-900 flex items-center gap-3">
             <span className="w-9 h-9 sm:w-10 sm:h-10 bg-yellow-100 rounded-2xl flex items-center justify-center flex-shrink-0">
@@ -269,7 +262,7 @@ export default function Starred() {
           </p>
         </header>
 
-        {/* ── Batch actions bar ── */}
+        {/* Batch actions bar */}
         {selectedCheckboxes.size > 0 && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-3 sm:p-4 mb-4 sm:mb-6 flex flex-col xs:flex-row items-start xs:items-center justify-between gap-3">
             <span className="text-sm font-bold text-yellow-700">
@@ -286,7 +279,7 @@ export default function Starred() {
           </div>
         )}
 
-        {/* ── Content ── */}
+        {/* Content */}
         {loading ? (
           <div className="text-center py-20">
             <i className="fas fa-spinner fa-spin text-4xl text-gray-300 mb-4"></i>
@@ -303,7 +296,7 @@ export default function Starred() {
         ) : (
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
 
-            {/* ── Desktop / tablet table (md+) ── */}
+            {/* Desktop table (md+) */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-separate border-spacing-y-1 p-4">
                 <thead>
@@ -389,7 +382,7 @@ export default function Starred() {
                           <button
                             onClick={() => setDeleteConfirm(file.id)}
                             className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete"
+                            title="Move to trash"
                           >
                             <i className="fas fa-trash-can text-sm"></i>
                           </button>
@@ -401,9 +394,8 @@ export default function Starred() {
               </table>
             </div>
 
-            {/* ── Mobile / small tablet cards (< md) ── */}
+            {/* Mobile cards (< md) */}
             <div className="md:hidden">
-              {/* Mobile select-all bar */}
               <div className="flex items-center justify-between px-4 pt-4 pb-2 border-b border-gray-50">
                 <label className="flex items-center gap-2 text-xs font-bold text-gray-500 cursor-pointer select-none">
                   <input
@@ -422,12 +414,9 @@ export default function Starred() {
                   <div
                     key={file.id}
                     className={`rounded-2xl border transition-colors overflow-hidden ${
-                      selectedCheckboxes.has(file.id)
-                        ? 'bg-yellow-50 border-yellow-300'
-                        : 'bg-white border-gray-100 shadow-sm'
+                      selectedCheckboxes.has(file.id) ? 'bg-yellow-50 border-yellow-300' : 'bg-white border-gray-100 shadow-sm'
                     }`}
                   >
-                    {/* Card top row: checkbox + icon + name + meta */}
                     <div className="flex items-start gap-3 p-4">
                       <input
                         type="checkbox"
@@ -455,38 +444,24 @@ export default function Starred() {
                       </div>
                     </div>
 
-                    {/* Card action row */}
                     <div className="grid grid-cols-4 border-t border-gray-100">
-                      <button
-                        onClick={() => setPreviewFile(file)}
-                        className="flex flex-col items-center justify-center gap-1 py-3 text-blue-500 hover:bg-blue-50 transition-colors"
-                        title="Preview"
-                      >
+                      <button onClick={() => setPreviewFile(file)}
+                        className="flex flex-col items-center justify-center gap-1 py-3 text-blue-500 hover:bg-blue-50 transition-colors">
                         <i className="fas fa-eye text-sm"></i>
                         <span className="text-[10px] font-semibold">Preview</span>
                       </button>
-                      <button
-                        onClick={() => handleDownload(file)}
-                        className="flex flex-col items-center justify-center gap-1 py-3 text-green-500 hover:bg-green-50 transition-colors border-l border-gray-100"
-                        title="Download"
-                      >
+                      <button onClick={() => handleDownload(file)}
+                        className="flex flex-col items-center justify-center gap-1 py-3 text-green-500 hover:bg-green-50 transition-colors border-l border-gray-100">
                         <i className="fas fa-download text-sm"></i>
                         <span className="text-[10px] font-semibold">Download</span>
                       </button>
-                      <button
-                        onClick={() => handleUnstar(file.id)}
-                        disabled={!!starLoading[file.id]}
-                        className="flex flex-col items-center justify-center gap-1 py-3 text-yellow-500 hover:bg-yellow-50 transition-colors disabled:opacity-50 border-l border-gray-100"
-                        title="Remove from favourites"
-                      >
+                      <button onClick={() => handleUnstar(file.id)} disabled={!!starLoading[file.id]}
+                        className="flex flex-col items-center justify-center gap-1 py-3 text-yellow-500 hover:bg-yellow-50 transition-colors disabled:opacity-50 border-l border-gray-100">
                         <i className={`fas ${starLoading[file.id] ? 'fa-spinner fa-spin' : 'fa-star'} text-sm`}></i>
                         <span className="text-[10px] font-semibold">Unstar</span>
                       </button>
-                      <button
-                        onClick={() => setDeleteConfirm(file.id)}
-                        className="flex flex-col items-center justify-center gap-1 py-3 text-red-500 hover:bg-red-50 transition-colors border-l border-gray-100"
-                        title="Delete"
-                      >
+                      <button onClick={() => setDeleteConfirm(file.id)}
+                        className="flex flex-col items-center justify-center gap-1 py-3 text-red-500 hover:bg-red-50 transition-colors border-l border-gray-100">
                         <i className="fas fa-trash-can text-sm"></i>
                         <span className="text-[10px] font-semibold">Delete</span>
                       </button>
@@ -498,29 +473,23 @@ export default function Starred() {
           </div>
         )}
 
-        {/* ── Pagination ── */}
+        {/* Pagination */}
         {pagination.total_pages > 1 && (
           <div className="mt-6 sm:mt-8 flex justify-center items-center gap-3 flex-wrap">
-            <button
-              disabled={currentPage === 1}
-              onClick={() => fetchStarred(currentPage - 1)}
-              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 text-gray-600 disabled:opacity-30 hover:border-indigo-300 transition-all"
-            >
+            <button disabled={currentPage === 1} onClick={() => fetchStarred(currentPage - 1)}
+              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 text-gray-600 disabled:opacity-30 hover:border-indigo-300 transition-all">
               <i className="fas fa-chevron-left text-xs"></i>
             </button>
             <span className="text-sm font-bold text-gray-600">Page {currentPage} of {pagination.total_pages}</span>
-            <button
-              disabled={currentPage === pagination.total_pages}
-              onClick={() => fetchStarred(currentPage + 1)}
-              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 text-gray-600 disabled:opacity-30 hover:border-indigo-300 transition-all"
-            >
+            <button disabled={currentPage === pagination.total_pages} onClick={() => fetchStarred(currentPage + 1)}
+              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 text-gray-600 disabled:opacity-30 hover:border-indigo-300 transition-all">
               <i className="fas fa-chevron-right text-xs"></i>
             </button>
           </div>
         )}
       </div>
 
-      {/* ══ DELETE CONFIRM MODAL ══ */}
+      {/* DELETE CONFIRM MODAL */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4">
           <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 sm:p-8 max-w-sm w-full shadow-2xl">
@@ -532,10 +501,7 @@ export default function Starred() {
               The file will be moved to trash and removed from favourites.
             </p>
             <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="py-3 font-bold text-gray-600 hover:text-gray-900 text-sm"
-              >
+              <button onClick={() => setDeleteConfirm(null)} className="py-3 font-bold text-gray-600 hover:text-gray-900 text-sm">
                 Cancel
               </button>
               <button
@@ -551,25 +517,19 @@ export default function Starred() {
         </div>
       )}
 
-      {/* ══ PREVIEW MODAL ══ */}
+      {/* PREVIEW MODAL */}
       {previewFile && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
           <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 lg:p-8 max-w-lg w-full shadow-2xl max-h-[92vh] sm:max-h-[90vh] overflow-y-auto">
-            {/* Modal header */}
             <div className="flex justify-between items-start mb-5 sm:mb-6">
               <h3 className="text-base sm:text-lg font-bold text-gray-900">File Preview</h3>
-              <button
-                onClick={() => setPreviewFile(null)}
-                className="text-gray-400 hover:text-gray-600 text-xl sm:text-2xl p-1 -mt-1 -mr-1"
-              >
+              <button onClick={() => setPreviewFile(null)} className="text-gray-400 hover:text-gray-600 text-xl sm:text-2xl p-1 -mt-1 -mr-1">
                 <i className="fas fa-times"></i>
               </button>
             </div>
 
-            {/* Media preview */}
             {renderPreview(previewFile)}
 
-            {/* File metadata */}
             <div className="space-y-3 sm:space-y-4 mb-5 sm:mb-6">
               <div>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Filename</p>
@@ -591,18 +551,13 @@ export default function Starred() {
               </div>
             </div>
 
-            {/* Action buttons */}
             <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => { handleDownload(previewFile); setPreviewFile(null) }}
-                className="py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 text-sm"
-              >
+              <button onClick={() => { handleDownload(previewFile); setPreviewFile(null) }}
+                className="py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 text-sm">
                 <i className="fas fa-download"></i> Download
               </button>
-              <button
-                onClick={() => setPreviewFile(null)}
-                className="py-3 bg-gray-100 text-gray-700 rounded-2xl font-bold hover:bg-gray-200 transition-all text-sm"
-              >
+              <button onClick={() => setPreviewFile(null)}
+                className="py-3 bg-gray-100 text-gray-700 rounded-2xl font-bold hover:bg-gray-200 transition-all text-sm">
                 Close
               </button>
             </div>
