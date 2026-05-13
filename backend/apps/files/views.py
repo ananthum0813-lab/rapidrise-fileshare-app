@@ -1,4 +1,7 @@
 import os
+import re
+import hashlib
+
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Count
@@ -21,9 +24,160 @@ class FilePagination(PageNumberPagination):
     max_page_size = 100
 
 
-# ═══════════════════════════════════════════════════════════════════
-# EXISTING VIEWS (Keep all original functionality)
-# ═══════════════════════════════════════════════════════════════════
+# ──────────────────────────────────────────────────────────────────────────────
+# Robust server-side filename deduplication
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _split_name(filename: str) -> tuple[str, str]:
+    """Split 'report (2).pdf' → ('report', '.pdf')."""
+    if '.' in filename:
+        dot = filename.rfind('.')
+        return filename[:dot], filename[dot:]
+    return filename, ''
+
+
+# Matches " (N)" or "(N)" at end of base name — our own suffix style
+_COUNTER_RE = re.compile(r'^(.*?)\s*\((\d+)\)$')
+
+# Matches Django's auto-suffix patterns: _1_, _2, _abc123_ etc.
+_DJANGO_SUFFIX_RE = re.compile(r'_[a-zA-Z0-9]+_?$')
+
+
+def _strip_our_counter(base: str) -> str:
+    """'report (2)' → 'report',  'report' → 'report'."""
+    m = _COUNTER_RE.match(base)
+    return m.group(1).rstrip() if m else base
+
+
+def _strip_django_suffix(base: str) -> str:
+    """
+    Strip Django's auto-appended storage suffixes from a *display* name.
+    e.g. 'Screenshot from 2026-05-11 15-36-24 _1_' → 'Screenshot from 2026-05-11 15-36-24'
+    Only strips if the suffix looks like Django-generated (underscore + alnum + optional _).
+    """
+    return _DJANGO_SUFFIX_RE.sub('', base).rstrip()
+
+
+def resolve_unique_filename(desired_name: str, owner, exclude_pk=None) -> str:
+    """
+    Return a display filename that is unique for this owner (among non-deleted files).
+
+    Algorithm
+    ---------
+    1. Split desired_name → (raw_base, ext)
+    2. Strip any Django storage suffix from raw_base           → clean_base
+    3. Strip our own "(N)" counter from clean_base             → root_base
+    4. Query ALL existing orignal_names that start with root_base + ext
+    5. Collect every counter already in use (0 = no counter)
+    6. Pick lowest non-negative integer NOT in that set:
+       - 0  → return  root_base + ext              (e.g. "file.png")
+       - N  → return  root_base + " (N)" + ext     (e.g. "file (3).png")
+
+    This guarantees:
+      file.png → file (1).png → file (2).png → file (3).png …
+    and never resets or duplicates.
+    """
+    raw_base, ext = _split_name(desired_name)
+    clean_base    = _strip_django_suffix(raw_base)
+    root_base     = _strip_our_counter(clean_base)
+
+    # Fetch all existing names for this owner that could collide
+    prefix       = root_base          # names starting with root_base
+    ext_lower    = ext.lower()
+
+    qs = File.objects.filter(
+        owner=owner,
+        is_deleted=False,
+        original_name__istartswith=prefix,
+    )
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+
+    existing_names = set(qs.values_list('original_name', flat=True))
+
+    # Build set of counters already occupied
+    occupied = set()
+    exact_base = root_base.lower() + ext_lower          # counter-0 candidate
+
+    for name in existing_names:
+        name_lower = name.lower()
+        if name_lower == exact_base:
+            occupied.add(0)
+            continue
+        b, e = _split_name(name)
+        if e.lower() != ext_lower:
+            continue
+        m = _COUNTER_RE.match(b)
+        if m and m.group(1).rstrip().lower() == root_base.lower():
+            occupied.add(int(m.group(2)))
+
+    # Find the lowest free slot
+    counter = 0
+    while counter in occupied:
+        counter += 1
+
+    if counter == 0:
+        return root_base + ext
+    return f'{root_base} ({counter}){ext}'
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# SHA-256 helper
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _compute_sha256(f) -> str:
+    h = hashlib.sha256()
+    for chunk in f.chunks():
+        h.update(chunk)
+    f.seek(0)
+    return h.hexdigest()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Duplicate check endpoint  (called by frontend BEFORE upload)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class CheckDuplicateView(APIView):
+    """
+    POST /api/files/check-duplicate/
+    Body: { "sha256": "<64-char hex>" }
+
+    Returns:
+      { is_duplicate: false }                       — safe to upload
+      { is_duplicate: true, existing_file: {...} }  — duplicate found
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        sha256 = request.data.get('sha256', '').strip().lower()
+        if len(sha256) != 64 or not all(c in '0123456789abcdef' for c in sha256):
+            raise ValidationError({'sha256': 'A valid 64-character SHA-256 hex string is required.'})
+
+        duplicate = File.objects.filter(
+            owner=request.user,
+            sha256=sha256,
+            is_deleted=False,
+        ).first()
+
+        if not duplicate:
+            return success_response(
+                data={'is_duplicate': False},
+                status_code=status.HTTP_200_OK,
+            )
+
+        return success_response(
+            data={
+                'is_duplicate': True,
+                'existing_file': FileSerializer(duplicate, context={'request': request}).data,
+            },
+            message='Duplicate file detected — same content already exists in your storage.',
+            status_code=status.HTTP_200_OK,
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Upload  (with server-side dedup + sha256 store)
+# ──────────────────────────────────────────────────────────────────────────────
 
 class FileUploadView(APIView):
     """Upload one or multiple files (multipart/form-data, field name: 'files')."""
@@ -34,60 +188,85 @@ class FileUploadView(APIView):
         if not files:
             raise ValidationError({'files': 'No files provided.'})
 
-        user = request.user
-        
-        # Calculate current usage
-        used_bytes = File.objects.filter(
-            owner=user,
-            is_deleted=False
-        ).aggregate(total=Sum('file_size'))['total'] or 0
-        
-        total_allowed = settings.MAX_STORAGE_BYTES
-        available = total_allowed - used_bytes
+        user      = request.user
+        used_bytes = File.objects.filter(owner=user, is_deleted=False).aggregate(
+            total=Sum('file_size')
+        )['total'] or 0
+        available  = settings.MAX_STORAGE_BYTES - used_bytes
 
         uploaded = []
-        errors = []
+        errors   = []
+
+        # Track names assigned IN THIS batch so two files in the same upload
+        # don't get the same resolved name.
+        batch_names: set[str] = set()
 
         for f in files:
-            # Validate file size
+            # ── size check ────────────────────────────────────────────────────
             if f.size > settings.MAX_FILE_SIZE_BYTES:
-                errors.append(f'{f.name}: Exceeds max size ({settings.MAX_FILE_SIZE_MB}MB)')
+                errors.append(f'{f.name}: Exceeds max size ({settings.MAX_FILE_SIZE_MB} MB)')
                 continue
-
-            # Validate user storage
             if f.size > available:
                 errors.append(f'{f.name}: Not enough storage space')
                 continue
 
-            # Validate MIME type
+            # ── MIME check ────────────────────────────────────────────────────
             mime_type = get_mime_type(f)
             if mime_type not in settings.ALLOWED_MIME_TYPES:
-                errors.append(f'{f.name}: File type not allowed')
+                errors.append(f'{f.name}: File type not allowed ({mime_type})')
                 continue
 
+            # ── SHA-256 ───────────────────────────────────────────────────────
+            try:
+                sha256 = _compute_sha256(f)
+            except Exception:
+                sha256 = ''
+
+            # ── Resolve unique display name ───────────────────────────────────
+            # Start from the sanitized desired name, then find the next free slot.
+            desired   = sanitize_filename(f.name)
+            unique    = resolve_unique_filename(desired, user)
+
+            # Also avoid clashing with names already assigned in this batch
+            if unique.lower() in {n.lower() for n in batch_names}:
+                raw_base, ext = _split_name(unique)
+                root_base     = _strip_our_counter(raw_base)
+                counter       = 1
+                while f'{root_base} ({counter}){ext}'.lower() in {n.lower() for n in batch_names}:
+                    counter += 1
+                unique = f'{root_base} ({counter}){ext}'
+
+            batch_names.add(unique)
+
+            # ── Create record ─────────────────────────────────────────────────
             try:
                 record = File.objects.create(
                     owner=user,
-                    original_name=sanitize_filename(f.name),
+                    original_name=unique,
                     file=f,
                     file_size=f.size,
                     mime_type=mime_type,
+                    sha256=sha256,
                 )
-                uploaded.append(FileSerializer(record).data)
+                uploaded.append(FileSerializer(record, context={'request': request}).data)
                 available -= f.size
             except Exception as e:
-                errors.append(f'{f.name}: Upload failed - {str(e)}')
+                errors.append(f'{f.name}: Upload failed — {e}')
 
         return success_response(
             data={
                 'uploaded': uploaded,
-                'errors': errors if errors else None,
-                'count': len(uploaded),
+                'errors':   errors or None,
+                'count':    len(uploaded),
             },
             message=f'{len(uploaded)} file(s) uploaded successfully.' if uploaded else 'Upload failed.',
             status_code=status.HTTP_201_CREATED if uploaded else status.HTTP_400_BAD_REQUEST,
         )
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# All existing views — unchanged
+# ──────────────────────────────────────────────────────────────────────────────
 
 class FileListView(APIView):
     """List all files for the authenticated user, with search and ordering."""
@@ -96,33 +275,33 @@ class FileListView(APIView):
     def get(self, request):
         qs = File.objects.filter(owner=request.user, is_deleted=False)
 
-        # Search
         search = request.query_params.get('search', '').strip()
         if search:
             qs = qs.filter(original_name__icontains=search)
 
-        # Ordering
         ordering = request.query_params.get('ordering', '-uploaded_at')
-        valid_orderings = ['uploaded_at', '-uploaded_at', 'original_name', '-original_name', 'file_size', '-file_size']
+        valid_orderings = [
+            'uploaded_at', '-uploaded_at',
+            'original_name', '-original_name',
+            'file_size', '-file_size',
+        ]
         if ordering in valid_orderings:
             qs = qs.order_by(ordering)
 
-        # Pagination
         paginator = FilePagination()
-        page = paginator.paginate_queryset(qs, request)
+        page      = paginator.paginate_queryset(qs, request)
 
         return success_response(data={
-            'results': FileSerializer(page, many=True).data,
-            'count': paginator.page.paginator.count,
-            'total_pages': paginator.page.paginator.num_pages,
+            'results':      FileSerializer(page, many=True).data,
+            'count':        paginator.page.paginator.count,
+            'total_pages':  paginator.page.paginator.num_pages,
             'current_page': paginator.page.number,
-            'next': paginator.get_next_link(),
-            'previous': paginator.get_previous_link(),
+            'next':         paginator.get_next_link(),
+            'previous':     paginator.get_previous_link(),
         })
 
 
 class FileDetailView(APIView):
-    """Get or delete a specific file. Only the owner can access."""
     permission_classes = [IsAuthenticated, IsFileOwner]
 
     def get_object(self, pk):
@@ -131,256 +310,205 @@ class FileDetailView(APIView):
         return obj
 
     def get(self, request, pk):
-        """Get file details."""
-        file_obj = self.get_object(pk)
-        return success_response(data=FileSerializer(file_obj).data)
+        return success_response(data=FileSerializer(self.get_object(pk)).data)
 
     def delete(self, request, pk):
-        """Delete a file (soft delete)."""
         file_obj = self.get_object(pk)
-        name = file_obj.original_name
+        name     = file_obj.original_name
         file_obj.delete_file()
         return success_response(message=f"'{name}' deleted successfully.")
 
 
 class FileDownloadView(APIView):
-    """Download a file. Only the owner can download."""
     permission_classes = [IsAuthenticated, IsFileOwner]
 
     def get(self, request, pk):
-        file_obj = get_object_or_404(File, pk=pk, is_deleted=False)
+        file_obj  = get_object_or_404(File, pk=pk, is_deleted=False)
         self.check_object_permissions(request, file_obj)
         file_path = file_obj.file.path
         if os.path.exists(file_path):
-            response = FileResponse(open(file_path, 'rb'), as_attachment=True, filename=file_obj.original_name)
-            return response
+            return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=file_obj.original_name)
         raise Http404('File not found on server.')
 
 
 class FileRenameView(APIView):
     """
-    Rename a file while maintaining filename uniqueness per user.
-    
-    SECURITY & UNIQUENESS:
-    ✅ Only filename owner can rename
-    ✅ Extension is protected (cannot be changed)
-    ✅ Filename must be unique (per user, excluding deleted files)
-    ✅ Cannot rename to existing filename
-    ✅ Case-insensitive uniqueness check
+    Rename a file.
+
+    - Extension is protected (cannot be changed).
+    - Uses resolve_unique_filename so the new name is guaranteed unique.
     """
     permission_classes = [IsAuthenticated, IsFileOwner]
 
     def post(self, request, pk):
         file_obj = get_object_or_404(File, pk=pk, is_deleted=False)
         self.check_object_permissions(request, file_obj)
-        
+
         new_name = request.data.get('new_name', '').strip()
         if not new_name:
             raise ValidationError({'new_name': 'New filename is required.'})
-        
-        # Extract original file extension
+
+        # Protect extension
         original_name = file_obj.original_name
-        if '.' in original_name:
-            original_ext = '.' + original_name.rsplit('.', 1)[1]
-        else:
-            original_ext = ''
-        
-        # Remove extension from new_name if user provided one
+        original_ext  = ('.' + original_name.rsplit('.', 1)[1]) if '.' in original_name else ''
+
+        # Strip any extension the user may have typed
         if '.' in new_name:
             new_name = new_name.rsplit('.', 1)[0]
-        
-        # Sanitize and reconstruct: filename + original_extension
-        new_name = sanitize_filename(new_name)
-        new_name = new_name + original_ext
-        
-        # Prevent no-op renames
-        if new_name == original_name:
-            raise ValidationError({'new_name': 'New filename is the same as current.'})
-        
-        # ✅ CHECK UNIQUENESS: Ensure filename doesn't exist for this user
-        filename_exists = File.objects.filter(
-            owner=request.user,
-            original_name=new_name,
-            is_deleted=False
-        ).exclude(pk=pk).exists()
-        
-        if filename_exists:
+
+        new_name    = sanitize_filename(new_name) + original_ext
+        desired_full = new_name
+
+        if desired_full == original_name:
+            raise ValidationError({'new_name': 'New filename is the same as the current name.'})
+
+        # Resolve uniqueness (exclude this file itself so a no-op rename is detected above)
+        unique_name = resolve_unique_filename(desired_full, request.user, exclude_pk=pk)
+
+        # If resolve_unique_filename changed the name it means there's a clash
+        if unique_name != desired_full:
             raise ValidationError({
-                'new_name': f"You already have a file named '{new_name}'. Please choose a different name."
+                'new_name': f"A file named '{desired_full}' already exists. "
+                            f"It would be saved as '{unique_name}' — "
+                            f"please choose a different name or confirm.",
             })
-        
-        # ✅ RENAME: Update the filename
-        file_obj.original_name = new_name
+
+        file_obj.original_name = unique_name
         file_obj.save(update_fields=['original_name'])
-        
+
         return success_response(
             data=FileSerializer(file_obj).data,
-            message=f"Renamed to '{new_name}'."
+            message=f"Renamed to '{unique_name}'.",
         )
 
 
 class StorageInfoView(APIView):
-    """Get storage usage stats for the authenticated user."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Single query for both used bytes and file count
         result = File.objects.filter(owner=request.user, is_deleted=False).aggregate(
             used=Sum('file_size'),
             file_count=Count('id'),
         )
-        used = result['used'] or 0
+        used  = result['used'] or 0
         total = settings.MAX_STORAGE_BYTES
-
         return success_response(data={
-            'used_bytes': used,
-            'total_bytes': total,
-            'used_mb': round(used / (1024 * 1024), 2),
-            'total_gb': settings.MAX_STORAGE_GB,
+            'used_bytes':    used,
+            'total_bytes':   total,
+            'used_mb':       round(used / (1024 * 1024), 2),
+            'total_gb':      settings.MAX_STORAGE_GB,
             'usage_percent': round((used / total) * 100, 2) if total else 0,
-            'file_count': result['file_count'],
+            'file_count':    result['file_count'],
         })
 
 
-# ═══════════════════════════════════════════════════════════════════
-# ✨ NEW VIEWS FOR NEW FEATURES
-# ═══════════════════════════════════════════════════════════════════
+# ── Favorites ─────────────────────────────────────────────────────────────────
 
 class ToggleFavoriteView(APIView):
-    """Toggle file favorite status. ⭐"""
     permission_classes = [IsAuthenticated, IsFileOwner]
-    
+
     def post(self, request, pk):
         file_obj = get_object_or_404(File, pk=pk, is_deleted=False)
         self.check_object_permissions(request, file_obj)
-        
         file_obj.toggle_favorite()
         return success_response(
             data=FileSerializer(file_obj).data,
-            message=f"{'⭐ Added to favorites' if file_obj.is_favorite else '✓ Removed from favorites'}."
+            message='⭐ Added to favorites.' if file_obj.is_favorite else '✓ Removed from favorites.',
         )
 
 
 class FavoritesListView(APIView):
-    """List all favorite files. 🌟"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
-        qs = File.objects.filter(
-            owner=request.user, 
-            is_deleted=False, 
-            is_favorite=True
-        ).order_by('-uploaded_at')
+        qs        = File.objects.filter(owner=request.user, is_deleted=False, is_favorite=True).order_by('-uploaded_at')
         paginator = FilePagination()
-        page = paginator.paginate_queryset(qs, request)
-        
+        page      = paginator.paginate_queryset(qs, request)
         return success_response(data={
-            'results': FileSerializer(page, many=True).data,
-            'count': paginator.page.paginator.count,
-            'total_pages': paginator.page.paginator.num_pages,
+            'results':      FileSerializer(page, many=True).data,
+            'count':        paginator.page.paginator.count,
+            'total_pages':  paginator.page.paginator.num_pages,
             'current_page': paginator.page.number,
         })
 
 
+# ── Trash ─────────────────────────────────────────────────────────────────────
+
 class TrashListView(APIView):
-    """List deleted (trashed) files. 🗑️"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
-        qs = File.objects.filter(owner=request.user, is_deleted=True).order_by('-deleted_at')
+        qs        = File.objects.filter(owner=request.user, is_deleted=True).order_by('-deleted_at')
         paginator = FilePagination()
-        page = paginator.paginate_queryset(qs, request)
-        
+        page      = paginator.paginate_queryset(qs, request)
         return success_response(data={
-            'results': FileSerializer(page, many=True).data,
-            'count': paginator.page.paginator.count,
-            'total_pages': paginator.page.paginator.num_pages,
+            'results':      FileSerializer(page, many=True).data,
+            'count':        paginator.page.paginator.count,
+            'total_pages':  paginator.page.paginator.num_pages,
             'current_page': paginator.page.number,
         })
 
 
 class RestoreFileView(APIView):
-    """Restore a file from trash. ↩️"""
     permission_classes = [IsAuthenticated, IsFileOwner]
-    
+
     def post(self, request, pk):
         file_obj = get_object_or_404(File, pk=pk, is_deleted=True)
         self.check_object_permissions(request, file_obj)
-        
         file_obj.restore_file()
         return success_response(
             data=FileSerializer(file_obj).data,
-            message=f"✓ '{file_obj.original_name}' restored from trash."
+            message=f"✓ '{file_obj.original_name}' restored from trash.",
         )
 
 
 class EmptyTrashView(APIView):
-    """Permanently delete all trashed files. ⚠️"""
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request):
-        trashed_files = File.objects.filter(owner=request.user, is_deleted=True)
-        count = trashed_files.count()
-        
-        for file_obj in trashed_files:
-            file_obj.permanently_delete()
-        
+        trashed = File.objects.filter(owner=request.user, is_deleted=True)
+        count   = trashed.count()
+        for f in trashed:
+            f.permanently_delete()
         return success_response(message=f"✓ Permanently deleted {count} file(s) from trash.")
 
 
 class PermanentlyDeleteView(APIView):
-    """Permanently delete a single file from trash. ⚠️"""
     permission_classes = [IsAuthenticated, IsFileOwner]
-    
+
     def post(self, request, pk):
         file_obj = get_object_or_404(File, pk=pk, is_deleted=True)
         self.check_object_permissions(request, file_obj)
-        
         name = file_obj.original_name
         file_obj.permanently_delete()
-        
         return success_response(message=f"✓ Permanently deleted '{name}'.")
 
 
+# ── Batch ─────────────────────────────────────────────────────────────────────
+
 class BatchDeleteView(APIView):
-    """Delete multiple files at once. 🗑️"""
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request):
-        file_ids = request.data.get('file_ids', [])
-        if not file_ids:
+        ids = request.data.get('file_ids', [])
+        if not ids:
             raise ValidationError({'file_ids': 'At least one file ID is required.'})
-        
-        files = File.objects.filter(
-            owner=request.user,
-            id__in=file_ids,
-            is_deleted=False
-        )
-        
+        files = File.objects.filter(owner=request.user, id__in=ids, is_deleted=False)
         count = files.count()
-        for file_obj in files:
-            file_obj.delete_file()
-        
+        for f in files:
+            f.delete_file()
         return success_response(message=f"✓ Deleted {count} file(s).")
 
 
 class BatchRestoreView(APIView):
-    """Restore multiple files from trash at once. ↩️"""
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request):
-        file_ids = request.data.get('file_ids', [])
-        if not file_ids:
+        ids = request.data.get('file_ids', [])
+        if not ids:
             raise ValidationError({'file_ids': 'At least one file ID is required.'})
-        
-        files = File.objects.filter(
-            owner=request.user,
-            id__in=file_ids,
-            is_deleted=True
-        )
-        
+        files = File.objects.filter(owner=request.user, id__in=ids, is_deleted=True)
         count = files.count()
-        for file_obj in files:
-            file_obj.restore_file()
-        
+        for f in files:
+            f.restore_file()
         return success_response(message=f"✓ Restored {count} file(s) from trash.")
