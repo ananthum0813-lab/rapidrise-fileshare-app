@@ -423,10 +423,10 @@ export default function Dashboard() {
               )}
             </div>
 
-            <button className="relative h-11 flex items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm hover:bg-slate-50 transition px-3">
+            {/* <button className="relative h-11 flex items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm hover:bg-slate-50 transition px-3">
               <i className="fas fa-bell text-slate-600"></i>
               <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
-            </button>
+            </button> */}
             <Link to="/settings">
               <img src={avatarUrl} alt="avatar" className="h-11 w-11 rounded-full ring-2 ring-white shadow-md cursor-pointer hover:opacity-80 transition" />
             </Link>

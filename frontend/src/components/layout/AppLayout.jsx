@@ -51,7 +51,7 @@ export default function AppLayout() {
           <div className="bg-indigo-600 p-2 rounded-lg text-white">
             <i className="fas fa-cloud text-lg"></i>
           </div>
-          <h1 className="text-lg sm:text-xl font-bold text-slate-800 truncate">CloudShare</h1>
+          <h1 className="text-lg sm:text-xl font-bold text-slate-800 truncate">FileShare</h1>
         </div>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -93,7 +93,7 @@ export default function AppLayout() {
           <div className="bg-indigo-600 p-2 rounded-lg text-white shadow-sm">
             <i className="fas fa-cloud text-xl"></i>
           </div>
-          <h1 className="text-xl font-black text-slate-800 tracking-tight">CloudShare</h1>
+          <h1 className="text-xl font-black text-slate-800 tracking-tight">FileShare</h1>
         </div>
 
         {/* Navigation */}

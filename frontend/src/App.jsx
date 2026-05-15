@@ -18,8 +18,9 @@ import Starred from '@/pages/Starred'
 import Trash from '@/pages/Trash'
 import NotFound from '@/pages/NotFound'
 // Public Pages — TWO separate pages, one per use-case
-import PublicSharePage   from '@/pages/PublicSharePage'    // view/download a shared file link
-import PublicUploadPage  from '@/pages/PublicUploadPage'   // recipient uploads files via request link
+import PublicSharePage    from '@/pages/PublicSharePage'    // view/download a shared file link
+import PublicUploadPage   from '@/pages/PublicUploadPage'   // recipient uploads files via request link
+import PublicZipSharePage from '@/pages/PublicZipSharePage' // view/download a shared ZIP link
 
 function RootRedirect() {
   const { isAuthenticated, sessionChecked } = useSelector((s) => s.auth)
@@ -55,15 +56,22 @@ function AppRoutes() {
         Used when a file owner shares a file → recipient gets /share/<share_token>
         Calls GET /api/sharing/public/<token>/ to fetch file info + download
       */}
-      <Route path="/share/:token"          element={<PublicSharePage />} />
+      <Route path="/share/:token" element={<PublicSharePage />} />
 
       {/*
-        Public upload page — /shared/:token  (legacy) and /request/upload/:token
+        Public upload page — /shared/:token (legacy) and /request/upload/:token
         Used when a file request owner sends recipients an upload link.
         Calls GET /api/sharing/requests/upload/<token>/ to validate token.
       */}
-      <Route path="/shared/:token"         element={<PublicUploadPage />} />
-      <Route path="/request/upload/:token" element={<PublicUploadPage />} />
+      <Route path="/shared/:token"          element={<PublicUploadPage />} />
+      <Route path="/request/upload/:token"  element={<PublicUploadPage />} />
+
+      {/*
+        Public ZIP share page — /zip-share/:token
+        Used when a file owner shares a ZIP bundle → recipient gets /zip-share/<token>
+        Calls GET /api/sharing/public/zip/<token>/ to fetch ZIP info + download
+      */}
+      <Route path="/zip-share/:token" element={<PublicZipSharePage />} />
 
       {/* Protected app pages */}
       <Route element={<ProtectedRoute />}>
