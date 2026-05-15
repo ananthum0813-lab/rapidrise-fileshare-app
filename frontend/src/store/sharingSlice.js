@@ -1,11 +1,14 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import {
+  getAllFiles as apiGetAllFiles,
   getShares,
   createShare as apiCreateShare,
   revokeShare as apiRevokeShare,
+  deleteShare as apiDeleteShare,
   createZipShare as apiCreateZipShare,
   getZipShares as apiGetZipShares,
   revokeZipShare as apiRevokeZipShare,
+  deleteZipShare as apiDeleteZipShare,
   getGlobalAnalytics as apiGetGlobalAnalytics,
   getShareAnalytics as apiGetShareAnalytics,
   getFileRequests,
@@ -14,10 +17,23 @@ import {
   getInbox,
   reviewSubmission as apiReview,
   deleteInfectedFile as apiDeleteInfectedFile,
+  removeInboxItem as apiRemoveInboxItem,
 } from '@/api/sharingApi'
 
-// ── Single-file share thunks ──────────────────────────────────────────────────
+// ── All-files thunk ───────────────────────────────────────────────────────────
+export const fetchAllFiles = createAsyncThunk(
+  'sharing/fetchAllFiles',
+  async (search = '', { rejectWithValue }) => {
+    try {
+      const { data } = await apiGetAllFiles(search)
+      return data.data
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || 'Failed to load files.')
+    }
+  },
+)
 
+// ── Single-file share thunks ──────────────────────────────────────────────────
 export const fetchShares = createAsyncThunk(
   'sharing/fetchShares',
   async ({ page = 1, status = '', file_id = '' } = {}, { rejectWithValue }) => {
@@ -54,8 +70,19 @@ export const revoke = createAsyncThunk(
   },
 )
 
-// ── ZIP share thunks (NEW) ────────────────────────────────────────────────────
+export const deleteShare = createAsyncThunk(
+  'sharing/deleteShare',
+  async (shareId, { rejectWithValue }) => {
+    try {
+      await apiDeleteShare(shareId)
+      return shareId
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || 'Failed to delete share.')
+    }
+  },
+)
 
+// ── ZIP share thunks ──────────────────────────────────────────────────────────
 export const createZipShare = createAsyncThunk(
   'sharing/createZipShare',
   async (formData, { rejectWithValue }) => {
@@ -92,8 +119,19 @@ export const revokeZipShare = createAsyncThunk(
   },
 )
 
-// ── Analytics thunks ──────────────────────────────────────────────────────────
+export const deleteZipShare = createAsyncThunk(
+  'sharing/deleteZipShare',
+  async (zipShareId, { rejectWithValue }) => {
+    try {
+      await apiDeleteZipShare(zipShareId)
+      return zipShareId
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || 'Failed to delete ZIP share.')
+    }
+  },
+)
 
+// ── Analytics ─────────────────────────────────────────────────────────────────
 export const fetchGlobalAnalytics = createAsyncThunk(
   'sharing/fetchGlobalAnalytics',
   async (_, { rejectWithValue }) => {
@@ -118,8 +156,7 @@ export const fetchShareAnalytics = createAsyncThunk(
   },
 )
 
-// ── File request thunks ───────────────────────────────────────────────────────
-
+// ── Request thunks ────────────────────────────────────────────────────────────
 export const fetchRequests = createAsyncThunk(
   'sharing/fetchRequests',
   async ({ page = 1, status = '' } = {}, { rejectWithValue }) => {
@@ -157,7 +194,6 @@ export const closeRequest = createAsyncThunk(
 )
 
 // ── Inbox thunks ──────────────────────────────────────────────────────────────
-
 export const fetchInbox = createAsyncThunk(
   'sharing/fetchInbox',
   async ({ page = 1, status = '', source_type = '', scan_status = '' } = {}, { rejectWithValue }) => {
@@ -182,6 +218,7 @@ export const reviewInboxItem = createAsyncThunk(
   },
 )
 
+/** Hard-delete an infected/scan_failed file + its inbox row. */
 export const deleteInfectedFile = createAsyncThunk(
   'sharing/deleteInfectedFile',
   async (submissionId, { rejectWithValue }) => {
@@ -194,11 +231,31 @@ export const deleteInfectedFile = createAsyncThunk(
   },
 )
 
-// ── Slice ─────────────────────────────────────────────────────────────────────
+/**
+ * Remove any inbox entry (with smart file handling).
+ * Infected files → hard-deleted.  Safe files → only the row is removed.
+ */
+export const removeInboxItem = createAsyncThunk(
+  'sharing/removeInboxItem',
+  async (submissionId, { rejectWithValue }) => {
+    try {
+      await apiRemoveInboxItem(submissionId)
+      return submissionId
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || 'Failed to remove item.')
+    }
+  },
+)
 
+// ── Slice ─────────────────────────────────────────────────────────────────────
 const sharingSlice = createSlice({
   name: 'sharing',
   initialState: {
+    // All owner files
+    allFiles:        [],
+    allFilesCount:   0,
+    allFilesLoading: false,
+
     // Single-file shares
     shares:     [],
     pagination: { current_page: 1, total_pages: 1, count: 0, next: null, previous: null },
@@ -206,9 +263,9 @@ const sharingSlice = createSlice({
     error:      null,
 
     // ZIP shares
-    zipShares:       [],
-    zipPagination:   { current_page: 1, total_pages: 1, count: 0 },
-    zipSharing:      false,
+    zipShares:     [],
+    zipPagination: { current_page: 1, total_pages: 1, count: 0, next: null, previous: null },
+    zipSharing:    false,
 
     // Analytics
     globalAnalytics:  null,
@@ -227,15 +284,26 @@ const sharingSlice = createSlice({
     scanStatusCounts:  {},
     inboxLoading:      false,
     deletingFile:      false,
+    removingItem:      false,
   },
   reducers: {},
   extraReducers: (builder) => {
 
+    // ── All files ─────────────────────────────────────────────────────────────
+    builder
+      .addCase(fetchAllFiles.pending,   (s) => { s.allFilesLoading = true })
+      .addCase(fetchAllFiles.fulfilled, (s, { payload }) => {
+        s.allFiles        = payload.files || []
+        s.allFilesCount   = payload.count || 0
+        s.allFilesLoading = false
+      })
+      .addCase(fetchAllFiles.rejected,  (s) => { s.allFilesLoading = false })
+
     // ── Single-file shares ────────────────────────────────────────────────────
     builder
-      .addCase(fetchShares.fulfilled, (state, { payload }) => {
-        state.shares     = payload.results || []
-        state.pagination = {
+      .addCase(fetchShares.fulfilled, (s, { payload }) => {
+        s.shares     = payload.results || []
+        s.pagination = {
           current_page: payload.current_page,
           total_pages:  payload.total_pages,
           count:        payload.count,
@@ -243,105 +311,125 @@ const sharingSlice = createSlice({
           previous:     payload.previous,
         }
       })
-      .addCase(share.pending,   (state) => { state.sharing = true;  state.error = null })
-      .addCase(share.fulfilled, (state) => { state.sharing = false })
-      .addCase(share.rejected,  (state, { payload }) => { state.sharing = false; state.error = payload })
-      .addCase(revoke.fulfilled, (state, { payload: id }) => {
-        const s = state.shares.find((x) => x.id === id)
-        if (s) s.status = 'revoked'
+      .addCase(share.pending,   (s) => { s.sharing = true;  s.error = null })
+      .addCase(share.fulfilled, (s) => { s.sharing = false })
+      .addCase(share.rejected,  (s, { payload }) => { s.sharing = false; s.error = payload })
+      .addCase(revoke.fulfilled, (s, { payload: id }) => {
+        const item = s.shares.find((x) => x.id === id)
+        if (item) item.status = 'revoked'
+      })
+      .addCase(deleteShare.fulfilled, (s, { payload: id }) => {
+        s.shares = s.shares.filter((x) => x.id !== id)
       })
 
     // ── ZIP shares ────────────────────────────────────────────────────────────
     builder
-      .addCase(createZipShare.pending,   (state) => { state.zipSharing = true; state.error = null })
-      .addCase(createZipShare.fulfilled, (state, { payload }) => {
-        state.zipSharing = false
-        const newShares = payload.zip_shares || []
-        state.zipShares = [...newShares, ...state.zipShares]
+      .addCase(createZipShare.pending,   (s) => { s.zipSharing = true; s.error = null })
+      .addCase(createZipShare.fulfilled, (s, { payload }) => {
+        s.zipSharing = false
+        const newZips = payload.zip_shares || []
+        s.zipShares   = [...newZips, ...s.zipShares]
+        s.zipPagination = {
+          ...s.zipPagination,
+          count: (s.zipPagination.count || 0) + newZips.length,
+        }
       })
-      .addCase(createZipShare.rejected,  (state, { payload }) => {
-        state.zipSharing = false
-        state.error = payload
+      .addCase(createZipShare.rejected, (s, { payload }) => {
+        s.zipSharing = false
+        s.error = payload
       })
-      .addCase(fetchZipShares.fulfilled, (state, { payload }) => {
-        state.zipShares   = payload.results || []
-        state.zipPagination = {
+      .addCase(fetchZipShares.fulfilled, (s, { payload }) => {
+        s.zipShares     = payload.results || []
+        s.zipPagination = {
           current_page: payload.current_page,
           total_pages:  payload.total_pages,
           count:        payload.count,
+          next:         payload.next,
+          previous:     payload.previous,
         }
       })
-      .addCase(revokeZipShare.fulfilled, (state, { payload: id }) => {
-        const zs = state.zipShares.find((x) => x.id === id)
-        if (zs) zs.status = 'revoked'
+      .addCase(revokeZipShare.fulfilled, (s, { payload: id }) => {
+        const item = s.zipShares.find((x) => x.id === id)
+        if (item) item.status = 'revoked'
+      })
+      .addCase(deleteZipShare.fulfilled, (s, { payload: id }) => {
+        s.zipShares = s.zipShares.filter((x) => x.id !== id)
       })
 
     // ── Analytics ─────────────────────────────────────────────────────────────
     builder
-      .addCase(fetchGlobalAnalytics.pending,   (state) => { state.analyticsLoading = true })
-      .addCase(fetchGlobalAnalytics.fulfilled, (state, { payload }) => {
-        state.globalAnalytics  = payload
-        state.analyticsLoading = false
+      .addCase(fetchGlobalAnalytics.pending,   (s) => { s.analyticsLoading = true })
+      .addCase(fetchGlobalAnalytics.fulfilled, (s, { payload }) => {
+        s.globalAnalytics  = payload
+        s.analyticsLoading = false
       })
-      .addCase(fetchGlobalAnalytics.rejected,  (state) => { state.analyticsLoading = false })
-      .addCase(fetchShareAnalytics.pending,    (state) => { state.analyticsLoading = true })
-      .addCase(fetchShareAnalytics.fulfilled,  (state, { payload }) => {
-        state.shareAnalytics   = payload
-        state.analyticsLoading = false
+      .addCase(fetchGlobalAnalytics.rejected,  (s) => { s.analyticsLoading = false })
+      .addCase(fetchShareAnalytics.pending,    (s) => { s.analyticsLoading = true })
+      .addCase(fetchShareAnalytics.fulfilled,  (s, { payload }) => {
+        s.shareAnalytics   = payload
+        s.analyticsLoading = false
       })
-      .addCase(fetchShareAnalytics.rejected,   (state) => { state.analyticsLoading = false })
+      .addCase(fetchShareAnalytics.rejected,   (s) => { s.analyticsLoading = false })
 
     // ── Requests ──────────────────────────────────────────────────────────────
     builder
-      .addCase(fetchRequests.pending,   (state) => { state.requestLoading = true })
-      .addCase(fetchRequests.fulfilled, (state, { payload }) => {
-        state.requests          = payload.results || []
-        state.requestPagination = {
+      .addCase(fetchRequests.pending,   (s) => { s.requestLoading = true })
+      .addCase(fetchRequests.fulfilled, (s, { payload }) => {
+        s.requests          = payload.results || []
+        s.requestPagination = {
           current_page: payload.current_page,
           total_pages:  payload.total_pages,
           count:        payload.count,
         }
-        state.requestLoading = false
+        s.requestLoading = false
       })
-      .addCase(fetchRequests.rejected,  (state) => { state.requestLoading = false })
-      .addCase(createRequest.fulfilled, (state, { payload }) => {
-        if (payload?.id) state.requests.unshift(payload)
+      .addCase(fetchRequests.rejected,  (s) => { s.requestLoading = false })
+      .addCase(createRequest.fulfilled, (s, { payload }) => {
+        if (payload?.id) s.requests.unshift(payload)
       })
-      .addCase(closeRequest.fulfilled, (state, { payload: id }) => {
-        state.requests = state.requests.filter((r) => r.id !== id)
+      .addCase(closeRequest.fulfilled, (s, { payload: id }) => {
+        s.requests = s.requests.filter((r) => r.id !== id)
       })
 
     // ── Inbox ─────────────────────────────────────────────────────────────────
     builder
-      .addCase(fetchInbox.pending,   (state) => { state.inboxLoading = true })
-      .addCase(fetchInbox.fulfilled, (state, { payload }) => {
-        state.inbox            = payload.results || []
-        state.inboxPagination  = {
+      .addCase(fetchInbox.pending,   (s) => { s.inboxLoading = true })
+      .addCase(fetchInbox.fulfilled, (s, { payload }) => {
+        s.inbox            = payload.results || []
+        s.inboxPagination  = {
           current_page: payload.current_page,
           total_pages:  payload.total_pages,
           count:        payload.count,
         }
-        state.inboxStatusCounts = payload.status_counts      || {}
-        state.scanStatusCounts  = payload.scan_status_counts || {}
-        state.inboxLoading      = false
+        s.inboxStatusCounts = payload.status_counts      || {}
+        s.scanStatusCounts  = payload.scan_status_counts || {}
+        s.inboxLoading      = false
       })
-      .addCase(fetchInbox.rejected, (state) => { state.inboxLoading = false })
-      .addCase(reviewInboxItem.fulfilled, (state, { payload }) => {
+      .addCase(fetchInbox.rejected, (s) => { s.inboxLoading = false })
+      .addCase(reviewInboxItem.fulfilled, (s, { payload }) => {
         if (!payload?.id) return
-        const idx = state.inbox.findIndex((x) => x.id === payload.id)
-        if (idx !== -1) state.inbox[idx] = payload
+        const idx = s.inbox.findIndex((x) => x.id === payload.id)
+        if (idx !== -1) s.inbox[idx] = payload
       })
-
-    // ── Delete infected file ───────────────────────────────────────────────────
-    builder
-      .addCase(deleteInfectedFile.pending,   (state) => { state.deletingFile = true; state.error = null })
-      .addCase(deleteInfectedFile.fulfilled, (state, { payload: id }) => {
-        state.inbox       = state.inbox.filter((x) => x.id !== id)
-        state.deletingFile = false
+      // deleteInfectedFile — legacy (still works for backwards compat)
+      .addCase(deleteInfectedFile.pending,   (s) => { s.deletingFile = true })
+      .addCase(deleteInfectedFile.fulfilled, (s, { payload: id }) => {
+        s.inbox        = s.inbox.filter((x) => x.id !== id)
+        s.deletingFile = false
       })
-      .addCase(deleteInfectedFile.rejected,  (state, { payload }) => {
-        state.deletingFile = false
-        state.error        = payload
+      .addCase(deleteInfectedFile.rejected,  (s, { payload }) => {
+        s.deletingFile = false
+        s.error        = payload
+      })
+      // removeInboxItem — universal remove
+      .addCase(removeInboxItem.pending,   (s) => { s.removingItem = true })
+      .addCase(removeInboxItem.fulfilled, (s, { payload: id }) => {
+        s.inbox       = s.inbox.filter((x) => x.id !== id)
+        s.removingItem = false
+      })
+      .addCase(removeInboxItem.rejected,  (s, { payload }) => {
+        s.removingItem = false
+        s.error        = payload
       })
   },
 })
