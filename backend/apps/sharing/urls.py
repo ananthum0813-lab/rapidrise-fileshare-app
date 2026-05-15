@@ -1,86 +1,84 @@
 """
 apps/sharing/urls.py
-─────────────────────────────────────────────────────────────────────────────
-All sharing routes — single-file shares, ZIP shares, file requests, inbox.
 """
-
 from django.urls import path
 from .views import (
-    # Duplicate check
+    AllFilesView,
     CheckDuplicateView,
-
-    # Single-file shares
     CreateShareView,
     SharedFileListView,
     RevokeShareView,
+    DeleteShareView,
     ShareAnalyticsView,
     GlobalShareAnalyticsView,
-
-    # Multi-file ZIP shares (NEW)
     CreateZipShareView,
     ZipShareListView,
     RevokeZipShareView,
+    DeleteZipShareView,
     PublicZipShareInfoView,
     PublicZipShareDownloadView,
-
-    # Public single-file share
     PublicShareInfoView,
     PublicShareDownloadView,
-
-    # File requests (authenticated)
     FileRequestListView,
     FileRequestDetailView,
-
-    # Public upload — per-recipient token
     PublicRecipientInfoView,
     PublicRecipientUploadView,
-
-    # Legacy public upload — shared token
     PublicFileRequestInfoView,
     PublicFileRequestUploadView,
-
-    # Submission inbox
+    PublicUploadStatusView,
     SubmissionInboxListView,
     ReviewSubmissionView,
     DeleteInfectedFileView,
+    RemoveInboxItemView,
 )
 
 urlpatterns = [
-    # ── Duplicate detection ──────────────────────────────────────────────────
-    path('check-duplicate/', CheckDuplicateView.as_view(), name='check-duplicate'),
+    # ── All files (for share form file selector) ─────────────────────────────
+    path('all-files/',         AllFilesView.as_view(),       name='all-files'),
 
-    # ── Single-file shares ───────────────────────────────────────────────────
-    path('',              SharedFileListView.as_view(),  name='share-list'),
-    path('create/',       CreateShareView.as_view(),     name='share-create'),
-    path('<uuid:pk>/revoke/',    RevokeShareView.as_view(),    name='share-revoke'),
-    path('<uuid:pk>/analytics/', ShareAnalyticsView.as_view(), name='share-analytics'),
-    path('analytics/',           GlobalShareAnalyticsView.as_view(), name='share-global-analytics'),
+    # ── Duplicate check ───────────────────────────────────────────────────────
+    path('check-duplicate/',   CheckDuplicateView.as_view(), name='check-duplicate'),
 
-    # ── Multi-file ZIP shares (NEW) ──────────────────────────────────────────
-    path('zip/',                          ZipShareListView.as_view(),        name='zip-share-list'),
-    path('zip/create/',                   CreateZipShareView.as_view(),      name='zip-share-create'),
-    path('zip/<uuid:pk>/revoke/',         RevokeZipShareView.as_view(),      name='zip-share-revoke'),
+    # ── Single-file shares ────────────────────────────────────────────────────
+    path('',                           SharedFileListView.as_view(),      name='share-list'),
+    path('create/',                    CreateShareView.as_view(),         name='share-create'),
+    path('<uuid:pk>/revoke/',          RevokeShareView.as_view(),         name='share-revoke'),
+    path('<uuid:pk>/',                 DeleteShareView.as_view(),         name='share-delete'),
+    path('<uuid:pk>/analytics/',       ShareAnalyticsView.as_view(),      name='share-analytics'),
+    path('analytics/',                 GlobalShareAnalyticsView.as_view(), name='share-global-analytics'),
+
+    # ── Multi-file ZIP shares ─────────────────────────────────────────────────
+    path('zip/',                       ZipShareListView.as_view(),        name='zip-list'),
+    path('zip/create/',                CreateZipShareView.as_view(),      name='zip-create'),
+    path('zip/<uuid:pk>/revoke/',      RevokeZipShareView.as_view(),      name='zip-revoke'),
+    path('zip/<uuid:pk>/',             DeleteZipShareView.as_view(),      name='zip-delete'),
+
+    # ── Public ZIP share pages  (must come BEFORE public/<uuid:token>/) ───────
     path('public/zip/<uuid:token>/',          PublicZipShareInfoView.as_view(),     name='public-zip-info'),
     path('public/zip/<uuid:token>/download/', PublicZipShareDownloadView.as_view(), name='public-zip-download'),
 
-    # ── Public single-file share ─────────────────────────────────────────────
-    path('public/<uuid:token>/',          PublicShareInfoView.as_view(),     name='public-share-info'),
-    path('public/<uuid:token>/download/', PublicShareDownloadView.as_view(), name='public-share-download'),
+    # ── Public single-file share pages ───────────────────────────────────────
+    path('public/<uuid:token>/',             PublicShareInfoView.as_view(),       name='public-share-info'),
+    path('public/<uuid:token>/download/',    PublicShareDownloadView.as_view(),   name='public-share-download'),
 
-    # ── File requests (authenticated) ────────────────────────────────────────
-    path('requests/',         FileRequestListView.as_view(),   name='request-list'),
-    path('requests/<uuid:pk>/', FileRequestDetailView.as_view(), name='request-detail'),
+    # ── File requests (authenticated) ─────────────────────────────────────────
+    path('requests/',            FileRequestListView.as_view(),   name='request-list'),
+    path('requests/<uuid:pk>/',  FileRequestDetailView.as_view(), name='request-detail'),
 
-    # ── Per-recipient upload (public) ────────────────────────────────────────
+    # ── Per-recipient upload (public) ─────────────────────────────────────────
     path('requests/upload/<uuid:token>/',        PublicRecipientInfoView.as_view(),   name='recipient-info'),
     path('requests/upload/<uuid:token>/submit/', PublicRecipientUploadView.as_view(), name='recipient-upload'),
 
-    # ── Legacy shared-token public upload ────────────────────────────────────
+    # ── Public scan-status polling ────────────────────────────────────────────
+    path('public-upload-status/<uuid:token>/', PublicUploadStatusView.as_view(), name='public-upload-status'),
+
+    # ── Legacy shared-token upload ────────────────────────────────────────────
     path('requests/public/<uuid:token>/',        PublicFileRequestInfoView.as_view(),   name='public-request-info'),
     path('requests/public/<uuid:token>/upload/', PublicFileRequestUploadView.as_view(), name='public-request-upload'),
 
-    # ── Submission Inbox ─────────────────────────────────────────────────────
-    path('inbox/',                            SubmissionInboxListView.as_view(), name='inbox-list'),
-    path('inbox/<uuid:pk>/review/',           ReviewSubmissionView.as_view(),    name='inbox-review'),
-    path('inbox/<uuid:pk>/delete-file/',      DeleteInfectedFileView.as_view(),  name='inbox-delete-infected'),
+    # ── Inbox ─────────────────────────────────────────────────────────────────
+    path('inbox/',                       SubmissionInboxListView.as_view(), name='inbox-list'),
+    path('inbox/<uuid:pk>/review/',      ReviewSubmissionView.as_view(),    name='inbox-review'),
+    path('inbox/<uuid:pk>/delete-file/', DeleteInfectedFileView.as_view(),  name='inbox-delete-infected'),
+    path('inbox/<uuid:pk>/remove/',      RemoveInboxItemView.as_view(),     name='inbox-remove'),
 ]
