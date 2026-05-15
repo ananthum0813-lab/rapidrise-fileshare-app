@@ -9,13 +9,24 @@
  *
  * After upload, shows per-file scan status with a polling refresh
  * so the recipient sees when scanning completes.
+ *
+ * Slot / count corrections
+ * ─────────────────────────
+ * `info` is fetched once at page load and becomes stale after uploads.
+ * We track `sessionUploadCount` locally to correct:
+ *   • effectiveSlotsLeft = serverSlotsAtLoad - sessionUploadCount
+ *   • displayUploadCount = serverUploadCount + sessionUploadCount
+ *
+ * We do NOT subtract `uploaded.length` from slots — that causes a
+ * double-deduction because the server already deducted prior submissions
+ * when it computed `remaining_slots` at load time.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
-import { getRecipientUploadInfo, submitRecipientUpload } from '@/api/sharingApi'
+import { getRecipientUploadInfo, submitRecipientUpload, getRecipientUploadStatuses } from '@/api/sharingApi'
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ─── helpers ──────────────────────────────────────────────────────────────────
 
 const fmtBytes = (b) => {
   if (!b) return '0 B'
@@ -25,17 +36,21 @@ const fmtBytes = (b) => {
   return `${parseFloat((b / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }
 
-const fmtDate = (d) => d ? new Date(d).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—'
+const fmtDate = (d) =>
+  d ? new Date(d).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—'
+
+// Statuses where scanning is finished — stop polling once all files reach one
+const TERMINAL_STATUSES = new Set(['safe', 'infected', 'scan_failed'])
 
 // ─── scan status badge ────────────────────────────────────────────────────────
 
 const ScanBadge = ({ status }) => {
   const cfg = {
-    scanning:    { cls: 'bg-blue-50 text-blue-600 border-blue-200',       icon: 'fa-spinner fa-spin',       text: 'Scanning for viruses…' },
-    pending:     { cls: 'bg-slate-50 text-slate-500 border-slate-200',    icon: 'fa-clock',                 text: 'Scan pending'          },
-    safe:        { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: 'fa-shield-halved',      text: 'No threats detected'   },
-    infected:    { cls: 'bg-red-50 text-red-700 border-red-200',          icon: 'fa-bug',                   text: 'Threat detected'       },
-    scan_failed: { cls: 'bg-orange-50 text-orange-600 border-orange-200', icon: 'fa-triangle-exclamation',  text: 'Scan failed'           },
+    scanning:    { cls: 'bg-blue-50 text-blue-600 border-blue-200',          icon: 'fa-spinner fa-spin',      text: 'Scanning for viruses...' },
+    pending:     { cls: 'bg-slate-50 text-slate-500 border-slate-200',       icon: 'fa-clock',                text: 'Scan pending'            },
+    safe:        { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: 'fa-shield-halved',        text: 'No threats detected'     },
+    infected:    { cls: 'bg-red-50 text-red-700 border-red-200',             icon: 'fa-bug',                  text: 'Threat detected'         },
+    scan_failed: { cls: 'bg-orange-50 text-orange-600 border-orange-200',    icon: 'fa-triangle-exclamation', text: 'Scan failed'             },
   }
   const c = cfg[status] || cfg.pending
   return (
@@ -45,21 +60,20 @@ const ScanBadge = ({ status }) => {
   )
 }
 
-// ─── file row ─────────────────────────────────────────────────────────────────
+// ─── staged file row ──────────────────────────────────────────────────────────
 
 function FileRow({ file, onRemove }) {
   const ext = file.name.split('.').pop().toLowerCase()
   const iconMap = {
-    pdf: 'fa-file-pdf text-red-500',
-    doc: 'fa-file-word text-blue-500', docx: 'fa-file-word text-blue-500',
-    xls: 'fa-file-excel text-green-500', xlsx: 'fa-file-excel text-green-500',
-    png: 'fa-file-image text-purple-500', jpg: 'fa-file-image text-purple-500',
+    pdf:  'fa-file-pdf text-red-500',
+    doc:  'fa-file-word text-blue-500',   docx: 'fa-file-word text-blue-500',
+    xls:  'fa-file-excel text-green-500', xlsx: 'fa-file-excel text-green-500',
+    png:  'fa-file-image text-purple-500', jpg: 'fa-file-image text-purple-500',
     jpeg: 'fa-file-image text-purple-500', gif: 'fa-file-image text-purple-500',
-    zip: 'fa-file-zipper text-amber-500', mp4: 'fa-file-video text-indigo-500',
-    txt: 'fa-file-lines text-slate-500', csv: 'fa-file-csv text-green-600',
+    zip:  'fa-file-zipper text-amber-500', mp4: 'fa-file-video text-indigo-500',
+    txt:  'fa-file-lines text-slate-500',  csv: 'fa-file-csv text-green-600',
   }
   const icon = iconMap[ext] || 'fa-file text-slate-400'
-
   return (
     <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl group">
       <i className={`fas ${icon} text-lg flex-shrink-0`}></i>
@@ -79,7 +93,7 @@ function FileRow({ file, onRemove }) {
   )
 }
 
-// ─── uploaded result row ──────────────────────────────────────────────────────
+// ─── submitted file row (with scan badge) ─────────────────────────────────────
 
 function UploadedRow({ result }) {
   return (
@@ -101,22 +115,66 @@ function UploadedRow({ result }) {
 export default function PublicUploadPage() {
   const { token } = useParams()
 
-  // Request info state
-  const [info,     setInfo]     = useState(null)
-  const [loading,  setLoading]  = useState(true)
-  const [infoErr,  setInfoErr]  = useState('')
+  // Request info — fetched once; stale counts are corrected via sessionUploadCount
+  const [info,    setInfo]    = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [infoErr, setInfoErr] = useState('')
 
   // Upload state
-  const [files,    setFiles]    = useState([])        // FileList items staged
-  const [progress, setProgress] = useState(0)
+  const [files,     setFiles]     = useState([])    // staged, not yet submitted
+  const [progress,  setProgress]  = useState(0)
   const [uploading, setUploading] = useState(false)
   const [uploadErr, setUploadErr] = useState('')
-  const [uploaded,  setUploaded]  = useState([])      // results from server
-  const [done,      setDone]      = useState(false)
+  const [uploaded,  setUploaded]  = useState([])    // submitted files with scan statuses
+  const [done,      setDone]      = useState(false)  // true after first successful batch
 
-  // Drag-over state
+  /**
+   * sessionUploadCount — files successfully accepted by the server in THIS
+   * browser session. Used to correct stale `remaining_slots` and
+   * `recipient_upload_count` from the initial fetch WITHOUT double-deducting
+   * counts the server already factored in at load time.
+   */
+  const [sessionUploadCount, setSessionUploadCount] = useState(0)
+
+  // Drag-over UI state
   const [dragOver, setDragOver] = useState(false)
   const dropRef = useRef(null)
+
+  // Holds the setInterval id for scan-status polling
+  const pollRef = useRef(null)
+
+  // ── polling helpers ───────────────────────────────────────────────────────
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }, [])
+
+  // Clean up on unmount
+  useEffect(() => () => stopPolling(), [stopPolling])
+
+  const startPolling = useCallback(
+    (newBatchFiles) => {
+      if (pollRef.current) return   // already polling
+      // Skip if this batch is already all-terminal (instant scanner)
+      if (newBatchFiles.length > 0 && newBatchFiles.every((f) => TERMINAL_STATUSES.has(f.scan_status))) return
+
+      pollRef.current = setInterval(async () => {
+        try {
+          const { data } = await getRecipientUploadStatuses(token)
+          const results  = (data.data || data).files || []
+          if (!results.length) return
+          setUploaded(results)
+          if (results.every((f) => TERMINAL_STATUSES.has(f.scan_status))) stopPolling()
+        } catch {
+          // transient — keep polling
+        }
+      }, 3000)
+    },
+    [token, stopPolling],
+  )
 
   // ── fetch request info ────────────────────────────────────────────────────
 
@@ -124,45 +182,55 @@ export default function PublicUploadPage() {
     if (!token) return
     setLoading(true)
     getRecipientUploadInfo(token)
-      .then(({ data }) => {
-        setInfo(data.data || data)
-        setLoading(false)
-      })
+      .then(({ data }) => { setInfo(data.data || data); setLoading(false) })
       .catch((err) => {
-        const msg = err.response?.data?.detail
-          || err.response?.data?.message
-          || 'This upload link is invalid or has expired.'
-        setInfoErr(msg)
+        setInfoErr(
+          err.response?.data?.detail ||
+          err.response?.data?.message ||
+          'This upload link is invalid or has expired.',
+        )
         setLoading(false)
       })
   }, [token])
 
   // ── file picking ──────────────────────────────────────────────────────────
 
-  const addFiles = useCallback((incoming) => {
-    setUploadErr('')
-    const arr = Array.from(incoming)
-    const remaining = info ? (info.remaining_slots - files.length) : 10
-    const allowed   = arr.slice(0, remaining)
-    const blocked   = arr.length - allowed.length
+  const addFiles = useCallback(
+    (incoming) => {
+      setUploadErr('')
+      const arr = Array.from(incoming)
 
-    setFiles((prev) => {
-      const names = new Set(prev.map((f) => f.name + f.size))
-      const dedup  = allowed.filter((f) => !names.has(f.name + f.size))
-      return [...prev, ...dedup]
-    })
+      // Slots the server reported at load time (already excludes prior submissions)
+      const serverSlotsAtLoad = info
+        ? (info.remaining_slots ?? (info.max_files - info.submission_count))
+        : 10
 
-    if (blocked > 0) {
-      setUploadErr(`Only ${remaining} more file(s) can be added to this request.`)
-    }
-  }, [files, info])
+      // Subtract only what WE submitted this session, and what is already staged
+      const remaining = Math.max(0, serverSlotsAtLoad - sessionUploadCount - files.length)
+      const allowed   = arr.slice(0, remaining)
+      const blocked   = arr.length - allowed.length
+
+      setFiles((prev) => {
+        const names = new Set(prev.map((f) => f.name + f.size))
+        return [...prev, ...allowed.filter((f) => !names.has(f.name + f.size))]
+      })
+
+      if (blocked > 0) {
+        setUploadErr(`Only ${remaining} more file(s) can be added to this request.`)
+      }
+    },
+    [files, sessionUploadCount, info],
+  )
 
   const removeFile = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx))
 
-  // Drag & drop handlers
   const onDragOver  = (e) => { e.preventDefault(); setDragOver(true) }
   const onDragLeave = ()  => setDragOver(false)
-  const onDrop      = (e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files) }
+  const onDrop      = (e) => {
+    e.preventDefault()
+    setDragOver(false)
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files)
+  }
 
   // ── upload ────────────────────────────────────────────────────────────────
 
@@ -174,6 +242,7 @@ export default function PublicUploadPage() {
 
     const fd = new FormData()
     files.forEach((f) => fd.append('files', f))
+    if (info?.recipient_email) fd.append('submitter_email', info.recipient_email)
 
     try {
       const { data } = await submitRecipientUpload(token, fd, {
@@ -182,22 +251,31 @@ export default function PublicUploadPage() {
         },
       })
 
-      const payload = data.data || data
-      const results = payload.files || []
-      setUploaded(results)
+      const payload  = data.data || data
+      const newFiles = payload.files || []
+      const accepted = newFiles.length
+
+      // Append this batch to the running list so all uploaded files stay visible
+      setUploaded((prev) => [...prev, ...newFiles])
+      // Record how many were accepted so slot + count displays stay accurate
+      setSessionUploadCount((prev) => prev + accepted)
       setFiles([])
       setDone(true)
 
-      // Show errors for files that failed validation
       if (payload.errors?.length) {
         const errLines = payload.errors.map((e) => `${e.file}: ${e.errors?.join(', ')}`).join('\n')
         setUploadErr(`Some files were not accepted:\n${errLines}`)
       }
+
+      // Restart polling so it covers the full merged list
+      stopPolling()
+      startPolling(newFiles)
     } catch (err) {
-      const msg = err.response?.data?.detail
-        || err.response?.data?.message
-        || err.response?.data?.files
-        || 'Upload failed. Please try again.'
+      const msg =
+        err.response?.data?.detail ||
+        err.response?.data?.message ||
+        err.response?.data?.files ||
+        'Upload failed. Please try again.'
       setUploadErr(Array.isArray(msg) ? msg.join(' ') : String(msg))
     } finally {
       setUploading(false)
@@ -205,21 +283,18 @@ export default function PublicUploadPage() {
     }
   }
 
-  // ── upload more ───────────────────────────────────────────────────────────
+  // ── derived scan state ────────────────────────────────────────────────────
 
-  const uploadMore = () => {
-    setDone(false)
-    setUploaded([])
-    setUploadErr('')
-  }
+  const allScansSettled = uploaded.length > 0 && uploaded.every((f) => TERMINAL_STATUSES.has(f.scan_status))
+  const allSafe         = allScansSettled && uploaded.every((f) => f.scan_status === 'safe')
 
-  // ── loading / error states ────────────────────────────────────────────────
+  // ── loading / error screens ───────────────────────────────────────────────
 
   if (loading) return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center">
       <div className="text-center">
         <i className="fas fa-spinner fa-spin text-3xl text-indigo-500 mb-4 block"></i>
-        <p className="text-slate-500 font-medium">Loading upload page…</p>
+        <p className="text-slate-500 font-medium">Loading upload page...</p>
       </div>
     </div>
   )
@@ -236,45 +311,57 @@ export default function PublicUploadPage() {
     </div>
   )
 
-  const slotsLeft    = info.remaining_slots ?? (info.max_files - info.submission_count)
-  const isExpired    = info.expires_at && new Date(info.expires_at) < new Date()
-  const isFull       = slotsLeft <= 0
-  const isBlocked    = isExpired || isFull
+  // ── slot / count derivations ──────────────────────────────────────────────
 
-  // ── success screen ────────────────────────────────────────────────────────
+  // What the server reported at load time (already excludes all prior submissions)
+  const serverSlotsAtLoad  = info.remaining_slots ?? (info.max_files - info.submission_count)
+  const isExpired          = !!(info.expires_at && new Date(info.expires_at) < new Date())
 
-  if (done) return (
+  // Subtract only THIS session's uploads — do NOT subtract uploaded.length (double-deduction)
+  const effectiveSlotsLeft = Math.max(0, serverSlotsAtLoad - sessionUploadCount)
+  const isFull             = effectiveSlotsLeft <= 0
+
+  // "N already uploaded" — add session count to the stale server value
+  const displayUploadCount = (info.recipient_upload_count || 0) + sessionUploadCount
+
+  // Block upload form only if expired, or if the request was already full at load time
+  const isBlocked = isExpired || (serverSlotsAtLoad <= 0 && sessionUploadCount === 0)
+
+  // ── fully-complete final screen (slots exhausted after uploading) ─────────
+
+  if (done && isFull) return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-emerald-50 flex items-start justify-center p-4 pt-10 sm:pt-16">
       <div className="max-w-lg w-full space-y-4">
-        {/* Success header */}
+
         <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-8 text-center">
           <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <i className="fas fa-circle-check text-3xl text-emerald-500"></i>
           </div>
-          <h2 className="text-xl font-bold text-slate-900 mb-1">Files Uploaded!</h2>
+          <h2 className="text-xl font-bold text-slate-900 mb-1">All Files Sent Successfully!</h2>
           <p className="text-sm text-slate-500">
-            Your files have been received and are being scanned for security. <br />
-            <span className="text-slate-400">The recipient will be notified once the review is complete.</span>
+            This request is now complete — no upload slots remain.<br />
+            <span className="text-slate-400">The requester has been notified and will review your files.</span>
           </p>
         </div>
 
-        {/* Per-file scan status */}
         {uploaded.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
               <i className="fas fa-shield-halved text-indigo-500 text-sm"></i>
               <span className="text-sm font-bold text-slate-800">Security Scan Status</span>
-              <span className="ml-auto text-xs text-slate-400">{uploaded.length} file{uploaded.length !== 1 ? 's' : ''}</span>
+              <span className="ml-auto text-xs text-slate-400">
+                {uploaded.length} file{uploaded.length !== 1 ? 's' : ''}
+              </span>
             </div>
             <div className="p-4 space-y-2">
               {uploaded.map((r, i) => <UploadedRow key={i} result={r} />)}
             </div>
-            <div className="px-5 pb-4">
-              <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                <i className="fas fa-info-circle text-blue-400"></i>
-                Scanning typically completes within a few seconds. The requester reviews files after scanning.
-              </p>
-            </div>
+            {allScansSettled && (
+              <div className="mx-4 mb-4 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-sm text-emerald-700 font-medium">
+                <i className="fas fa-shield-halved text-emerald-500"></i>
+                All files passed the security scan and have been delivered to the requester.
+              </div>
+            )}
           </div>
         )}
 
@@ -284,20 +371,15 @@ export default function PublicUploadPage() {
           </div>
         )}
 
-        {/* Upload more button if slots remain */}
-        {slotsLeft > uploaded.length && (
-          <button
-            onClick={uploadMore}
-            className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
-          >
-            <i className="fas fa-plus"></i> Upload More Files
-          </button>
-        )}
+        <div className="rounded-2xl p-4 border bg-amber-50 border-amber-200 text-amber-700 text-sm font-medium flex items-center gap-3">
+          <i className="fas fa-lock text-amber-500 text-lg"></i>
+          <span>This request has reached its file limit. No further uploads are accepted.</span>
+        </div>
       </div>
     </div>
   )
 
-  // ── main upload UI ────────────────────────────────────────────────────────
+  // ── unified main UI ───────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-start justify-center p-4 pt-8 sm:pt-14">
@@ -322,12 +404,12 @@ export default function PublicUploadPage() {
             </div>
           </div>
 
-          {/* Meta */}
+          {/* Meta chips */}
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div className="bg-slate-50 rounded-xl px-3 py-2">
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Slots Left</p>
               <p className={`text-sm font-bold mt-0.5 ${isFull ? 'text-red-500' : 'text-slate-800'}`}>
-                {isFull ? 'Full' : `${slotsLeft} of ${info.max_files}`}
+                {isFull ? 'Full' : `${effectiveSlotsLeft} of ${info.max_files}`}
               </p>
             </div>
             <div className="bg-slate-50 rounded-xl px-3 py-2">
@@ -348,7 +430,6 @@ export default function PublicUploadPage() {
             )}
           </div>
 
-          {/* Required files */}
           {info.required_files?.length > 0 && (
             <div className="mt-3 pt-3 border-t border-slate-100">
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Required Files</p>
@@ -362,39 +443,78 @@ export default function PublicUploadPage() {
             </div>
           )}
 
-          {/* Recipient info */}
           {info.recipient_email && (
             <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2 text-xs text-slate-400">
               <i className="fas fa-envelope text-[11px]"></i>
               Upload link for <span className="font-semibold text-slate-600">{info.recipient_email}</span>
-              {info.recipient_upload_count > 0 && (
+              {/* Use corrected count so it updates immediately after each upload */}
+              {displayUploadCount > 0 && (
                 <span className="ml-auto text-emerald-600 font-semibold">
-                  <i className="fas fa-check-circle mr-1"></i>{info.recipient_upload_count} already uploaded
+                  <i className="fas fa-check-circle mr-1"></i>{displayUploadCount} already uploaded
                 </span>
               )}
             </div>
           )}
         </div>
 
-        {/* Blocked state */}
+        {/* Scan results — shown inline after first upload while slots still remain */}
+        {done && uploaded.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
+              <i className="fas fa-shield-halved text-indigo-500 text-sm"></i>
+              <span className="text-sm font-bold text-slate-800">Security Scan Status</span>
+              <span className="ml-auto text-xs text-slate-400">
+                {uploaded.length} file{uploaded.length !== 1 ? 's' : ''} uploaded
+              </span>
+            </div>
+            <div className="p-4 space-y-2">
+              {uploaded.map((r, i) => <UploadedRow key={i} result={r} />)}
+            </div>
+            <div className="px-4 pb-4">
+              {!allScansSettled ? (
+                <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                  <i className="fas fa-info-circle text-blue-400"></i>
+                  Scanning typically completes within a few seconds...
+                </p>
+              ) : allSafe ? (
+                <div className="px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-sm text-emerald-700 font-medium">
+                  <i className="fas fa-shield-halved text-emerald-500"></i>
+                  All files are safe!{effectiveSlotsLeft > 0 ? ' You can upload more files below if needed.' : ''}
+                </div>
+              ) : (
+                <div className="px-4 py-3 bg-orange-50 border border-orange-200 rounded-xl flex items-center gap-2 text-sm text-orange-700 font-medium">
+                  <i className="fas fa-triangle-exclamation text-orange-500"></i>
+                  One or more files had scan issues. Check the statuses above.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Blocked state — expired or full before this session */}
         {isBlocked && (
           <div className={`rounded-2xl p-5 border text-sm font-medium flex items-center gap-3 ${
             isExpired ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700'
           }`}>
             <i className={`fas ${isExpired ? 'fa-clock text-red-500' : 'fa-lock text-amber-500'} text-lg`}></i>
-            <span>{isExpired ? 'This upload link has expired and is no longer accepting files.' : 'This request has reached its file limit.'}</span>
+            <span>
+              {isExpired
+                ? 'This upload link has expired and is no longer accepting files.'
+                : 'This request has reached its file limit.'}
+            </span>
           </div>
         )}
 
-        {/* Upload form */}
-        {!isBlocked && (
+        {/* Upload form — shown when slots remain */}
+        {!isBlocked && !isExpired && effectiveSlotsLeft > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="px-6 pt-5 pb-4 border-b border-slate-100">
               <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <i className="fas fa-cloud-arrow-up text-indigo-500"></i> Upload Your Files
+                <i className="fas fa-cloud-arrow-up text-indigo-500"></i>
+                {done ? 'Upload More Files' : 'Upload Your Files'}
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Files are scanned for viruses before being made available to the requester.
+                {effectiveSlotsLeft} slot{effectiveSlotsLeft !== 1 ? 's' : ''} remaining &middot; Files are scanned for viruses before delivery.
               </p>
             </div>
 
@@ -422,7 +542,10 @@ export default function PublicUploadPage() {
                       ? info.allowed_extensions.map((e) => `.${e}`).join(',')
                       : undefined
                   }
-                  onChange={(e) => { if (e.target.files.length) addFiles(e.target.files); e.target.value = '' }}
+                  onChange={(e) => {
+                    if (e.target.files.length) addFiles(e.target.files)
+                    e.target.value = ''
+                  }}
                 />
                 <div className={`transition-transform ${dragOver ? 'scale-110' : ''}`}>
                   <i className={`fas fa-cloud-arrow-up text-3xl mb-3 block ${dragOver ? 'text-indigo-500' : 'text-slate-300'}`}></i>
@@ -430,7 +553,7 @@ export default function PublicUploadPage() {
                     {dragOver ? 'Drop files here' : 'Drag & drop files, or click to browse'}
                   </p>
                   <p className="text-xs text-slate-400 mt-1">
-                    Up to {slotsLeft} file{slotsLeft !== 1 ? 's' : ''} · Max 100 MB each
+                    Up to {effectiveSlotsLeft} file{effectiveSlotsLeft !== 1 ? 's' : ''} &middot; Max 100 MB each
                   </p>
                 </div>
               </div>
@@ -455,7 +578,7 @@ export default function PublicUploadPage() {
               {uploading && progress > 0 && (
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs text-slate-500 font-medium">
-                    <span><i className="fas fa-spinner fa-spin mr-1.5"></i>Uploading…</span>
+                    <span><i className="fas fa-spinner fa-spin mr-1.5"></i>Uploading...</span>
                     <span>{progress}%</span>
                   </div>
                   <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
@@ -474,11 +597,10 @@ export default function PublicUploadPage() {
                 className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
               >
                 {uploading
-                  ? <><i className="fas fa-spinner fa-spin"></i>Uploading {files.length} file{files.length !== 1 ? 's' : ''}…</>
+                  ? <><i className="fas fa-spinner fa-spin"></i>Uploading {files.length} file{files.length !== 1 ? 's' : ''}...</>
                   : <><i className="fas fa-paper-plane"></i>Submit {files.length > 0 ? `${files.length} file${files.length !== 1 ? 's' : ''}` : 'Files'}</>}
               </button>
 
-              {/* Security note */}
               <p className="text-center text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
                 <i className="fas fa-shield-halved text-emerald-400"></i>
                 All files are automatically scanned for viruses before delivery.
