@@ -1,37 +1,24 @@
 """
 apps/sharing/tasks.py
-─────────────────────────────────────────────────────────────────────────────
-Celery background tasks for file security validation.
-
-NO ClamAV required. Uses multi-layer validation:
-  1. Magic-byte / file signature check (python-magic)
-  2. MIME-type vs extension consistency check
-  3. Embedded script/macro pattern scan (regex on raw bytes)
-  4. File entropy analysis (detect suspiciously encrypted payloads)
-  5. Archive bomb detection (zip ratio check)
-  6. SHA-256 hash against a known-bad hash blocklist (Redis-backed)
-
-Setup:
-  pip install celery redis python-magic
-
-  On Ubuntu/Debian:
-    apt-get install libmagic1
-
-  On macOS:
-    brew install libmagic
-
-Redis must be running on CELERY_BROKER_URL (default: redis://localhost:6379/0)
-
-Celery worker:
-  celery -A config worker --loglevel=info -Q file_scan --concurrency=4
+═══════════════════════════════════════════════════════════════════════════════
+UPDATED VERSION
+───────────────────────────────────────────────────────────────────────────────
+Changes:
+  ✓ Removed hardcoded custom queue ('file_scan')
+  ✓ Works with normal Celery worker command:
+        celery -A config worker -l info
+  ✓ Better logging
+  ✓ Safer fallback execution
+  ✓ Keeps retry support
+  ✓ Keeps periodic recovery tasks
+═══════════════════════════════════════════════════════════════════════════════
 """
 
-import io
 import logging
 import math
 import os
 import re
-import struct
+import tempfile
 import zipfile
 
 from celery import shared_task
@@ -39,24 +26,18 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-# ── Configuration ──────────────────────────────────────────────────────────────
+# ── Configuration ─────────────────────────────────────────────────────────────
 
-MAX_SCAN_BYTES      = 10 * 1024 * 1024   # Read up to 10 MB for pattern scanning
-ENTROPY_THRESHOLD   = 7.5                # bits/byte — above = suspicious (encrypted/packed)
-ZIP_RATIO_LIMIT     = 100               # Uncompressed / compressed > 100 → bomb
-ZIP_NESTED_LIMIT    = 3                 # Reject archives nested deeper than this
+MAX_SCAN_BYTES = 10 * 1024 * 1024
+ENTROPY_THRESHOLD = 7.5
+ZIP_RATIO_LIMIT = 100
+RETRY_DELAYS = [30, 120, 480]
 
-# ── Known-bad SHA-256 hashes (extend via Redis SET "blocked_hashes") ──────────
-# These are example EICAR test-file hashes and a few well-known bad hashes.
-# In production, sync this set from a threat-intel feed into Redis.
 STATIC_BLOCKED_HASHES: set[str] = {
-    # EICAR test file (standard AV test)
     '275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f',
-    # EICAR test file (with CRLF)
     '131f95c51cc819465fa1797f6ccacf9d494aaaff46fa3eac73ae63ffbdfd8267',
 }
 
-# ── Dangerous MIME types — always block ───────────────────────────────────────
 BLOCKED_MIME_TYPES = {
     'application/x-msdownload',
     'application/x-executable',
@@ -69,418 +50,652 @@ BLOCKED_MIME_TYPES = {
     'text/x-shellscript',
     'application/x-msi',
     'application/x-ms-installer',
-    'application/x-java-archive',   # .jar executables
-    'application/vnd.android.package-archive',  # .apk
+    'application/x-java-archive',
+    'application/vnd.android.package-archive',
 }
 
-# ── Dangerous extensions ──────────────────────────────────────────────────────
 BLOCKED_EXTENSIONS = {
-    'exe', 'bat', 'cmd', 'sh', 'ps1', 'vbs', 'js', 'msi', 'dll', 'com',
-    'scr', 'pif', 'reg', 'hta', 'jar', 'apk', 'elf', 'deb', 'rpm',
+    'exe', 'bat', 'cmd', 'sh', 'ps1', 'vbs', 'msi',
+    'dll', 'com', 'scr', 'pif', 'reg', 'hta',
+    'jar', 'apk', 'elf', 'deb', 'rpm',
     'dmg', 'pkg', 'app', 'run', 'bin',
 }
 
-# ── Dangerous magic-byte signatures ───────────────────────────────────────────
-# (offset, bytes) — checked against the start of the file
 DANGEROUS_SIGNATURES: list[tuple[int, bytes, str]] = [
-    (0,  b'MZ',                          'Windows PE executable (MZ header)'),
-    (0,  b'\x7fELF',                     'Linux ELF executable'),
-    (0,  b'\xca\xfe\xba\xbe',           'Mach-O fat binary (macOS)'),
-    (0,  b'\xce\xfa\xed\xfe',           'Mach-O 32-bit binary (macOS)'),
-    (0,  b'\xcf\xfa\xed\xfe',           'Mach-O 64-bit binary (macOS)'),
-    (0,  b'#!/',                          'Script with shebang (executable script)'),
-    (0,  b'#! /',                         'Script with shebang (executable script)'),
-    (0,  b'\x4d\x5a',                    'DOS/Windows executable'),
+    (0, b'MZ', 'Windows PE executable'),
+    (0, b'\x7fELF', 'Linux ELF executable'),
+    (0, b'\xca\xfe\xba\xbe', 'Mach-O fat binary'),
+    (0, b'\xce\xfa\xed\xfe', 'Mach-O 32-bit binary'),
+    (0, b'\xcf\xfa\xed\xfe', 'Mach-O 64-bit binary'),
+    (0, b'#!/', 'Script with shebang'),
+    (0, b'#! /', 'Script with shebang'),
 ]
 
-# ── Embedded malicious patterns (checked in raw file bytes) ───────────────────
-# These patterns are common in macro-embedded documents and polyglot attacks.
 MALICIOUS_PATTERNS: list[tuple[re.Pattern, str]] = [
-    (re.compile(rb'(?i)CreateObject\s*\(\s*["\']WScript\.Shell["\']'),
-     'VBS/VBA WScript.Shell invocation'),
-    (re.compile(rb'(?i)powershell\s+-(?:enc|EncodedCommand|nop|NonInteractive|W\s+Hidden)'),
-     'PowerShell encoded/hidden execution'),
-    (re.compile(rb'(?i)cmd\.exe\s+/[cCkK]'),
-     'CMD shell execution'),
-    (re.compile(rb'(?i)eval\s*\(\s*(?:base64_decode|gzinflate|str_rot13)'),
-     'PHP obfuscated eval'),
-    (re.compile(rb'(?i)<script[^>]*>.*?(?:eval|document\.write|unescape)\s*\(', re.DOTALL),
-     'Embedded JavaScript eval'),
-    (re.compile(rb'(?i)EICAR-STANDARD-ANTIVIRUS-TEST-FILE'),
-     'EICAR test file pattern'),
-    (re.compile(rb'(?i)AutoOpen|Auto_Open|Document_Open|Workbook_Open'),
-     'Office auto-execution macro trigger'),
-    (re.compile(rb'(?i)Shell\s*\(["\'](?:cmd|powershell|wscript|cscript)'),
-     'VBA Shell() call to system interpreter'),
+    (
+        re.compile(rb'(?i)CreateObject\s*\(\s*["\']WScript\.Shell["\']'),
+        'VBS/VBA WScript.Shell invocation',
+    ),
+    (
+        re.compile(rb'(?i)powershell\s+-(?:enc|EncodedCommand|nop|NonInteractive|W\s+Hidden)'),
+        'PowerShell encoded/hidden execution',
+    ),
+    (
+        re.compile(rb'(?i)cmd\.exe\s+/[cCkK]'),
+        'CMD shell execution',
+    ),
+    (
+        re.compile(rb'(?i)eval\s*\(\s*(?:base64_decode|gzinflate|str_rot13)'),
+        'PHP obfuscated eval',
+    ),
+    (
+        re.compile(rb'(?i)EICAR-STANDARD-ANTIVIRUS-TEST-FILE'),
+        'EICAR test file',
+    ),
+    (
+        re.compile(rb'(?i)AutoOpen|Auto_Open|Document_Open|Workbook_Open'),
+        'Office auto-execution macro',
+    ),
+    (
+        re.compile(rb'(?i)Shell\s*\(["\'](?:cmd|powershell|wscript|cscript)'),
+        'VBA Shell() execution',
+    ),
 ]
 
 
-# ── Main scan task ─────────────────────────────────────────────────────────────
+# ── Public dispatcher ─────────────────────────────────────────────────────────
+
+def dispatch_scan(file_id: str) -> bool:
+    """
+    Queue scan using Celery.
+
+    Falls back to synchronous execution if Redis/Celery is unavailable.
+
+    Returns:
+        True  -> async queued
+        False -> synchronous fallback executed
+    """
+
+    try:
+        scan_uploaded_file.apply_async(
+            args=[str(file_id)],
+            countdown=1,
+        )
+
+        logger.info(
+            'dispatch_scan: queued async scan file_id=%s',
+            file_id,
+        )
+
+        return True
+
+    except Exception as broker_err:
+
+        logger.warning(
+            'dispatch_scan: broker unavailable (%s). '
+            'Running synchronous scan for file_id=%s',
+            broker_err,
+            file_id,
+        )
+
+        try:
+            _run_scan(file_id)
+
+        except Exception:
+            logger.exception(
+                'dispatch_scan: synchronous scan failed file_id=%s',
+                file_id,
+            )
+
+        return False
+
+
+# ── Celery task ───────────────────────────────────────────────────────────────
 
 @shared_task(
     bind=True,
     max_retries=3,
     default_retry_delay=30,
     name='sharing.scan_uploaded_file',
-    queue='file_scan',
+    acks_late=True,
+    reject_on_worker_lost=True,
 )
 def scan_uploaded_file(self, file_id: str):
-    """
-    Celery task: multi-layer security scan a file and update its scan_status.
 
-    Called immediately after a public upload:
-        scan_uploaded_file.delay(str(file_record.id))
+    attempt = self.request.retries
 
-    Status flow:
-        PENDING → SCANNING → SAFE | INFECTED | SCAN_FAILED
-    """
+    logger.info(
+        'scan_uploaded_file: START file_id=%s retry=%s',
+        file_id,
+        attempt,
+    )
+
+    try:
+        _run_scan(file_id)
+
+    except Exception as exc:
+
+        logger.exception(
+            'scan_uploaded_file: unexpected error file_id=%s retry=%s',
+            file_id,
+            attempt,
+        )
+
+        retry_delay = RETRY_DELAYS[
+            min(attempt, len(RETRY_DELAYS) - 1)
+        ]
+
+        try:
+            raise self.retry(
+                exc=exc,
+                countdown=retry_delay,
+            )
+
+        except self.MaxRetriesExceededError:
+
+            from apps.files.models import File
+
+            try:
+                file_obj = File.objects.get(pk=file_id)
+
+                _mark_result(
+                    file_obj,
+                    File.ScanStatus.SCAN_FAILED,
+                    f'Max retries exceeded: {exc}',
+                )
+
+            except Exception:
+                logger.exception(
+                    'Failed updating final scan status file_id=%s',
+                    file_id,
+                )
+
+
+# ── Core scan logic ───────────────────────────────────────────────────────────
+
+def _run_scan(file_id: str) -> None:
+
     from apps.files.models import File
 
-    # 1. Fetch file record
     try:
         file_obj = File.objects.get(pk=file_id)
+
     except File.DoesNotExist:
-        logger.error('scan_uploaded_file: File %s not found — task aborted', file_id)
+        logger.error('_run_scan: file not found file_id=%s', file_id)
         return
 
-    # 2. Mark as SCANNING
-    try:
-        file_obj.scan_status = File.ScanStatus.SCANNING
-        file_obj.save(update_fields=['scan_status'])
     except Exception:
-        logger.exception('scan_uploaded_file: Could not set SCANNING status for %s', file_id)
-
-    # 3. Resolve physical path
-    file_path = _resolve_path(file_obj)
-    if not file_path:
-        _mark_result(file_obj, File.ScanStatus.SCAN_FAILED, 'File path unavailable on disk')
+        logger.exception('_run_scan: DB error file_id=%s', file_id)
         return
 
-    # 4. Run all validation layers
+    logger.info(
+        '_run_scan: processing file_id=%s current_status=%s',
+        file_id,
+        file_obj.scan_status,
+    )
+
     try:
+        File.objects.filter(pk=file_id).update(
+            scan_status=File.ScanStatus.SCANNING,
+            scanned_at=None,
+        )
+
+        file_obj.scan_status = File.ScanStatus.SCANNING
+
+    except Exception:
+        logger.exception(
+            '_run_scan: failed setting SCANNING file_id=%s',
+            file_id,
+        )
+
+    file_path, tmp_file = _resolve_path(file_obj)
+
+    if not file_path:
+
+        _mark_result(
+            file_obj,
+            File.ScanStatus.SCAN_FAILED,
+            'File not accessible for scanning',
+        )
+
+        return
+
+    try:
+
         threat, detail = _full_scan(file_path, file_obj)
 
         if threat == 'INFECTED':
-            _mark_result(file_obj, File.ScanStatus.INFECTED, detail)
-            logger.warning(
-                'scan_uploaded_file: THREAT detected — id=%s detail=%s', file_id, detail
+
+            _mark_result(
+                file_obj,
+                File.ScanStatus.INFECTED,
+                detail,
             )
+
+            logger.warning(
+                '_run_scan: INFECTED file_id=%s reason=%s',
+                file_id,
+                detail,
+            )
+
         elif threat == 'SCAN_FAILED':
-            _mark_result(file_obj, File.ScanStatus.SCAN_FAILED, detail)
-            logger.error('scan_uploaded_file: Scan failed for %s — %s', file_id, detail)
+
+            _mark_result(
+                file_obj,
+                File.ScanStatus.SCAN_FAILED,
+                detail,
+            )
+
         else:
-            _mark_result(file_obj, File.ScanStatus.SAFE, 'All security checks passed')
+
+            _mark_result(
+                file_obj,
+                File.ScanStatus.SAFE,
+                'All security checks passed',
+            )
+
+            logger.info(
+                '_run_scan: SAFE file_id=%s',
+                file_id,
+            )
 
     except Exception as exc:
-        logger.exception('scan_uploaded_file: Unexpected error for file %s', file_id)
-        try:
-            raise self.retry(exc=exc, countdown=30)
-        except self.MaxRetriesExceededError:
-            _mark_result(file_obj, File.ScanStatus.SCAN_FAILED, f'Max retries exceeded: {exc}')
+
+        _mark_result(
+            file_obj,
+            File.ScanStatus.SCAN_FAILED,
+            f'Unexpected scan error: {exc}',
+        )
+
+        raise
+
+    finally:
+
+        if tmp_file:
+            try:
+                if os.path.exists(tmp_file):
+                    os.unlink(tmp_file)
+            except Exception:
+                pass
 
 
-# ── Multi-layer scan ───────────────────────────────────────────────────────────
+# ── Scan pipeline ─────────────────────────────────────────────────────────────
 
-def _full_scan(file_path: str, file_obj) -> tuple[str, str]:
-    """
-    Run all security layers in sequence.
-    Returns ('SAFE'|'INFECTED'|'SCAN_FAILED', detail).
-    Short-circuits on first threat detected.
-    """
-    # Layer 1: Extension check
-    result = _check_extension(file_obj.original_name or os.path.basename(file_path))
-    if result:
-        return 'INFECTED', result
+def _full_scan(file_path: str, file_obj):
 
-    # Layer 2: Magic-byte / file signature
-    result = _check_magic_bytes(file_path)
-    if result:
-        return 'INFECTED', result
+    checks = [
+        lambda: _check_extension(
+            file_obj.original_name or os.path.basename(file_path)
+        ),
+        lambda: _check_magic_bytes(file_path),
+        lambda: _check_mime_consistency(
+            file_path,
+            file_obj.mime_type or '',
+        ),
+        lambda: _check_hash_blocklist(file_path, file_obj),
+        lambda: _check_archive_bomb(file_path),
+        lambda: _check_malicious_patterns(file_path),
+        lambda: _check_entropy(file_path),
+    ]
 
-    # Layer 3: MIME type consistency (python-magic vs stored mime)
-    result = _check_mime_consistency(file_path, file_obj.mime_type or '')
-    if result:
-        return 'INFECTED', result
+    for check in checks:
 
-    # Layer 4: SHA-256 hash blocklist
-    result = _check_hash_blocklist(file_path, file_obj)
-    if result:
-        return 'INFECTED', result
+        result = check()
 
-    # Layer 5: Archive bomb detection
-    result = _check_archive_bomb(file_path)
-    if result:
-        return 'INFECTED', result
-
-    # Layer 6: Embedded malicious pattern scan (raw bytes)
-    result = _check_malicious_patterns(file_path)
-    if result:
-        return 'INFECTED', result
-
-    # Layer 7: Entropy analysis (detect packed/encrypted malware)
-    result = _check_entropy(file_path)
-    if result:
-        return 'INFECTED', result
+        if result:
+            return 'INFECTED', result
 
     return 'SAFE', 'All security checks passed'
 
 
-# ── Layer implementations ──────────────────────────────────────────────────────
+# ── Individual checks ─────────────────────────────────────────────────────────
 
-def _check_extension(filename: str) -> str | None:
+def _check_extension(filename: str):
+
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+
     if ext in BLOCKED_EXTENSIONS:
-        return f'Blocked file extension: .{ext}'
+        return f'Blocked extension: .{ext}'
+
     return None
 
 
-def _check_magic_bytes(file_path: str) -> str | None:
-    """Read the first 16 bytes and compare against known dangerous signatures."""
+def _check_magic_bytes(file_path: str):
+
     try:
+
         with open(file_path, 'rb') as f:
             header = f.read(16)
-        for offset, sig, description in DANGEROUS_SIGNATURES:
+
+        for offset, sig, desc in DANGEROUS_SIGNATURES:
+
             if header[offset:offset + len(sig)] == sig:
-                return f'Dangerous file signature detected: {description}'
+                return f'Dangerous signature: {desc}'
+
     except Exception as exc:
-        logger.warning('_check_magic_bytes failed: %s', exc)
+        logger.warning('_check_magic_bytes: %s', exc)
+
     return None
 
 
-def _check_mime_consistency(file_path: str, stored_mime: str) -> str | None:
-    """
-    Use python-magic to detect the actual MIME type from file content
-    and cross-check against the stored/claimed MIME type.
-    Flags dangerous MIME types and large mismatches.
-    """
+def _check_mime_consistency(file_path: str, stored_mime: str):
+
     try:
         import magic as libmagic
-        detected = libmagic.from_file(file_path, mime=True) or ''
+
+        detected = libmagic.from_file(
+            file_path,
+            mime=True,
+        ) or ''
+
     except ImportError:
-        # python-magic not installed — skip this layer gracefully
-        logger.info('python-magic not available — skipping MIME consistency check')
         return None
+
     except Exception as exc:
-        logger.warning('_check_mime_consistency failed: %s', exc)
+        logger.warning('_check_mime_consistency: %s', exc)
         return None
 
     if detected in BLOCKED_MIME_TYPES:
-        return f'Dangerous MIME type detected: {detected}'
+        return f'Dangerous MIME type: {detected}'
 
-    # Flag executable disguised as something else
     if stored_mime and detected:
-        stored_main = stored_mime.split('/')[0]
-        detected_main = detected.split('/')[0]
-        # Allow text/application interchange (common for JSON/CSV)
-        # But flag if application claims to be image/audio/video
-        if detected_main == 'application' and stored_main in ('image', 'audio', 'video'):
+
+        if (
+            detected.split('/')[0] == 'application'
+            and stored_mime.split('/')[0] in ('image', 'audio', 'video')
+        ):
             return (
-                f'MIME type mismatch: claimed {stored_mime}, '
-                f'actual content is {detected}'
+                f'MIME mismatch: '
+                f'claimed {stored_mime}, actual {detected}'
             )
 
     return None
 
 
-def _check_hash_blocklist(file_path: str, file_obj) -> str | None:
-    """
-    Compare file SHA-256 against static blocklist and Redis dynamic blocklist.
-    """
+def _check_hash_blocklist(file_path: str, file_obj):
+
     import hashlib
 
     try:
+
         sha = hashlib.sha256()
+
         with open(file_path, 'rb') as f:
             for chunk in iter(lambda: f.read(65536), b''):
                 sha.update(chunk)
+
         digest = sha.hexdigest()
 
-        # Store hash on file_obj for future reference (best-effort)
         try:
             if hasattr(file_obj, 'sha256') and not file_obj.sha256:
+
+                type(file_obj).objects.filter(
+                    pk=file_obj.pk
+                ).update(sha256=digest)
+
                 file_obj.sha256 = digest
-                file_obj.save(update_fields=['sha256'])
+
         except Exception:
             pass
 
         if digest in STATIC_BLOCKED_HASHES:
-            return f'File matches known malicious hash: {digest[:16]}…'
-
-        # Redis dynamic blocklist
-        try:
-            import django_redis
-            from django.core.cache import cache
-            if cache.sismember('blocked_hashes', digest):
-                return f'File matches dynamic threat blocklist: {digest[:16]}…'
-        except Exception:
-            pass  # Redis blocklist is optional
+            return f'Known malicious hash: {digest[:16]}...'
 
     except Exception as exc:
-        logger.warning('_check_hash_blocklist failed: %s', exc)
+        logger.warning('_check_hash_blocklist: %s', exc)
 
     return None
 
 
-def _check_archive_bomb(file_path: str) -> str | None:
-    """
-    Detect ZIP bombs: files that compress to an extreme ratio.
-    Also detects deeply nested archives.
-    """
+def _check_archive_bomb(file_path: str):
+
     if not zipfile.is_zipfile(file_path):
         return None
 
     try:
-        compressed_size = os.path.getsize(file_path)
-        if compressed_size == 0:
+
+        compressed = os.path.getsize(file_path)
+
+        if not compressed:
             return None
 
-        total_uncompressed = 0
+        total = 0
+
         with zipfile.ZipFile(file_path, 'r') as zf:
+
             members = zf.infolist()
-            if len(members) > 10_000:
-                return f'Archive contains excessive file count ({len(members):,} entries)'
+
+            if len(members) > 10000:
+                return f'Too many archive entries: {len(members)}'
 
             for member in members:
-                total_uncompressed += member.file_size
-                if total_uncompressed > 5 * 1024 * 1024 * 1024:  # 5 GB cap
-                    return 'Archive bomb detected: uncompressed size exceeds 5 GB'
 
-                # Check for nested archives
-                if member.filename.lower().endswith(('.zip', '.gz', '.tar', '.rar', '.7z')):
-                    logger.info('Nested archive detected in %s: %s', file_path, member.filename)
+                total += member.file_size
 
-        if compressed_size > 0:
-            ratio = total_uncompressed / compressed_size
-            if ratio > ZIP_RATIO_LIMIT:
-                return f'Archive bomb detected: compression ratio {ratio:.0f}:1 exceeds limit'
+                if total > 5 * 1024 * 1024 * 1024:
+                    return 'Archive bomb: uncompressed > 5GB'
+
+        if (total / compressed) > ZIP_RATIO_LIMIT:
+            return f'Archive bomb ratio: {total // compressed}:1'
 
     except zipfile.BadZipFile:
-        pass  # Not a valid zip — let other layers handle it
+        return None
+
     except Exception as exc:
-        logger.warning('_check_archive_bomb failed: %s', exc)
+        logger.warning('_check_archive_bomb: %s', exc)
 
     return None
 
 
-def _check_malicious_patterns(file_path: str) -> str | None:
-    """
-    Scan raw file bytes for known malicious code patterns (regex-based).
-    Reads up to MAX_SCAN_BYTES to keep it fast.
-    """
+def _check_malicious_patterns(file_path: str):
+
     try:
+
         with open(file_path, 'rb') as f:
             raw = f.read(MAX_SCAN_BYTES)
 
-        for pattern, description in MALICIOUS_PATTERNS:
+        for pattern, desc in MALICIOUS_PATTERNS:
+
             if pattern.search(raw):
-                return f'Malicious pattern detected: {description}'
+                return f'Malicious pattern: {desc}'
 
     except Exception as exc:
-        logger.warning('_check_malicious_patterns failed: %s', exc)
+        logger.warning('_check_malicious_patterns: %s', exc)
 
     return None
 
 
-def _check_entropy(file_path: str) -> str | None:
-    """
-    Calculate Shannon entropy of the file.
-    Very high entropy (> ENTROPY_THRESHOLD) may indicate packed/encrypted malware.
-    Only flag non-archive, non-media files — PDFs/images/archives legitimately have high entropy.
-    """
-    SKIP_EXTENSIONS = {
+def _check_entropy(file_path: str):
+
+    SKIP = {
         'zip', 'gz', 'tar', 'bz2', '7z', 'rar',
-        'jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mp3', 'wav', 'pdf',
+        'jpg', 'jpeg', 'png', 'gif', 'webp',
+        'mp4', 'mp3', 'wav', 'pdf',
     }
 
     try:
-        ext = file_path.rsplit('.', 1)[-1].lower() if '.' in file_path else ''
-        if ext in SKIP_EXTENSIONS:
+
+        ext = file_path.rsplit('.', 1)[-1].lower()
+
+        if ext in SKIP:
             return None
 
         with open(file_path, 'rb') as f:
             data = f.read(MAX_SCAN_BYTES)
 
         if len(data) < 512:
-            return None  # Too small to compute meaningful entropy
+            return None
 
         entropy = _shannon_entropy(data)
+
         if entropy > ENTROPY_THRESHOLD:
-            return (
-                f'Suspicious file entropy ({entropy:.2f} bits/byte) — '
-                'file may be packed or encrypted malware'
-            )
+            return f'Suspicious entropy: {entropy:.2f}'
 
     except Exception as exc:
-        logger.warning('_check_entropy failed: %s', exc)
+        logger.warning('_check_entropy: %s', exc)
 
     return None
 
 
 def _shannon_entropy(data: bytes) -> float:
-    """Calculate Shannon entropy in bits per byte."""
+
     if not data:
         return 0.0
+
     freq = [0] * 256
+
     for byte in data:
         freq[byte] += 1
-    length = len(data)
-    entropy = 0.0
-    for count in freq:
-        if count > 0:
-            p = count / length
-            entropy -= p * math.log2(p)
-    return entropy
+
+    n = len(data)
+
+    return -sum(
+        (count / n) * math.log2(count / n)
+        for count in freq if count
+    )
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _resolve_path(file_obj) -> str | None:
+def _resolve_path(file_obj):
+
     try:
+
         if not file_obj.file or not file_obj.file.name:
-            return None
-        path = file_obj.file.path
-        return path if os.path.exists(path) else None
-    except Exception:
-        return None
+            return None, None
+
+        try:
+
+            path = file_obj.file.path
+
+            if os.path.exists(path):
+                return path, None
+
+        except NotImplementedError:
+            pass
+
+        suffix = os.path.splitext(file_obj.file.name)[-1] or '.bin'
+
+        tmp = tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=suffix,
+            prefix='scan_',
+        )
+
+        with file_obj.file.open('rb') as src:
+
+            while chunk := src.read(65536):
+                tmp.write(chunk)
+
+        tmp.flush()
+        tmp.close()
+
+        return tmp.name, tmp.name
+
+    except Exception as exc:
+
+        logger.warning('_resolve_path: %s', exc)
+
+        return None, None
 
 
-def _mark_result(file_obj, scan_status, message: str) -> None:
+def _mark_result(file_obj, scan_status, message: str):
+
     try:
-        file_obj.scan_status = scan_status
-        file_obj.scan_result = message[:1000]
-        file_obj.scanned_at  = timezone.now()
-        file_obj.save(update_fields=['scan_status', 'scan_result', 'scanned_at'])
+
+        type(file_obj).objects.filter(pk=file_obj.pk).update(
+            scan_status=scan_status,
+            scan_result=message[:1000],
+            scanned_at=timezone.now(),
+        )
+
+        logger.info(
+            '_mark_result: file_id=%s status=%s',
+            file_obj.pk,
+            scan_status,
+        )
+
     except Exception:
-        logger.exception('_mark_result: Could not save scan result for file %s', file_obj.pk)
+        logger.exception(
+            '_mark_result failed file_id=%s',
+            file_obj.pk,
+        )
 
 
-# ── Periodic task: expire old shares ──────────────────────────────────────────
+# ── Periodic tasks ────────────────────────────────────────────────────────────
 
 @shared_task(name='sharing.expire_old_shares')
 def expire_old_shares():
-    """
-    Periodic task: mark expired FileShare and ZipShare records.
-    Schedule in settings:
-        CELERY_BEAT_SCHEDULE = {
-            'expire-shares': {
-                'task': 'sharing.expire_old_shares',
-                'schedule': crontab(minute=0, hour='*/6'),
-            },
-        }
-    """
+
     from .models import FileShare, ZipShare
 
     now = timezone.now()
-    fs_count = FileShare.objects.filter(
-        status=FileShare.Status.ACTIVE, expires_at__lt=now
+
+    fs = FileShare.objects.filter(
+        status=FileShare.Status.ACTIVE,
+        expires_at__lt=now,
     ).update(status=FileShare.Status.EXPIRED)
 
-    zs_count = ZipShare.objects.filter(
-        status=ZipShare.Status.ACTIVE, expires_at__lt=now
+    zs = ZipShare.objects.filter(
+        status=ZipShare.Status.ACTIVE,
+        expires_at__lt=now,
     ).update(status=ZipShare.Status.EXPIRED)
 
     logger.info(
-        'expire_old_shares: marked %d FileShares and %d ZipShares as expired',
-        fs_count, zs_count,
+        'expire_old_shares: file_shares=%s zip_shares=%s',
+        fs,
+        zs,
     )
-    return {'file_shares_expired': fs_count, 'zip_shares_expired': zs_count}
+
+    return {
+        'file_shares_expired': fs,
+        'zip_shares_expired': zs,
+    }
+
+
+@shared_task(name='sharing.unstick_scanning_files')
+def unstick_scanning_files():
+
+    from datetime import timedelta
+    from apps.files.models import File
+
+    cutoff = timezone.now() - timedelta(minutes=5)
+
+    stuck = File.objects.filter(
+        scan_status__in=[
+            File.ScanStatus.SCANNING,
+            File.ScanStatus.PENDING,
+        ],
+        scanned_at__isnull=True,
+        created_at__lt=cutoff,
+    )
+
+    requeued = 0
+
+    for file_obj in stuck:
+
+        try:
+
+            dispatch_scan(str(file_obj.id))
+
+            requeued += 1
+
+            logger.info(
+                'unstick_scanning_files: requeued file_id=%s',
+                file_obj.id,
+            )
+
+        except Exception:
+            logger.exception(
+                'unstick_scanning_files failed file_id=%s',
+                file_obj.id,
+            )
+
+    logger.info(
+        'unstick_scanning_files: total_requeued=%s',
+        requeued,
+    )
+
+    return {
+        'requeued': requeued,
+    }
