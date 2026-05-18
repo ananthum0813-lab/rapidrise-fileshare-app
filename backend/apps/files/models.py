@@ -131,3 +131,47 @@ class File(models.Model):
     # Alias used by views.py → PermanentlyDeleteView / EmptyTrashView
     def permanently_delete(self):
         self.hard_delete()
+
+
+"""
+apps/files/models.py
+
+A Folder belongs to one owner and holds zero-or-more File objects via a
+M2M relationship.  Files can belong to multiple folders (like labels/tags).
+"""
+
+
+
+class Folder(models.Model):
+    id    = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='folders',
+    )
+    name        = models.CharField(max_length=255)
+    description = models.TextField(blank=True, max_length=500)
+    color       = models.CharField(max_length=7, default='#6366f1')   # hex colour for UI
+    icon        = models.CharField(max_length=50, default='fa-folder') # FA icon class
+    files       = models.ManyToManyField(
+        'files.File',
+        blank=True,
+        related_name='folders',
+    )
+    created_at  = models.DateTimeField(default=timezone.now)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table        = 'folders'
+        ordering        = ['name']
+        unique_together = [['owner', 'name']]
+        indexes         = [
+            models.Index(fields=['owner']),
+        ]
+
+    def __str__(self):
+        return f'{self.name} ({self.owner.email})'
+
+    @property
+    def file_count(self):
+        return self.files.filter(is_deleted=False).count()

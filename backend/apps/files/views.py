@@ -512,3 +512,299 @@ class BatchRestoreView(APIView):
         for f in files:
             f.restore_file()
         return success_response(message=f"✓ Restored {count} file(s) from trash.")
+    
+
+
+
+"""
+
+All folder-related API views.
+
+    path('folders/',                          FolderListCreateView.as_view(),  name='folder-list'),
+    path('folders/<uuid:pk>/',                FolderDetailView.as_view(),      name='folder-detail'),
+    path('folders/<uuid:pk>/add-files/',      FolderAddFilesView.as_view(),    name='folder-add-files'),
+    path('folders/<uuid:pk>/remove-files/',   FolderRemoveFilesView.as_view(), name='folder-remove-files'),
+    path('folders/<uuid:pk>/share/',          FolderShareView.as_view(),       name='folder-share'),
+"""
+
+import logging
+from datetime import timedelta
+
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+
+from rest_framework import status
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import ValidationError, PermissionDenied
+
+from config.exceptions import success_response
+from apps.files.models import File
+
+from .models import Folder
+from .serializers import (
+    FolderSerializer,
+    FolderSummarySerializer,
+    CreateFolderSerializer,
+    AddRemoveFilesSerializer,
+)
+
+logger = logging.getLogger(__name__)
+
+
+# ── helper: attach active (non-deleted) files to queryset ────────────────────
+
+def _folder_with_active_files(folder: Folder) -> Folder:
+    """
+    Annotate the folder instance with a `files_active` attribute so that
+    FolderSerializer can embed only non-deleted files without an extra query.
+    """
+    folder.files_active = folder.files.filter(is_deleted=False).order_by('original_name')
+    return folder
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# List + Create
+# ─────────────────────────────────────────────────────────────────────────────
+
+class FolderListCreateView(APIView):
+    """
+    GET  /api/files/folders/   — list all folders (summary, no embedded files)
+    POST /api/files/folders/   — create a folder, optionally pre-loading files
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        folders = Folder.objects.filter(owner=request.user).prefetch_related('files')
+        return success_response(data={
+            'folders': FolderSummarySerializer(folders, many=True).data,
+            'count':   folders.count(),
+        })
+
+    def post(self, request):
+        serializer = CreateFolderSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+
+        folder = Folder.objects.create(
+            owner=request.user,
+            name=d['name'],
+            description=d.get('description', ''),
+            color=d.get('color', '#6366f1'),
+            icon=d.get('icon', 'fa-folder'),
+        )
+
+        if d.get('file_ids'):
+            files = File.objects.filter(pk__in=d['file_ids'], owner=request.user, is_deleted=False)
+            folder.files.set(files)
+
+        return success_response(
+            data=FolderSummarySerializer(folder).data,
+            message=f'Folder "{folder.name}" created.',
+            status_code=status.HTTP_201_CREATED,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Detail (get, patch, delete)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class FolderDetailView(APIView):
+    """
+    GET    /api/files/folders/<pk>/   — full folder with file list
+    PATCH  /api/files/folders/<pk>/   — rename / recolour / re-icon
+    DELETE /api/files/folders/<pk>/   — delete folder (files are NOT deleted)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_folder(self, pk, user):
+        folder = get_object_or_404(Folder, pk=pk)
+        if folder.owner != user:
+            raise PermissionDenied('Not your folder.')
+        return folder
+
+    def get(self, request, pk):
+        folder = _folder_with_active_files(self._get_folder(pk, request.user))
+        return success_response(data=FolderSerializer(folder).data)
+
+    def patch(self, request, pk):
+        folder     = self._get_folder(pk, request.user)
+        serializer = CreateFolderSerializer(
+            data={**request.data, 'name': request.data.get('name', folder.name)},
+            context={'request': request, 'folder_pk': str(pk)},
+        )
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+
+        folder.name        = d.get('name', folder.name)
+        folder.description = d.get('description', folder.description)
+        folder.color       = d.get('color', folder.color)
+        folder.icon        = d.get('icon', folder.icon)
+        folder.save(update_fields=['name', 'description', 'color', 'icon', 'updated_at'])
+
+        return success_response(
+            data=FolderSummarySerializer(folder).data,
+            message=f'Folder updated.',
+        )
+
+    def delete(self, request, pk):
+        folder = self._get_folder(pk, request.user)
+        name   = folder.name
+        folder.delete()           # M2M rows cascade; actual Files are untouched
+        return success_response(message=f'Folder "{name}" deleted.')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Add / Remove files
+# ─────────────────────────────────────────────────────────────────────────────
+
+class FolderAddFilesView(APIView):
+    """POST /api/files/folders/<pk>/add-files/  { file_ids: [...] }"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        folder = get_object_or_404(Folder, pk=pk, owner=request.user)
+        ser    = AddRemoveFilesSerializer(data=request.data, context={'request': request})
+        ser.is_valid(raise_exception=True)
+
+        files = File.objects.filter(pk__in=ser.validated_data['file_ids'], owner=request.user, is_deleted=False)
+        folder.files.add(*files)
+
+        added = files.count()
+        return success_response(
+            data={'folder_id': str(folder.id), 'added': added},
+            message=f'{added} file(s) added to "{folder.name}".',
+        )
+
+
+class FolderRemoveFilesView(APIView):
+    """POST /api/files/folders/<pk>/remove-files/  { file_ids: [...] }"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        folder = get_object_or_404(Folder, pk=pk, owner=request.user)
+        ser    = AddRemoveFilesSerializer(data=request.data, context={'request': request})
+        ser.is_valid(raise_exception=True)
+
+        files = File.objects.filter(pk__in=ser.validated_data['file_ids'])
+        folder.files.remove(*files)
+
+        removed = files.count()
+        return success_response(
+            data={'folder_id': str(folder.id), 'removed': removed},
+            message=f'{removed} file(s) removed from "{folder.name}".',
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Share files from a folder  (delegates to the same sharing logic)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class FolderShareView(APIView):
+    """
+    POST /api/files/folders/<pk>/share/
+
+    Body:
+      {
+        "file_ids":         ["uuid", ...],   # subset (or omit for all)
+        "recipient_emails": ["a@b.com"],
+        "expiration_hours": 24,
+        "message":          "optional",
+        "share_type":       "single" | "zip",  # single=one per file, zip=bundle
+        "zip_name":         "MyFolder.zip"      # only for zip
+      }
+
+    Reuses the exact same service layer used by the Sharing page so behaviour
+    is guaranteed identical.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        folder = get_object_or_404(Folder, pk=pk, owner=request.user)
+
+        recipient_emails = request.data.get('recipient_emails', [])
+        if not recipient_emails:
+            raise ValidationError({'recipient_emails': 'At least one recipient email is required.'})
+
+        expiration_hours = int(request.data.get('expiration_hours', 24))
+        message          = request.data.get('message', '')
+        share_type       = request.data.get('share_type', 'single')  # 'single' | 'zip'
+
+        # Determine which files to share
+        requested_ids = request.data.get('file_ids', [])
+        if requested_ids:
+            files = list(folder.files.filter(pk__in=requested_ids, is_deleted=False, owner=request.user))
+        else:
+            files = list(folder.files.filter(is_deleted=False, owner=request.user))
+
+        if not files:
+            raise ValidationError({'file_ids': 'No valid files found in this folder to share.'})
+
+        expires_at = timezone.now() + timedelta(hours=expiration_hours)
+
+        # ── Single-file mode: one share per file per recipient ──────────────
+        if share_type == 'single' or len(files) == 1:
+            from apps.sharing.services import create_shares
+            all_shares = []
+            for file_obj in files:
+                shares = create_shares(
+                    user=request.user,
+                    file=file_obj,
+                    recipient_emails=recipient_emails,
+                    expiration_hours=expiration_hours,
+                    message=message,
+                )
+                all_shares.extend(shares)
+
+            from apps.sharing.serializers import FileShareSerializer
+            return success_response(
+                data={
+                    'share_type': 'single',
+                    'shares':     FileShareSerializer(all_shares, many=True).data,
+                    'count':      len(all_shares),
+                },
+                message=f'Shared {len(files)} file(s) with {len(recipient_emails)} recipient(s).',
+                status_code=status.HTTP_201_CREATED,
+            )
+
+        # ── ZIP mode: bundle all selected files per recipient ───────────────
+        from apps.sharing.models import ZipShare
+        from apps.sharing.serializers import ZipShareSerializer
+
+        zip_name = request.data.get('zip_name', '') or f'{folder.name}.zip'
+        if not zip_name.endswith('.zip'):
+            zip_name += '.zip'
+
+        # Reuse the email helper from sharing views
+        from apps.sharing.views import _send_zip_share_email
+
+        zip_shares = []
+        for email in recipient_emails:
+            zs = ZipShare.objects.create(
+                shared_by=request.user,
+                recipient_email=email,
+                message=message,
+                zip_name=zip_name,
+                expires_at=expires_at,
+                file_count=len(files),
+                status=ZipShare.Status.ACTIVE,
+            )
+            zs.files.set(files)
+            zip_shares.append(zs)
+
+            try:
+                file_names = [f.original_name for f in files]
+                _send_zip_share_email(zip_share=zs, shared_by=request.user, file_names=file_names)
+            except Exception:
+                logger.exception('FolderShareView: email failed for ZipShare %s → %s', zs.id, email)
+
+        return success_response(
+            data={
+                'share_type': 'zip',
+                'zip_shares': ZipShareSerializer(zip_shares, many=True).data,
+                'count':      len(zip_shares),
+                'file_count': len(files),
+            },
+            message=f'{len(files)} files bundled and shared with {len(zip_shares)} recipient(s).',
+            status_code=status.HTTP_201_CREATED,
+        )
