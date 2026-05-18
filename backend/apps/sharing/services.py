@@ -16,7 +16,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from django.conf import settings
 
-from apps.authentication.services import send_share_email
+from apps.files.services import send_share_email
 from .models import FileShare, ShareAnalyticsEvent, FileRequest, RequestRecipient, SubmissionInbox
 
 logger = logging.getLogger(__name__)

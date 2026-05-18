@@ -136,6 +136,10 @@ def _content_disposition(filename: str, attachment: bool = True) -> str:
     )
 
 
+from django.conf import settings
+from django.core.mail import send_mail
+
+
 def _send_zip_share_email(zip_share, shared_by, file_names):
     sender_name  = getattr(shared_by, 'full_name', None) or shared_by.email
     download_url = zip_share.share_url
@@ -157,33 +161,15 @@ def _send_zip_share_email(zip_share, shared_by, file_names):
         f'Do not share this link — it is private to you.\n'
     )
 
-    body_html = None
-    try:
-        from django.template.loader import render_to_string
-        body_html = render_to_string('sharing/zip_share_email.html', {
-            'sender_name':  sender_name,
-            'file_count':   zip_share.file_count,
-            'file_names':   shown_names,
-            'extra_count':  extra_count,
-            'message':      zip_share.message,
-            'download_url': download_url,
-            'expires_str':  expires_str,
-            'zip_name':     zip_share.zip_name,
-        })
-    except Exception:
-        pass
-
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com')
-    email = EmailMultiAlternatives(
-        subject=subject,
-        body=body_plain,
-        from_email=from_email,
-        to=[zip_share.recipient_email],
-    )
-    if body_html:
-        email.attach_alternative(body_html, 'text/html')
-    email.send(fail_silently=False)
 
+    send_mail(
+        subject=subject,
+        message=body_plain,
+        from_email=from_email,
+        recipient_list=[zip_share.recipient_email],
+        fail_silently=False,
+    )
 
 def _zip_stream_generator(files_queryset):
     """
