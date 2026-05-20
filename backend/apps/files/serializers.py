@@ -10,12 +10,6 @@ from .models import Folder
 
 
 def sanitize_filename(name: str) -> str:
-    """
-    Make a filename safe:
-    - Strip directory traversal (e.g. ../../etc/passwd)
-    - Replace dangerous characters
-    - Collapse multiple dots (prevent .php.jpg tricks)
-    """
     name = os.path.basename(name)
     name = re.sub(r'[^\w\s.\-]', '_', name).strip()
     name = re.sub(r'\.{2,}', '.', name)
@@ -23,18 +17,15 @@ def sanitize_filename(name: str) -> str:
 
 
 def get_mime_type(file) -> str:
-    """Detect MIME type from filename. Returns 'application/octet-stream' as fallback."""
     guessed, _ = mimetypes.guess_type(file.name)
     return guessed or 'application/octet-stream'
 
 
 class FileSerializer(serializers.ModelSerializer):
     file_size_display = serializers.ReadOnlyField()
+    # FIX: expose is_expired as a computed read-only field
+    is_expired        = serializers.ReadOnlyField()
 
-    # Returns the absolute URL to the file so the frontend can render
-    # image / video / audio previews directly (e.g. <img src={file.file} />).
-    # Requires views to pass context={'request': request} when instantiating
-    # this serializer — see the serialize_file() helper in views.py.
     file = serializers.SerializerMethodField()
 
     class Meta:
@@ -42,23 +33,22 @@ class FileSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'original_name',
-            'file',             # absolute URL for browser preview
+            'file',
             'file_size',
             'file_size_display',
             'mime_type',
             'uploaded_at',
             'is_deleted',
-            'deleted_at',       # needed by Trash page (days-remaining counter)
-            'is_favorite',      # needed by Files & Starred pages (star toggle)
+            'deleted_at',
+            'is_favorite',
+            # FIX: these two fields were missing — the frontend needs them for
+            # the expiry badge, column, preview modal, and SetExpiryModal.
+            'expires_at',
+            'is_expired',
         ]
         read_only_fields = fields
 
     def get_file(self, obj) -> str | None:
-        """
-        Build an absolute URL so the browser can fetch the file directly.
-        Falls back to a relative URL when no request is available in context
-        (e.g. management commands, shell, tests without a request factory).
-        """
         if not (obj.file and obj.file.name):
             return None
         request = self.context.get('request')
@@ -81,14 +71,12 @@ class FileUploadSerializer(serializers.Serializer):
         errors = []
 
         for f in files:
-            # Size check
             if f.size > max_size:
                 errors.append(
                     f"'{f.name}' is too large. Max size is {settings.MAX_FILE_SIZE_MB}MB."
                 )
                 continue
 
-            # MIME type check against allowlist
             mime, _ = mimetypes.guess_type(f.name)
             if allowed_types and mime not in allowed_types:
                 errors.append(
@@ -112,8 +100,6 @@ class FileUploadSerializer(serializers.Serializer):
                 f'Storage limit exceeded. You only have {available:.1f}MB available.'
             )
         return attrs
-    
-
 
 
 # ── Minimal file info embedded inside a folder response ───────────────────────
@@ -138,7 +124,7 @@ class FolderSerializer(serializers.ModelSerializer):
     files      = FolderFileSerializer(
         many=True,
         read_only=True,
-        source='files_active',   # use the manager method below
+        source='files_active',
     )
 
     class Meta:

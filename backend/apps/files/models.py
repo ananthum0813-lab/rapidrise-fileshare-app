@@ -1,9 +1,11 @@
 """
 apps/files/models.py
 ─────────────────────────────────────────────────────────────────────────────
-FIX: Added method aliases delete_file(), restore_file(), permanently_delete()
-     so views.py doesn't crash with AttributeError.
-     The canonical implementations remain soft_delete() / restore() / hard_delete().
+Changes from previous version:
+  • Added `expires_at`  — optional expiry datetime (null = never expires).
+  • Added `is_expired`  — computed property; True when expires_at is past.
+
+Everything else is exactly as before.
 """
 
 import uuid
@@ -52,6 +54,18 @@ class File(models.Model):
     is_deleted  = models.BooleanField(default=False, db_index=True)
     deleted_at  = models.DateTimeField(null=True, blank=True)
 
+    # ── NEW: optional expiry ──────────────────────────────────────────────────
+    # When set, the Celery task `delete_expired_files` (apps/files/tasks.py)
+    # will soft-delete this file once `expires_at` passes.
+    # Null means the file never expires automatically (default behaviour).
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Optional expiry. Null = never expires automatically.',
+    )
+    # ─────────────────────────────────────────────────────────────────────────
+
     uploaded_at = models.DateTimeField(default=timezone.now, db_index=True)
     updated_at  = models.DateTimeField(auto_now=True)
 
@@ -63,6 +77,9 @@ class File(models.Model):
             models.Index(fields=['owner', 'is_favorite']),
             models.Index(fields=['sha256']),
             models.Index(fields=['scan_status']),
+            # Composite index used by the Celery cleanup query:
+            #   expires_at <= now() AND is_deleted = False
+            models.Index(fields=['expires_at', 'is_deleted']),
         ]
 
     def __str__(self):
@@ -90,6 +107,21 @@ class File(models.Model):
     @property
     def scan_status_display(self):
         return self.get_scan_status_display()
+
+    # ── NEW: expiry helper ────────────────────────────────────────────────────
+    @property
+    def is_expired(self) -> bool:
+        """
+        True when the file has a set expiry time that is now in the past.
+
+        Note: the Celery task soft-deletes expired files, so ``is_expired``
+        will only return True for the window between the expiry datetime
+        and the next cleanup run (≤ 1 hour by default).
+        The download/detail views use this to block access immediately,
+        without waiting for the task to run.
+        """
+        return bool(self.expires_at and self.expires_at <= timezone.now())
+    # ─────────────────────────────────────────────────────────────────────────
 
     # ── Toggle favourite ──────────────────────────────────────────────────────
 
@@ -133,14 +165,9 @@ class File(models.Model):
         self.hard_delete()
 
 
-"""
-apps/files/models.py
-
-A Folder belongs to one owner and holds zero-or-more File objects via a
-M2M relationship.  Files can belong to multiple folders (like labels/tags).
-"""
-
-
+# ─────────────────────────────────────────────────────────────────────────────
+# Folder model — unchanged
+# ─────────────────────────────────────────────────────────────────────────────
 
 class Folder(models.Model):
     id    = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
