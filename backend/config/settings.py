@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'apps.authentication',
     'apps.files',
     'apps.sharing',
+    'django_celery_beat',
     
 ]
 
@@ -248,3 +249,23 @@ ALLOWED_MIME_TYPES = {
 
 CELERY_BROKER_URL = "redis://127.0.0.1:6379/0"
 CELERY_RESULT_BACKEND = "redis://127.0.0.1:6379/0"
+
+# Serialisation
+CELERY_ACCEPT_CONTENT    = ['json']
+CELERY_TASK_SERIALIZER   = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+ 
+# Timezone — must match TIME_ZONE
+CELERY_TIMEZONE = 'UTC'
+ 
+# ── Celery Beat scheduler ──────────────────────────────────────────────────────
+# Uses the database (django_celery_beat) so schedules survive restarts
+# and can be inspected / modified in the Django admin.
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+ 
+# ── Optional reliability settings ─────────────────────────────────────────────
+CELERY_TASK_ACKS_LATE             = True   # acknowledge only after task finishes
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1      # fair distribution across workers
+CELERY_TASK_TRACK_STARTED         = True   # enables STARTED state in Flower / admin
+ 
+
