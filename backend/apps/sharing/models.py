@@ -28,6 +28,9 @@ class FileShare(models.Model):
     shared_at       = models.DateTimeField(default=timezone.now)
     accessed_at     = models.DateTimeField(null=True, blank=True)
     download_count  = models.PositiveIntegerField(default=0)
+    # ✅ FIX: view_count retained on model (existing DB column) but no longer
+    #    surfaced in the API. Removing the DB column would require a migration;
+    #    we simply stop exposing it in serializers / analytics views.
     view_count      = models.PositiveIntegerField(default=0)
     last_ip         = models.GenericIPAddressField(null=True, blank=True)
     last_user_agent = models.CharField(max_length=512, blank=True)
@@ -68,6 +71,7 @@ class FileShare(models.Model):
         self.save(update_fields=['accessed_at', 'download_count', 'last_ip', 'last_user_agent'])
 
     def mark_viewed(self, ip=None, user_agent=''):
+        # Still tracked internally but no longer exposed in the API.
         self.view_count     += 1
         self.last_ip         = ip
         self.last_user_agent = (user_agent or '')[:512]
@@ -222,10 +226,20 @@ class FileRequest(models.Model):
 
     @property
     def submission_count(self):
+        """
+        ✅ FIX: Count ALL non-rejected, non-deleted submissions for this
+        request — not just PENDING + APPROVED.  NEEDS_ACTION and COMPLETE
+        are legitimate states that represent real uploaded files.
+
+        This is the authoritative count used to check remaining_slots and
+        to display "X of Y files received" on the request card.
+        """
         return self.submissions.filter(
             status__in=[
                 SubmissionInbox.Status.PENDING,
                 SubmissionInbox.Status.APPROVED,
+                SubmissionInbox.Status.NEEDS_ACTION,
+                SubmissionInbox.Status.COMPLETE,
             ]
         ).count()
 
@@ -269,6 +283,23 @@ class RequestRecipient(models.Model):
     @property
     def has_uploaded(self):
         return self.upload_count > 0
+
+    @property
+    def files_submitted_count(self):
+        """
+        ✅ FIX: Accurate per-recipient file count from the inbox.
+        upload_count only tracks POST requests — if a file is later rejected
+        or removed, upload_count does not decrement. This property queries
+        the inbox for the current accurate count.
+        """
+        return self.submissions.filter(
+            status__in=[
+                SubmissionInbox.Status.PENDING,
+                SubmissionInbox.Status.APPROVED,
+                SubmissionInbox.Status.NEEDS_ACTION,
+                SubmissionInbox.Status.COMPLETE,
+            ]
+        ).count()
 
     def record_upload(self, ip=None):
         if not self.first_uploaded_at:
@@ -345,6 +376,9 @@ class SubmissionInbox(models.Model):
             models.Index(fields=['owner', 'status']),
             models.Index(fields=['owner', 'source_type']),
             models.Index(fields=['file_request', 'status']),
+            # ✅ FIX: added index for recipient lookups (used heavily in
+            #    per-recipient count queries)
+            models.Index(fields=['recipient', 'status']),
         ]
 
     def __str__(self):

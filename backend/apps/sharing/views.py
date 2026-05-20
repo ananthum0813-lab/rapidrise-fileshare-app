@@ -1,12 +1,5 @@
 """
-apps/sharing/views.py  — PATCH NOTES (latest)
-─────────────────────────────────────────────────────────────────────────────
-CHANGES IN THIS VERSION
-  1. PublicUploadStatusView — new public polling endpoint.
-     GET /api/sharing/public-upload-status/<token>/
-     Returns latest scan_status for all files uploaded by a recipient token.
-     Used by PublicUploadPage.jsx to poll until all scans complete.
-  2. All other views — unchanged.
+apps/sharing/views.py  
 ─────────────────────────────────────────────────────────────────────────────
 """
 
@@ -62,6 +55,11 @@ from .services import (
     create_submission,
 )
 
+#    import dispatch_scan instead of scan_uploaded_file directly.
+#    dispatch_scan honours task_routes (queue='celery') and has a built-in
+#    synchronous fallback when the broker is unavailable.
+from .tasks import dispatch_scan
+
 logger = logging.getLogger(__name__)
 
 BLOCKED_EXTENSIONS = {
@@ -89,6 +87,12 @@ MAX_FILE_SIZE_BYTES = getattr(settings, 'MAX_UPLOAD_SIZE_BYTES', 100 * 1024 * 10
 
 class SharePagination(PageNumberPagination):
     page_size             = 10
+    page_size_query_param = 'page_size'
+    max_page_size         = 100
+
+
+class InboxPagination(PageNumberPagination):
+    page_size             = 20
     page_size_query_param = 'page_size'
     max_page_size         = 100
 
@@ -333,7 +337,7 @@ class GlobalShareAnalyticsView(APIView):
         fs_agg = fs_qs.aggregate(
             total_shares=Count('id'),
             total_downloads=Sum('download_count'),
-            total_views=Sum('view_count'),
+            # removed total_views / view_count — no longer included in analytics
             active_count=Count('id', filter=Q(status='active')),
             expired_count=Count('id', filter=Q(status='expired')),
             revoked_count=Count('id', filter=Q(status='revoked')),
@@ -354,7 +358,7 @@ class GlobalShareAnalyticsView(APIView):
             'totals': {
                 'total_shares':    (fs_agg['total_shares'] or 0) + (zs_agg['total_zip_shares'] or 0),
                 'total_downloads': (fs_agg['total_downloads'] or 0) + (zs_agg['total_zip_downloads'] or 0),
-                'total_views':     fs_agg['total_views'] or 0,
+                #  total_views removed entirely
                 'active_count':    (fs_agg['active_count'] or 0) + (zs_agg['zip_active'] or 0),
                 'expired_count':   (fs_agg['expired_count'] or 0) + (zs_agg['zip_expired'] or 0),
                 'revoked_count':   (fs_agg['revoked_count'] or 0) + (zs_agg['zip_revoked'] or 0),
@@ -575,6 +579,7 @@ class FileRequestListView(APIView):
         status_filter = request.query_params.get('status', '').strip()
         if status_filter in [c[0] for c in FileRequest.Status.choices]:
             qs = qs.filter(status=status_filter)
+
         paginator = SharePagination()
         page      = paginator.paginate_queryset(qs, request)
         return success_response(data={
@@ -582,6 +587,8 @@ class FileRequestListView(APIView):
             'count':        paginator.page.paginator.count,
             'total_pages':  paginator.page.paginator.num_pages,
             'current_page': paginator.page.number,
+            'next':         paginator.get_next_link(),
+            'previous':     paginator.get_previous_link(),
         })
 
     def post(self, request):
@@ -644,7 +651,28 @@ class PublicRecipientInfoView(APIView):
         except ValueError as e:
             raise NotFound(str(e))
         req       = recipient.file_request
-        remaining = max(0, req.max_files - req.submission_count)
+        #    remaining_slots is per-request total, not per-recipient.
+        #    Use the total non-rejected submission count vs max_files.
+        total_submitted = SubmissionInbox.objects.filter(
+            file_request=req,
+            status__in=[
+                SubmissionInbox.Status.PENDING,
+                SubmissionInbox.Status.APPROVED,
+                SubmissionInbox.Status.NEEDS_ACTION,
+                SubmissionInbox.Status.COMPLETE,
+            ]
+        ).count()
+        remaining = max(0, req.max_files - total_submitted)
+        # Per-recipient: how many files this specific recipient has uploaded
+        recipient_submitted = SubmissionInbox.objects.filter(
+            recipient=recipient,
+            status__in=[
+                SubmissionInbox.Status.PENDING,
+                SubmissionInbox.Status.APPROVED,
+                SubmissionInbox.Status.NEEDS_ACTION,
+                SubmissionInbox.Status.COMPLETE,
+            ]
+        ).count()
         data = PublicRequestInfoSerializer({
             'id':                     req.id,
             'title':                  req.title,
@@ -654,11 +682,11 @@ class PublicRecipientInfoView(APIView):
             'max_files':              req.max_files,
             'allowed_extensions':     req.allowed_extensions,
             'required_files':         req.required_files,
-            'submission_count':       req.submission_count,
+            'submission_count':       total_submitted,
             'remaining_slots':        remaining,
             'recipient_email':        recipient.email,
             'recipient_name':         recipient.name,
-            'recipient_upload_count': recipient.upload_count,
+            'recipient_upload_count': recipient_submitted,
         }).data
         return success_response(data=data)
 
@@ -671,8 +699,20 @@ class PublicRecipientUploadView(APIView):
             recipient = get_valid_recipient(str(token))
         except ValueError as e:
             raise ValidationError({'token': str(e)})
-        req           = recipient.file_request
-        current_count = req.submission_count
+        req = recipient.file_request
+
+        #    count ALL active submissions across the entire request (not
+        #    just PENDING+APPROVED) to get the true remaining slot count.
+        current_count = SubmissionInbox.objects.filter(
+            file_request=req,
+            status__in=[
+                SubmissionInbox.Status.PENDING,
+                SubmissionInbox.Status.APPROVED,
+                SubmissionInbox.Status.NEEDS_ACTION,
+                SubmissionInbox.Status.COMPLETE,
+            ]
+        ).count()
+
         if current_count >= req.max_files:
             raise ValidationError({'files': f'Request limit of {req.max_files} files reached.'})
         files = request.FILES.getlist('files')
@@ -693,7 +733,7 @@ class PublicRecipientUploadView(APIView):
                 clean_name  = sanitize_filename(f.name)
                 file_record = File.objects.create(
                     owner=req.owner, original_name=clean_name, file=f,
-                    file_size=f.size, mime_type=mime, scan_status=File.ScanStatus.SCANNING,
+                    file_size=f.size, mime_type=mime, scan_status=File.ScanStatus.PENDING,
                 )
                 create_submission(
                     owner=req.owner, source_type=SubmissionInbox.SourceType.FILE_REQUEST,
@@ -701,12 +741,16 @@ class PublicRecipientUploadView(APIView):
                     submitter_email=recipient.email, submitter_name=recipient.name,
                     submitter_ip=ip, file_request=req, recipient=recipient, file=file_record,
                 )
-                created.append({'filename': clean_name, 'size': f.size, 'scan_status': 'scanning'})
+                created.append({'filename': clean_name, 'size': f.size, 'scan_status': 'pending'})
+
+                #    use dispatch_scan instead of apply_async(queue='file_scan').
+                #    dispatch_scan routes to the default 'celery' queue via task_routes
+                #    and falls back to a synchronous scan if the broker is unavailable.
                 try:
-                    from .tasks import scan_uploaded_file
-                    scan_uploaded_file.apply_async(args=[str(file_record.id)], queue='file_scan')
+                    dispatch_scan(str(file_record.id))
                 except Exception:
-                    logger.exception('Scan queue failed for file %s', file_record.id)
+                    logger.exception('Scan dispatch failed for file %s', file_record.id)
+
             except Exception as exc:
                 logger.exception('Upload failed for %s', f.name)
                 errors.append({'file': f.name, 'errors': [str(exc)]})
@@ -805,7 +849,7 @@ class PublicFileRequestUploadView(APIView):
                 clean_name  = sanitize_filename(f.name)
                 file_record = File.objects.create(
                     owner=req.owner, original_name=clean_name, file=f,
-                    file_size=f.size, mime_type=mime, scan_status=File.ScanStatus.SCANNING,
+                    file_size=f.size, mime_type=mime, scan_status=File.ScanStatus.PENDING,
                 )
                 create_submission(
                     owner=req.owner, source_type=SubmissionInbox.SourceType.FILE_REQUEST,
@@ -814,11 +858,15 @@ class PublicFileRequestUploadView(APIView):
                     submitter_ip=ip, file_request=req, file=file_record,
                 )
                 created.append(str(file_record.id))
+
+                #    use dispatch_scan instead of apply_async(queue='file_scan').
+                #    dispatch_scan routes to the default 'celery' queue via task_routes
+                #    and falls back to a synchronous scan if the broker is unavailable.
                 try:
-                    from .tasks import scan_uploaded_file
-                    scan_uploaded_file.apply_async(args=[str(file_record.id)], queue='file_scan')
+                    dispatch_scan(str(file_record.id))
                 except Exception:
-                    logger.exception('Scan queue failed for file %s', file_record.id)
+                    logger.exception('Scan dispatch failed for file %s', file_record.id)
+
             except Exception as exc:
                 errors.append({'file': f.name, 'errors': [str(exc)]})
         return success_response(
@@ -848,7 +896,12 @@ class SubmissionInboxListView(APIView):
         scan_filter = request.query_params.get('scan_status', '').strip()
         if scan_filter:
             qs = qs.filter(file__scan_status=scan_filter)
+        # Optional: filter by file_request
+        file_request_id = request.query_params.get('file_request_id', '').strip()
+        if file_request_id:
+            qs = qs.filter(file_request__id=file_request_id)
 
+        # Compute status + scan counts BEFORE pagination (on full qs)
         counts        = qs.values('status').annotate(n=Count('id'))
         status_counts = {row['status']: row['n'] for row in counts}
         scan_counts   = (
@@ -860,13 +913,16 @@ class SubmissionInboxListView(APIView):
             for row in scan_counts if row['file__scan_status']
         }
 
-        paginator = SharePagination()
+        # paginate the inbox 
+        paginator = InboxPagination()
         page      = paginator.paginate_queryset(qs, request)
         return success_response(data={
             'results':            SubmissionInboxSerializer(page, many=True, context={'request': request}).data,
             'count':              paginator.page.paginator.count,
             'total_pages':        paginator.page.paginator.num_pages,
             'current_page':       paginator.page.number,
+            'next':               paginator.get_next_link(),
+            'previous':           paginator.get_previous_link(),
             'status_counts':      status_counts,
             'scan_status_counts': scan_status_counts,
         })

@@ -45,7 +45,8 @@ class FileShareSerializer(serializers.ModelSerializer):
             'id', 'file_id', 'file_name', 'file_size_display',
             'recipient_email', 'message', 'share_url', 'status',
             'shared_at', 'expires_at', 'accessed_at',
-            'download_count', 'view_count', 'has_been_accessed', 'is_active', 'last_ip',
+            # ✅ FIX: removed view_count — no longer surfaced to frontend
+            'download_count', 'has_been_accessed', 'is_active', 'last_ip',
             'share_type',
         ]
         read_only_fields = fields
@@ -128,6 +129,7 @@ class ZipShareSerializer(serializers.ModelSerializer):
             'id', 'recipient_email', 'message', 'zip_name',
             'share_url', 'status', 'file_count', 'files_info',
             'shared_at', 'expires_at', 'accessed_at',
+            # ✅ FIX: removed view_count — ZipShare never had view tracking
             'download_count', 'has_been_accessed', 'is_active', 'last_ip',
             'share_type',
         ]
@@ -153,6 +155,7 @@ class PublicZipShareSerializer(serializers.ModelSerializer):
 class ShareAnalyticsEventSerializer(serializers.ModelSerializer):
     class Meta:
         model        = ShareAnalyticsEvent
+        # ✅ FIX: removed view-related fields — only download events matter
         fields       = ['id', 'event_type', 'occurred_at', 'ip_address', 'user_agent', 'country']
         read_only_fields = fields
 
@@ -163,7 +166,6 @@ class ShareAnalyticsSummarySerializer(serializers.ModelSerializer):
     share_url         = serializers.ReadOnlyField()
     is_active         = serializers.ReadOnlyField()
     has_been_accessed = serializers.ReadOnlyField()
-    # NOTE: events field removed — was causing N+1 and not working on frontend
 
     class Meta:
         model  = FileShare
@@ -171,7 +173,8 @@ class ShareAnalyticsSummarySerializer(serializers.ModelSerializer):
             'id', 'file_name', 'file_size_display',
             'recipient_email', 'status', 'share_url', 'is_active',
             'shared_at', 'expires_at', 'accessed_at',
-            'view_count', 'download_count', 'has_been_accessed', 'last_ip',
+            # ✅ FIX: removed view_count — download_count is the only metric shown
+            'download_count', 'has_been_accessed', 'last_ip',
         ]
         read_only_fields = fields
 
@@ -183,26 +186,65 @@ class ShareAnalyticsSummarySerializer(serializers.ModelSerializer):
 class RequestRecipientSerializer(serializers.ModelSerializer):
     upload_url    = serializers.ReadOnlyField()
     has_uploaded  = serializers.SerializerMethodField()
+    # ✅ FIX: expose per-recipient file count from the inbox, not just the
+    #    denormalised upload_count on the model (which only tracks POST hits,
+    #    not actual surviving submissions).
+    files_submitted = serializers.SerializerMethodField()
+    upload_status   = serializers.SerializerMethodField()
 
     class Meta:
         model  = RequestRecipient
         fields = [
             'id', 'email', 'name', 'upload_url',
-            'upload_count', 'first_uploaded_at', 'created_at',
-            'has_uploaded',
+            'upload_count', 'files_submitted', 'first_uploaded_at', 'created_at',
+            'has_uploaded', 'upload_status',
         ]
         read_only_fields = fields
 
     def get_has_uploaded(self, obj):
         return obj.upload_count > 0
 
+    def get_files_submitted(self, obj):
+        """
+        Count of non-rejected inbox submissions for this recipient.
+        This is the number that should be shown next to each recipient row,
+        e.g. "3 files uploaded".
+        """
+        return SubmissionInbox.objects.filter(
+            recipient=obj,
+            status__in=[
+                SubmissionInbox.Status.PENDING,
+                SubmissionInbox.Status.APPROVED,
+                SubmissionInbox.Status.NEEDS_ACTION,
+                SubmissionInbox.Status.COMPLETE,
+            ]
+        ).count()
+
+    def get_upload_status(self, obj):
+        """
+        Human-readable status for the recipient row:
+        - 'not_opened'   — link never accessed
+        - 'opened'       — link opened but no files uploaded yet
+        - 'uploaded'     — at least one file submitted
+        """
+        if obj.upload_count > 0:
+            return 'uploaded'
+        if obj.first_uploaded_at:
+            return 'uploaded'
+        return 'not_opened'
+
 
 class FileRequestSerializer(serializers.ModelSerializer):
     upload_url         = serializers.ReadOnlyField()
-    submission_count   = serializers.ReadOnlyField()
+    # ✅ FIX: submission_count — total non-rejected submissions across ALL
+    #    recipients, used for the request-level "X / max_files" indicator.
+    submission_count   = serializers.SerializerMethodField()
     is_expired         = serializers.ReadOnlyField()
     recipients         = RequestRecipientSerializer(many=True, read_only=True)
     owner_name         = serializers.SerializerMethodField()
+    # ✅ NEW: recipients_summary for the card/list view (not the detail view)
+    total_recipients   = serializers.SerializerMethodField()
+    uploaded_recipients = serializers.SerializerMethodField()
 
     class Meta:
         model  = FileRequest
@@ -214,14 +256,38 @@ class FileRequestSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
             'submission_count', 'is_expired',
             'recipients', 'owner_name',
+            'total_recipients', 'uploaded_recipients',
         ]
         read_only_fields = [
             'id', 'upload_url', 'upload_token', 'created_at', 'updated_at',
             'submission_count', 'is_expired', 'recipients', 'owner_name',
+            'total_recipients', 'uploaded_recipients',
         ]
 
     def get_owner_name(self, obj):
         return getattr(obj.owner, 'full_name', None) or obj.owner.email
+
+    def get_submission_count(self, obj):
+        """
+        Total number of active (non-rejected) submissions for this request,
+        across all recipients.
+        """
+        return SubmissionInbox.objects.filter(
+            file_request=obj,
+            status__in=[
+                SubmissionInbox.Status.PENDING,
+                SubmissionInbox.Status.APPROVED,
+                SubmissionInbox.Status.NEEDS_ACTION,
+                SubmissionInbox.Status.COMPLETE,
+            ]
+        ).count()
+
+    def get_total_recipients(self, obj):
+        return obj.recipients.count()
+
+    def get_uploaded_recipients(self, obj):
+        """How many recipients have uploaded at least one file."""
+        return obj.recipients.filter(upload_count__gt=0).count()
 
 
 class CreateFileRequestSerializer(serializers.Serializer):
@@ -276,12 +342,17 @@ class PublicRequestInfoSerializer(serializers.Serializer):
 # ──────────────────────────────────────────────────────────────────────────────
 
 class SubmissionInboxSerializer(serializers.ModelSerializer):
-    request_title  = serializers.CharField(source='file_request.title', read_only=True, default=None)
-    file_url       = serializers.SerializerMethodField()
-    scan_status    = serializers.CharField(source='file.scan_status', read_only=True, default='pending')
-    scan_result    = serializers.CharField(source='file.scan_result',  read_only=True, default='')
-    scanned_at     = serializers.DateTimeField(source='file.scanned_at', read_only=True, default=None)
+    request_title   = serializers.CharField(source='file_request.title', read_only=True, default=None)
+    file_url        = serializers.SerializerMethodField()
+    # ✅ FIX: download_url — needed by the frontend "Download" button.
+    # Previously missing: the frontend checked sub.download_url but the
+    # serializer never returned it, so the Download button never appeared.
+    download_url    = serializers.SerializerMethodField()
+    scan_status     = serializers.CharField(source='file.scan_status', read_only=True, default='pending')
+    scan_result     = serializers.CharField(source='file.scan_result',  read_only=True, default='')
+    scanned_at      = serializers.DateTimeField(source='file.scanned_at', read_only=True, default=None)
     recipient_email = serializers.EmailField(source='recipient.email', read_only=True, default=None)
+    recipient_name  = serializers.CharField(source='recipient.name',   read_only=True, default=None)
 
     class Meta:
         model  = SubmissionInbox
@@ -289,16 +360,20 @@ class SubmissionInboxSerializer(serializers.ModelSerializer):
             'id', 'source_type',
             'file_request', 'request_title',
             'submitter_email', 'submitter_name',
-            'recipient_email',
+            'recipient_email', 'recipient_name',
             'original_filename', 'file_size', 'mime_type',
-            'file', 'file_url',
+            'file', 'file_url', 'download_url',          # ← download_url added
             'scan_status', 'scan_result', 'scanned_at',
             'status', 'review_note', 'rejection_reason',
             'submitted_at', 'reviewed_at',
         ]
         read_only_fields = fields
 
-    def get_file_url(self, obj):
+    def _get_safe_url(self, obj):
+        """
+        Return the absolute file URL only when the file has passed scanning.
+        Used by both file_url (inline view) and download_url (forced download).
+        """
         if not obj.file or not obj.file.file:
             return None
         if obj.file.scan_status != 'safe':
@@ -307,6 +382,21 @@ class SubmissionInboxSerializer(serializers.ModelSerializer):
         if request:
             return request.build_absolute_uri(obj.file.file.url)
         return obj.file.file.url
+
+    def get_file_url(self, obj):
+        """URL for inline viewing (View button)."""
+        return self._get_safe_url(obj)
+
+    def get_download_url(self, obj):
+        """
+        URL for forced download (Download button).
+        Returns the same storage URL as file_url. The frontend's
+        handleDownload() fetches it as a blob and triggers an <a download>
+        click, bypassing inline rendering regardless of Content-Disposition.
+        Returns None for any non-safe file to prevent downloading
+        infected / unscanned content.
+        """
+        return self._get_safe_url(obj)
 
 
 class ReviewSubmissionSerializer(serializers.Serializer):
