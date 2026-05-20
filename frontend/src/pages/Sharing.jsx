@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useForm } from 'react-hook-form'
+import api from '@/api/axios'
 import {
   fetchAllFiles,
   fetchShares,
@@ -259,7 +260,7 @@ function FileSelector({ files, loading, selectedFiles, onToggle }) {
 
 // ─── Pagination control ───────────────────────────────────────────────────────
 
-function Pagination({ currentPage, totalPages, count, onPageChange, loading }) {
+function Pagination({ currentPage, totalPages, count, onPageChange, loading, label }) {
   if (!totalPages || totalPages <= 1) return null
   return (
     <div className="flex items-center justify-center gap-2 pt-2">
@@ -271,6 +272,7 @@ function Pagination({ currentPage, totalPages, count, onPageChange, loading }) {
         <i className="fas fa-chevron-left text-[10px]"></i> Prev
       </button>
       <span className="text-xs text-slate-500 font-medium px-2">
+        {label && <span className="text-slate-400 mr-1">{label} ·</span>}
         Page {currentPage} of {totalPages}
         {count != null && <span className="text-slate-400 ml-1">({fmt(count)} total)</span>}
       </span>
@@ -311,15 +313,6 @@ function FileViewerModal({ file, onClose }) {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {file.file_url && (
-              <a
-                href={file.file_url}
-                download={file.original_filename}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all"
-              >
-                <i className="fas fa-download text-[10px]"></i> Download
-              </a>
-            )}
             <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all">
               <i className="fas fa-xmark"></i>
             </button>
@@ -360,11 +353,6 @@ function FileViewerModal({ file, onClose }) {
               <i className="fas fa-file text-5xl mb-4 text-slate-300"></i>
               <p className="text-sm font-semibold text-slate-600 mb-1">Preview not available</p>
               <p className="text-xs text-slate-400 mb-4">This file type cannot be previewed in the browser.</p>
-              {file.file_url && (
-                <a href={file.file_url} download={file.original_filename} className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all">
-                  <i className="fas fa-download"></i> Download File
-                </a>
-              )}
             </div>
           )}
         </div>
@@ -384,34 +372,35 @@ function SharesPanel() {
     error,
   } = useSelector((s) => s.sharing)
 
-  const [showForm,      setShowForm]      = useState(false)
-  const [currentPage,   setCurrentPage]   = useState(1)
-  const [successMsg,    setSuccessMsg]    = useState('')
-  const [emails,        setEmails]        = useState([])
-  const [selectedFiles, setSelectedFiles] = useState([])
-  const [actionConfirm, setActionConfirm] = useState(null)
-  const [actionLoading, setActionLoading] = useState(false)
-  // Track whether we're in a background refresh so we don't flash loading state
-  const [initialLoaded, setInitialLoaded] = useState(false)
+  const [showForm,        setShowForm]        = useState(false)
+  // Singles and ZIPs are independently paginated — using one shared page
+  // caused Math.max(total_pages) to show ghost pages for the shorter list.
+  const [singlesPage,     setSinglesPage]     = useState(1)
+  const [zipsPage,        setZipsPage]        = useState(1)
+  const [successMsg,      setSuccessMsg]      = useState('')
+  const [emails,          setEmails]          = useState([])
+  const [selectedFiles,   setSelectedFiles]   = useState([])
+  const [actionConfirm,   setActionConfirm]   = useState(null)
+  const [actionLoading,   setActionLoading]   = useState(false)
+  const [initialLoaded,   setInitialLoaded]   = useState(false)
+  // Prevent double-submit on the share form
+  const [formSubmitting,  setFormSubmitting]  = useState(false)
 
   const { register: field, handleSubmit, reset } = useForm({
     defaultValues: { expiration_hours: 24, message: '', zip_name: 'shared_files' },
   })
 
-  // Fetch all files once on mount
   useEffect(() => { dispatch(fetchAllFiles()) }, [dispatch])
 
-  // Fetch shares whenever page changes; mark initial load done after first fetch
+  // Fetch singles whenever singlesPage changes
   useEffect(() => {
-    const load = async () => {
-      await Promise.all([
-        dispatch(fetchShares({ page: currentPage })),
-        dispatch(fetchZipShares({ page: currentPage })),
-      ])
-      setInitialLoaded(true)
-    }
-    load()
-  }, [dispatch, currentPage])
+    dispatch(fetchShares({ page: singlesPage })).then(() => setInitialLoaded(true))
+  }, [dispatch, singlesPage])
+
+  // Fetch zips whenever zipsPage changes
+  useEffect(() => {
+    dispatch(fetchZipShares({ page: zipsPage }))
+  }, [dispatch, zipsPage])
 
   const toggleFile = (id) =>
     setSelectedFiles((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
@@ -419,7 +408,8 @@ function SharesPanel() {
   const isZipMode    = selectedFiles.length >= 2
   const isSingleMode = selectedFiles.length === 1
   const isFormValid  = emails.length > 0 && selectedFiles.length >= 1
-  const isSubmitting = sharing || zipSharing
+  // isSubmitting: Redux async flags OR local guard — whichever fires first
+  const isSubmitting = sharing || zipSharing || formSubmitting
 
   const flash = (msg) => {
     setSuccessMsg(msg)
@@ -427,50 +417,55 @@ function SharesPanel() {
   }
 
   const onSubmit = async (data) => {
-    if (!isFormValid) return
+    // Guard: prevent double-submit from rapid clicks
+    if (!isFormValid || formSubmitting) return
+    setFormSubmitting(true)
 
-    let result
-    if (isZipMode) {
-      result = await dispatch(createZipShare({
-        file_ids:         selectedFiles,
-        recipient_emails: emails,
-        expiration_hours: Number(data.expiration_hours),
-        message:          data.message || '',
-        zip_name:         (data.zip_name || 'shared_files').replace(/\.zip$/i, '') + '.zip',
-      }))
-      if (createZipShare.fulfilled.match(result)) {
-        const p = result.payload
-        flash(`✓ ${p.file_count} files bundled into ${p.count} unique ZIP link${p.count !== 1 ? 's' : ''}. Each recipient received their own private download link by email.`)
+    try {
+      let result
+      if (isZipMode) {
+        result = await dispatch(createZipShare({
+          file_ids:         selectedFiles,
+          recipient_emails: emails,
+          expiration_hours: Number(data.expiration_hours),
+          message:          data.message || '',
+          zip_name:         (data.zip_name || 'shared_files').replace(/\.zip$/i, '') + '.zip',
+        }))
+        if (createZipShare.fulfilled.match(result)) {
+          const p = result.payload
+          flash(`✓ ${p.file_count} files bundled into ${p.count} unique ZIP link${p.count !== 1 ? 's' : ''}. Each recipient received their own private download link by email.`)
+        } else {
+          flash(`⚠ ZIP share failed: ${result.payload || 'Unknown error'}`)
+        }
       } else {
-        flash(`⚠ ZIP share failed: ${result.payload || 'Unknown error'}`)
+        result = await dispatch(share({
+          file_id:          selectedFiles[0],
+          recipient_emails: emails,
+          expiration_hours: Number(data.expiration_hours),
+          message:          data.message || '',
+        }))
+        if (share.fulfilled.match(result)) {
+          const count = result.payload.count ?? 0
+          flash(`✓ File shared with ${emails.length} recipient${emails.length !== 1 ? 's' : ''}. ${count} unique private link${count !== 1 ? 's' : ''} sent by email.`)
+        } else {
+          flash(`⚠ Share failed: ${result.payload || 'Unknown error'}`)
+        }
       }
-    } else {
-      result = await dispatch(share({
-        file_id:          selectedFiles[0],
-        recipient_emails: emails,
-        expiration_hours: Number(data.expiration_hours),
-        message:          data.message || '',
-      }))
-      if (share.fulfilled.match(result)) {
-        const count = result.payload.count ?? 0
-        flash(`✓ File shared with ${emails.length} recipient${emails.length !== 1 ? 's' : ''}. ${count} unique private link${count !== 1 ? 's' : ''} sent by email.`)
-      } else {
-        flash(`⚠ Share failed: ${result.payload || 'Unknown error'}`)
-      }
+
+      reset()
+      setEmails([])
+      setSelectedFiles([])
+      setShowForm(false)
+      // Reset both paginators to page 1 after a new share
+      setSinglesPage(1)
+      setZipsPage(1)
+      await Promise.all([
+        dispatch(fetchShares({ page: 1 })),
+        dispatch(fetchZipShares({ page: 1 })),
+      ])
+    } finally {
+      setFormSubmitting(false)
     }
-
-    reset()
-    setEmails([])
-    setSelectedFiles([])
-    setShowForm(false)
-    // Go to page 1 to see the new share at the top
-    setCurrentPage(1)
-    // Re-fetch immediately — page change above will trigger the useEffect,
-    // but if currentPage was already 1 we need to force it
-    await Promise.all([
-      dispatch(fetchShares({ page: 1 })),
-      dispatch(fetchZipShares({ page: 1 })),
-    ])
   }
 
   const handleConfirmAction = async () => {
@@ -483,10 +478,10 @@ function SharesPanel() {
       } else {
         type === 'zip' ? await dispatch(deleteZipShare(id)) : await dispatch(deleteShare(id))
       }
-      // Re-fetch current page after action so the list is immediately accurate
+      // Re-fetch the correct page for each list independently
       await Promise.all([
-        dispatch(fetchShares({ page: currentPage })),
-        dispatch(fetchZipShares({ page: currentPage })),
+        dispatch(fetchShares({ page: singlesPage })),
+        dispatch(fetchZipShares({ page: zipsPage })),
       ])
     } finally {
       setActionLoading(false)
@@ -494,18 +489,18 @@ function SharesPanel() {
     }
   }
 
-  // Merge + sort shares from both slices — stable because each fetch replaces
-  // the arrays in Redux with the correct page data
   const allShares = useMemo(() => {
     const singles = (shares || []).map((s) => ({ ...s, _type: 'single' }))
     const zips    = (zipShares || []).map((z) => ({ ...z, _type: 'zip' }))
     return [...singles, ...zips].sort((a, b) => new Date(b.shared_at) - new Date(a.shared_at))
   }, [shares, zipShares])
 
-  const totalPages = Math.max(pagination?.total_pages || 1, zipPagination?.total_pages || 1)
-  const totalCount = (pagination?.count || 0) + (zipPagination?.count || 0)
+  // Independent pagination per list — avoids ghost pages from Math.max
+  const singlesTotalPages = pagination?.total_pages    || 1
+  const singlesCount      = pagination?.count          || 0
+  const zipsTotalPages    = zipPagination?.total_pages || 1
+  const zipsCount         = zipPagination?.count       || 0
 
-  // Show full-page spinner only on the very first load, not on subsequent page changes
   const showSpinner = !initialLoaded && (sharing || zipSharing)
 
   return (
@@ -678,9 +673,9 @@ function SharesPanel() {
                     </button>
                   </div>
                 </div>
-                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
-                    ...(!isZip ? [{ icon: 'fa-eye', label: 'Views', value: fmt(s.view_count) }] : [{ icon: 'fa-files', label: 'Files', value: s.file_count }]),
+                    ...(!isZip ? [] : [{ icon: 'fa-files', label: 'Files', value: s.file_count }]),
                     { icon: 'fa-download', label: 'Downloads', value: fmt(s.download_count) },
                     { icon: 'fa-calendar', label: 'Shared',    value: new Date(s.shared_at).toLocaleDateString() },
                     { icon: 'fa-clock',    label: 'Expires',   value: new Date(s.expires_at).toLocaleDateString() },
@@ -718,11 +713,20 @@ function SharesPanel() {
             )
           })}
           <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            count={totalCount}
-            onPageChange={(p) => setCurrentPage(p)}
-            loading={sharing || zipSharing}
+            currentPage={singlesPage}
+            totalPages={singlesTotalPages}
+            count={singlesCount}
+            onPageChange={(p) => setSinglesPage(p)}
+            loading={sharing}
+            label="Single shares"
+          />
+          <Pagination
+            currentPage={zipsPage}
+            totalPages={zipsTotalPages}
+            count={zipsCount}
+            onPageChange={(p) => setZipsPage(p)}
+            loading={zipSharing}
+            label="ZIP shares"
           />
         </div>
       )}
@@ -764,14 +768,16 @@ function AnalyticsPanel() {
         <h2 className="text-lg font-bold text-slate-900">Sharing Analytics</h2>
         <p className="text-sm text-slate-500">Aggregated stats across single-file shares and ZIP bundles.</p>
       </div>
+
+     
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatTile icon="fa-share-nodes"  label="Total Shares"    value={fmt(totals?.total_shares)}    color="indigo"  />
-        <StatTile icon="fa-eye"          label="Total Views"     value={fmt(totals?.total_views)}     color="blue"    />
         <StatTile icon="fa-download"     label="Total Downloads" value={fmt(totals?.total_downloads)} color="emerald" />
         <StatTile icon="fa-circle-check" label="Active"          value={fmt(totals?.active_count)}    color="green"   />
         <StatTile icon="fa-clock"        label="Expired"         value={fmt(totals?.expired_count)}   color="amber"   />
         <StatTile icon="fa-ban"          label="Revoked"         value={fmt(totals?.revoked_count)}   color="red"     />
       </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card className="p-5">
           <div className="flex items-center gap-2 mb-3">
@@ -782,8 +788,8 @@ function AnalyticsPanel() {
             {[
               { label: 'Shares',    value: fmt(single_file?.total_shares) },
               { label: 'Downloads', value: fmt(single_file?.total_downloads) },
-              { label: 'Views',     value: fmt(single_file?.total_views) },
               { label: 'Active',    value: fmt(single_file?.active_count) },
+              { label: 'Expired',   value: fmt(single_file?.expired_count) },
             ].map(({ label, value }) => (
               <div key={label} className="bg-slate-50 rounded-xl px-3 py-2">
                 <p className="text-[10px] text-slate-400 font-bold uppercase">{label}</p>
@@ -812,6 +818,7 @@ function AnalyticsPanel() {
           </div>
         </Card>
       </div>
+
       {top_shares.length > 0 && (
         <Card className="overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
@@ -827,7 +834,7 @@ function AnalyticsPanel() {
                   <p className="text-xs text-slate-400">{s.recipient_email}</p>
                 </div>
                 <div className="flex items-center gap-4 text-xs flex-shrink-0">
-                  <span className="flex items-center gap-1 text-blue-600 font-semibold"><i className="fas fa-eye text-[10px]"></i>{fmt(s.view_count)}</span>
+                  {/* ── FIXED: removed view_count display, only show downloads ── */}
                   <span className="flex items-center gap-1 text-emerald-600 font-semibold"><i className="fas fa-download text-[10px]"></i>{fmt(s.download_count)}</span>
                   <StatusBadge status={s.status} />
                 </div>
@@ -853,6 +860,8 @@ function RequestsPanel() {
   const [currentPage,     setCurrentPage]     = useState(1)
   const [emailError,      setEmailError]      = useState('')
   const [initialLoaded,   setInitialLoaded]   = useState(false)
+  // Prevent double-submit from rapid button clicks
+  const [formSubmitting,  setFormSubmitting]  = useState(false)
 
   const { register: field, handleSubmit, reset, formState: { errors } } = useForm({
     mode: 'onTouched',
@@ -877,9 +886,17 @@ function RequestsPanel() {
   }
 
   const onSubmit = async (data) => {
+    // Guard: prevent double-submit from rapid clicks
+    if (formSubmitting) return
+    setFormSubmitting(true)
+
     const allowedExt = data.allowed_extensions
       ? data.allowed_extensions.split(/[,\s]+/).map((e) => e.trim().replace(/^\./, '').toLowerCase()).filter(Boolean)
       : []
+
+    // max_files is PER RECIPIENT. Each recipient gets their own upload slot
+    // quota, so we send the value directly to the backend.
+    const perRecipientMax  = Number(data.max_files)
 
     const payload = {
       title:              data.title,
@@ -887,22 +904,26 @@ function RequestsPanel() {
       recipient_emails:   recipientEmails,
       recipient_email:    '',
       expiration_hours:   Number(data.expiration_hours),
-      max_files:          Number(data.max_files),
+      max_files:          perRecipientMax,
       allowed_extensions: allowedExt,
     }
-    const result = await dispatch(createRequest(payload))
-    if (createRequest.fulfilled.match(result)) {
-      reset()
-      setRecipientEmails([])
-      setShowForm(false)
-      const count = recipientEmails.length
-      setSuccessMsg(
-        `✓ File request created. ${count} unique upload link${count !== 1 ? 's' : ''} sent by email to ${count} recipient${count !== 1 ? 's' : ''}.`
-      )
-      setTimeout(() => setSuccessMsg(''), 8000)
-      // Refresh to page 1 so new request appears immediately
-      setCurrentPage(1)
-      await dispatch(fetchRequests({ page: 1 }))
+
+    try {
+      const result = await dispatch(createRequest(payload))
+      if (createRequest.fulfilled.match(result)) {
+        reset()
+        setRecipientEmails([])
+        setShowForm(false)
+        const count = recipientEmails.length
+        setSuccessMsg(
+          `✓ File request created. ${count} unique upload link${count !== 1 ? 's' : ''} sent by email to ${count} recipient${count !== 1 ? 's' : ''}. Each recipient can upload up to ${perRecipientMax} file${perRecipientMax !== 1 ? 's' : ''}.`
+        )
+        setTimeout(() => setSuccessMsg(''), 10000)
+        setCurrentPage(1)
+        await dispatch(fetchRequests({ page: 1 }))
+      }
+    } finally {
+      setFormSubmitting(false)
     }
   }
 
@@ -1057,6 +1078,18 @@ function RequestsPanel() {
         <div className="space-y-3">
           {requests.map((req) => {
             const recipients = req.recipients || []
+
+            // ── FIXED: submission_count comes from the backend's accurate
+            // count (non-rejected submissions). We display it as "X received"
+            // at the request level and show per-recipient counts inline.
+            // The top-level "X/Y submissions" chip is removed — it was
+            // misleading when counts differed from per-recipient badges.
+            const submissionCount = req.submission_count ?? 0
+            const perRecipientMax = req.max_files ?? 0
+            const recipientCount  = recipients.length || 1
+            const totalMaxFiles   = perRecipientMax * recipientCount
+            const allReceived     = totalMaxFiles > 0 && submissionCount >= totalMaxFiles
+
             return (
               <Card key={req.id} className="p-4 sm:p-5">
                 <div className="flex flex-col sm:flex-row sm:items-start gap-3">
@@ -1065,18 +1098,33 @@ function RequestsPanel() {
                       <p className="text-sm font-bold text-slate-900">{req.title}</p>
                       <StatusBadge status={req.status} />
                       {req.is_expired && <span className="text-xs text-red-500 font-semibold">Expired</span>}
+                      {/* ── FIXED: show a single accurate progress badge instead
+                          of the old "X/Y submissions" meta chip that was shown
+                          alongside per-recipient counts and could conflict ── */}
+                      {totalMaxFiles > 0 && (
+                        <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                          allReceived
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-slate-50 text-slate-500 border-slate-200'
+                        }`}>
+                          <i className={`fas ${allReceived ? 'fa-circle-check' : 'fa-file'} text-[9px]`}></i>
+                          {submissionCount}/{totalMaxFiles} received
+                        </span>
+                      )}
                     </div>
                     {req.description && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{req.description}</p>}
                     <div className="flex flex-wrap items-center gap-3 mt-2 text-[11px] text-slate-400">
-                      <span><i className="fas fa-file mr-1"></i>{req.submission_count}/{req.max_files} submissions</span>
-                      {req.expires_at && <span><i className="fas fa-clock mr-1"></i>Expires {new Date(req.expires_at).toLocaleDateString()}</span>}
-                      {recipients.length > 0 && <span><i className="fas fa-users mr-1"></i>{recipients.length} recipient{recipients.length !== 1 ? 's' : ''}</span>}
+                      {req.expires_at && (
+                        <span><i className="fas fa-clock mr-1"></i>Expires {new Date(req.expires_at).toLocaleDateString()}</span>
+                      )}
+                      {recipients.length > 0 && (
+                        <span><i className="fas fa-users mr-1"></i>{recipients.length} recipient{recipients.length !== 1 ? 's' : ''}</span>
+                      )}
                       {req.allowed_extensions?.length > 0 && (
                         <span><i className="fas fa-filter mr-1"></i>{req.allowed_extensions.join(', ')}</span>
                       )}
                     </div>
                   </div>
-                  {/* ── Only show Close button; Copy Link removed ── */}
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {req.status === 'open' && (
                       <button onClick={() => setCloseConfirm(req.id)} className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-xs font-semibold hover:bg-slate-200 transition-all">
@@ -1086,24 +1134,36 @@ function RequestsPanel() {
                   </div>
                 </div>
 
-                {/* Recipients list — shows emails and their upload counts; no copy-link buttons */}
+                {/* ── Recipients list ─────────────────────────────────────────
+                    FIXED: show files_submitted (accurate inbox count from the
+                    backend serializer) rather than upload_count (raw POST hits
+                    that don't decrement on rejection / removal). If the backend
+                    returns upload_count as a fallback, prefer files_submitted. ── */}
                 {recipients.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-slate-100">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                       Recipients · {recipients.length}
                     </p>
                     <div className="space-y-1.5">
-                      {recipients.map((r) => (
-                        <div key={r.id} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl">
-                          <i className="fas fa-user text-slate-300 text-[11px] flex-shrink-0"></i>
-                          <span className="text-xs font-medium text-slate-700 truncate">{r.email}</span>
-                          {r.upload_count > 0 && (
-                            <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold flex-shrink-0 ml-auto">
-                              ✓ {r.upload_count} uploaded
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                      {recipients.map((r) => {
+                        // Prefer the accurate inbox-derived count; fall back to upload_count
+                        const filesUploaded = r.files_submitted ?? r.upload_count ?? 0
+                        return (
+                          <div key={r.id} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl">
+                            <i className="fas fa-user text-slate-300 text-[11px] flex-shrink-0"></i>
+                            <span className="text-xs font-medium text-slate-700 truncate">{r.email}</span>
+                            {filesUploaded > 0 ? (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold flex-shrink-0 ml-auto">
+                                ✓ {filesUploaded} uploaded
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ml-auto">
+                                Awaiting upload
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -1122,6 +1182,7 @@ function RequestsPanel() {
             )
           })}
 
+          {/* ── FIXED: Pagination wired up for requests panel ── */}
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
@@ -1152,7 +1213,7 @@ const SCAN_POLL_INTERVAL = 5000
 
 function InboxPanel() {
   const dispatch = useDispatch()
-  const { inbox, inboxLoading, inboxStatusCounts, scanStatusCounts, deletingFile, removingItem } = useSelector((s) => s.sharing)
+  const { inbox, inboxLoading, inboxPagination, inboxStatusCounts, scanStatusCounts, deletingFile, removingItem } = useSelector((s) => s.sharing)
 
   const [activeStatus,  setActiveStatus]  = useState('')
   const [reviewModal,   setReviewModal]   = useState(null)
@@ -1169,6 +1230,28 @@ function InboxPanel() {
     inbox.some((s) => s.scan_status === 'scanning' || s.scan_status === 'pending'),
     [inbox]
   )
+
+  const handleDownload = useCallback(async (downloadUrl, filename) => {
+    try {
+      if (!downloadUrl) {
+        setErrorMsg('Download URL not available')
+        return
+      }
+      const response = await api.get(downloadUrl, { responseType: 'blob' })
+      const blob = new Blob([response.data], { type: response.headers['content-type'] })
+      const blobUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = filename || 'download'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(blobUrl)
+    } catch (error) {
+      console.error('Download failed:', error)
+      setErrorMsg(`Download failed: ${error.response?.statusText || error.message}`)
+    }
+  }, [])
 
   const loadInbox = useCallback(async () => {
     await dispatch(fetchInbox({ page: currentPage, status: activeStatus }))
@@ -1241,6 +1324,8 @@ function InboxPanel() {
     { id: 'complete',     label: 'Complete', count: inboxStatusCounts?.complete },
   ]
 
+  const totalPages = inboxPagination?.total_pages || 1
+  const totalCount = inboxPagination?.count || 0
   const showSpinner = !initialLoaded && inboxLoading
 
   return (
@@ -1312,7 +1397,7 @@ function InboxPanel() {
             const isInfected   = ['infected', 'scan_failed'].includes(sub.scan_status)
             const isSafe       = sub.scan_status === 'safe'
             const isScanning   = ['scanning', 'pending'].includes(sub.scan_status)
-            const downloadable = isSafe && sub.file_url
+            const downloadable = isSafe && sub.download_url
             const viewable     = isSafe && sub.file_url
 
             return (
@@ -1356,9 +1441,9 @@ function InboxPanel() {
                       </button>
                     )}
                     {downloadable && (
-                      <a href={sub.file_url} download={sub.original_filename} className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all flex items-center gap-1">
+                      <button onClick={() => handleDownload(sub.download_url, sub.original_filename)} className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all flex items-center gap-1">
                         <i className="fas fa-download text-[10px]"></i> Download
-                      </a>
+                      </button>
                     )}
                     {isScanning && (
                       <span className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-semibold flex items-center gap-1.5">
@@ -1413,6 +1498,15 @@ function InboxPanel() {
               </Card>
             )
           })}
+
+          {/* ── Inbox pagination ── */}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            count={totalCount}
+            onPageChange={(p) => setCurrentPage(p)}
+            loading={inboxLoading}
+          />
         </div>
       )}
 
@@ -1478,7 +1572,6 @@ export default function Sharing() {
   const { shares, zipShares, inbox, inboxStatusCounts } = useSelector((s) => s.sharing)
   const [activeTab, setActiveTab] = useState('shares')
 
-  // Initial data load on mount — each panel manages its own subsequent fetches
   useEffect(() => {
     dispatch(fetchShares({ page: 1 }))
     dispatch(fetchZipShares({ page: 1 }))

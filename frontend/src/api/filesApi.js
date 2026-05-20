@@ -25,10 +25,19 @@ export const checkDuplicate = (sha256) =>
 
 /**
  * Upload one or more File objects.
+ *
+ * @param {File[]}  files        — native File objects to upload
+ * @param {string}  expiryOption — one of 'never' | '1_hour' | '1_day' | '7_days' | '30_days'
+ *
+ * When expiryOption is 'never' (the default) the field is omitted from the
+ * FormData so the backend treats it as no expiry, preserving backward compat.
  */
-export const uploadFiles = (files) => {
+export const uploadFiles = (files, expiryOption = 'never') => {
   const form = new FormData()
   files.forEach((f) => form.append('files', f))
+  if (expiryOption && expiryOption !== 'never') {
+    form.append('expiry_option', expiryOption)
+  }
   return api.post('/api/files/upload/', form, {
     headers: { 'Content-Type': undefined },
   })
@@ -44,6 +53,22 @@ export const renameFile = (fileId, newName) =>
   api.post(`/api/files/${fileId}/rename/`, { new_name: newName })
 
 export const getStorageInfo = () => api.get('/api/files/storage/')
+
+// ── Expiry ────────────────────────────────────────────────────────────────────
+
+/**
+ * Set or clear the auto-delete expiry on an existing file.
+ *
+ * @param {string}  fileId       — UUID of the file
+ * @param {string}  expiryOption — 'never' | '1_hour' | '1_day' | '7_days' | '30_days'
+ *
+ * POST /api/files/<pk>/set-expiry/
+ * Body: { expiry_option: string }
+ *
+ * Returns the updated FileSerializer payload ({ id, expires_at, … }).
+ */
+export const setFileExpiry = (fileId, expiryOption) =>
+  api.post(`/api/files/${fileId}/set-expiry/`, { expiry_option: expiryOption })
 
 // ── Favourites ────────────────────────────────────────────────────────────────
 
