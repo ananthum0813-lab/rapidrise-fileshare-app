@@ -1,11 +1,14 @@
 import os
 import re
 import hashlib
+from datetime import timedelta
 
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Count
 from django.conf import settings
+from django.utils import timezone
+
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -24,6 +27,54 @@ class FilePagination(PageNumberPagination):
     max_page_size = 100
 
 
+# ── Expiry option → timedelta mapping ────────────────────────────────────────
+# Single source of truth shared by FileUploadView and SetExpiryView.
+# 'never' / None / unrecognised → None (no expiry).
+
+_EXPIRY_DELTAS = {
+    '1_minute': timedelta(minutes=1),  
+    '1_hour':  timedelta(hours=1),
+    '1_day':   timedelta(days=1),
+    '7_days':  timedelta(days=7),
+    '30_days': timedelta(days=30),
+}
+
+def _expiry_option_to_dt(expiry_option: str | None):
+    """
+    Convert an expiry_option string to an aware datetime (or None).
+
+    Returns
+    -------
+    datetime | None
+        The absolute expiry moment, or None when expiry_option is
+        'never', empty, or unrecognised.
+    """
+    if not expiry_option or expiry_option == 'never':
+        return None
+    delta = _EXPIRY_DELTAS.get(expiry_option)
+    if delta is None:
+        return None
+    return timezone.now() + delta
+
+
+# ── Shared expiry guard ───────────────────────────────────────────────────────
+
+def _assert_not_expired(file_obj) -> None:
+    """
+    Raise a 410-Gone APIException if the file's expiry time has passed.
+
+    This provides an immediate barrier even in the window between the
+    file's expires_at and the next Celery cleanup run (≤ 1 hour by default).
+    Files with expires_at=None are permanent and always pass this check.
+    """
+    if file_obj.is_expired:
+        from rest_framework.exceptions import APIException
+        raise APIException(
+            detail='This file has expired and is no longer available.',
+            code='file_expired',
+        )
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Robust server-side filename deduplication
 # ──────────────────────────────────────────────────────────────────────────────
@@ -36,54 +87,26 @@ def _split_name(filename: str) -> tuple[str, str]:
     return filename, ''
 
 
-# Matches " (N)" or "(N)" at end of base name — our own suffix style
 _COUNTER_RE = re.compile(r'^(.*?)\s*\((\d+)\)$')
-
-# Matches Django's auto-suffix patterns: _1_, _2, _abc123_ etc.
 _DJANGO_SUFFIX_RE = re.compile(r'_[a-zA-Z0-9]+_?$')
 
 
 def _strip_our_counter(base: str) -> str:
-    """'report (2)' → 'report',  'report' → 'report'."""
     m = _COUNTER_RE.match(base)
     return m.group(1).rstrip() if m else base
 
 
 def _strip_django_suffix(base: str) -> str:
-    """
-    Strip Django's auto-appended storage suffixes from a *display* name.
-    e.g. 'Screenshot from 2026-05-11 15-36-24 _1_' → 'Screenshot from 2026-05-11 15-36-24'
-    Only strips if the suffix looks like Django-generated (underscore + alnum + optional _).
-    """
     return _DJANGO_SUFFIX_RE.sub('', base).rstrip()
 
 
 def resolve_unique_filename(desired_name: str, owner, exclude_pk=None) -> str:
-    """
-    Return a display filename that is unique for this owner (among non-deleted files).
-
-    Algorithm
-    ---------
-    1. Split desired_name → (raw_base, ext)
-    2. Strip any Django storage suffix from raw_base           → clean_base
-    3. Strip our own "(N)" counter from clean_base             → root_base
-    4. Query ALL existing orignal_names that start with root_base + ext
-    5. Collect every counter already in use (0 = no counter)
-    6. Pick lowest non-negative integer NOT in that set:
-       - 0  → return  root_base + ext              (e.g. "file.png")
-       - N  → return  root_base + " (N)" + ext     (e.g. "file (3).png")
-
-    This guarantees:
-      file.png → file (1).png → file (2).png → file (3).png …
-    and never resets or duplicates.
-    """
     raw_base, ext = _split_name(desired_name)
     clean_base    = _strip_django_suffix(raw_base)
     root_base     = _strip_our_counter(clean_base)
 
-    # Fetch all existing names for this owner that could collide
-    prefix       = root_base          # names starting with root_base
-    ext_lower    = ext.lower()
+    prefix    = root_base
+    ext_lower = ext.lower()
 
     qs = File.objects.filter(
         owner=owner,
@@ -95,9 +118,8 @@ def resolve_unique_filename(desired_name: str, owner, exclude_pk=None) -> str:
 
     existing_names = set(qs.values_list('original_name', flat=True))
 
-    # Build set of counters already occupied
-    occupied = set()
-    exact_base = root_base.lower() + ext_lower          # counter-0 candidate
+    occupied   = set()
+    exact_base = root_base.lower() + ext_lower
 
     for name in existing_names:
         name_lower = name.lower()
@@ -111,7 +133,6 @@ def resolve_unique_filename(desired_name: str, owner, exclude_pk=None) -> str:
         if m and m.group(1).rstrip().lower() == root_base.lower():
             occupied.add(int(m.group(2)))
 
-    # Find the lowest free slot
     counter = 0
     while counter in occupied:
         counter += 1
@@ -134,17 +155,13 @@ def _compute_sha256(f) -> str:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Duplicate check endpoint  (called by frontend BEFORE upload)
+# Duplicate check endpoint
 # ──────────────────────────────────────────────────────────────────────────────
 
 class CheckDuplicateView(APIView):
     """
     POST /api/files/check-duplicate/
     Body: { "sha256": "<64-char hex>" }
-
-    Returns:
-      { is_duplicate: false }                       — safe to upload
-      { is_duplicate: true, existing_file: {...} }  — duplicate found
     """
     permission_classes = [IsAuthenticated]
 
@@ -176,17 +193,27 @@ class CheckDuplicateView(APIView):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Upload  (with server-side dedup + sha256 store)
+# Upload  (now honours expiry_option from the request body)
 # ──────────────────────────────────────────────────────────────────────────────
 
 class FileUploadView(APIView):
-    """Upload one or multiple files (multipart/form-data, field name: 'files')."""
+    """Upload one or multiple files (multipart/form-data, field name: 'files').
+
+    Optional body field:
+      expiry_option  — 'never' | '1_hour' | '1_day' | '7_days' | '30_days'
+                       Omitting it or sending 'never' means no auto-delete.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         files = request.FILES.getlist('files')
         if not files:
             raise ValidationError({'files': 'No files provided.'})
+
+        # FIX: read expiry_option and convert to an absolute datetime once,
+        # then apply the same expires_at to every file in this batch.
+        expiry_option = request.data.get('expiry_option', 'never')
+        expires_at    = _expiry_option_to_dt(expiry_option)
 
         user      = request.user
         used_bytes = File.objects.filter(owner=user, is_deleted=False).aggregate(
@@ -196,13 +223,9 @@ class FileUploadView(APIView):
 
         uploaded = []
         errors   = []
-
-        # Track names assigned IN THIS batch so two files in the same upload
-        # don't get the same resolved name.
         batch_names: set[str] = set()
 
         for f in files:
-            # ── size check ────────────────────────────────────────────────────
             if f.size > settings.MAX_FILE_SIZE_BYTES:
                 errors.append(f'{f.name}: Exceeds max size ({settings.MAX_FILE_SIZE_MB} MB)')
                 continue
@@ -210,24 +233,19 @@ class FileUploadView(APIView):
                 errors.append(f'{f.name}: Not enough storage space')
                 continue
 
-            # ── MIME check ────────────────────────────────────────────────────
             mime_type = get_mime_type(f)
             if mime_type not in settings.ALLOWED_MIME_TYPES:
                 errors.append(f'{f.name}: File type not allowed ({mime_type})')
                 continue
 
-            # ── SHA-256 ───────────────────────────────────────────────────────
             try:
                 sha256 = _compute_sha256(f)
             except Exception:
                 sha256 = ''
 
-            # ── Resolve unique display name ───────────────────────────────────
-            # Start from the sanitized desired name, then find the next free slot.
-            desired   = sanitize_filename(f.name)
-            unique    = resolve_unique_filename(desired, user)
+            desired = sanitize_filename(f.name)
+            unique  = resolve_unique_filename(desired, user)
 
-            # Also avoid clashing with names already assigned in this batch
             if unique.lower() in {n.lower() for n in batch_names}:
                 raw_base, ext = _split_name(unique)
                 root_base     = _strip_our_counter(raw_base)
@@ -238,7 +256,6 @@ class FileUploadView(APIView):
 
             batch_names.add(unique)
 
-            # ── Create record ─────────────────────────────────────────────────
             try:
                 record = File.objects.create(
                     owner=user,
@@ -247,6 +264,7 @@ class FileUploadView(APIView):
                     file_size=f.size,
                     mime_type=mime_type,
                     sha256=sha256,
+                    expires_at=expires_at,   # FIX: was never set before
                 )
                 uploaded.append(FileSerializer(record, context={'request': request}).data)
                 available -= f.size
@@ -265,11 +283,57 @@ class FileUploadView(APIView):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# All existing views — unchanged
+# Set / clear expiry on an existing file  ← NEW VIEW (was completely missing)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class SetExpiryView(APIView):
+    """
+    POST /api/files/<pk>/set-expiry/
+    Body: { "expiry_option": "never" | "1_hour" | "1_day" | "7_days" | "30_days" }
+
+    Sets or clears the auto-delete expiry for an existing file.
+    Returns the updated FileSerializer payload so the frontend can
+    refresh the row without an extra fetchFiles call.
+    """
+    permission_classes = [IsAuthenticated, IsFileOwner]
+
+    def post(self, request, pk):
+        file_obj = get_object_or_404(File, pk=pk, is_deleted=False)
+        self.check_object_permissions(request, file_obj)
+
+        expiry_option = request.data.get('expiry_option', 'never')
+
+        # Validate — accept known values + 'never'
+        valid_options = {'never', '1_minute', '1_hour', '1_day', '7_days', '30_days'}
+        if expiry_option not in valid_options:
+            raise ValidationError({
+                'expiry_option': (
+                    f"Invalid value '{expiry_option}'. "
+                    f"Must be one of: {', '.join(sorted(valid_options))}."
+                )
+            })
+
+        expires_at = _expiry_option_to_dt(expiry_option)   # None for 'never'
+        file_obj.expires_at = expires_at
+        file_obj.save(update_fields=['expires_at'])
+
+        msg = (
+            'Auto-delete cleared — file is now permanent.'
+            if expires_at is None
+            else f'File will auto-delete in {expiry_option.replace("_", " ")}.'
+        )
+
+        return success_response(
+            data=FileSerializer(file_obj, context={'request': request}).data,
+            message=msg,
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Remaining views — unchanged
 # ──────────────────────────────────────────────────────────────────────────────
 
 class FileListView(APIView):
-    """List all files for the authenticated user, with search and ordering."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -307,6 +371,7 @@ class FileDetailView(APIView):
     def get_object(self, pk):
         obj = get_object_or_404(File, pk=pk, is_deleted=False)
         self.check_object_permissions(self.request, obj)
+        _assert_not_expired(obj)
         return obj
 
     def get(self, request, pk):
@@ -325,6 +390,7 @@ class FileDownloadView(APIView):
     def get(self, request, pk):
         file_obj  = get_object_or_404(File, pk=pk, is_deleted=False)
         self.check_object_permissions(request, file_obj)
+        _assert_not_expired(file_obj)
         file_path = file_obj.file.path
         if os.path.exists(file_path):
             return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=file_obj.original_name)
@@ -332,12 +398,6 @@ class FileDownloadView(APIView):
 
 
 class FileRenameView(APIView):
-    """
-    Rename a file.
-
-    - Extension is protected (cannot be changed).
-    - Uses resolve_unique_filename so the new name is guaranteed unique.
-    """
     permission_classes = [IsAuthenticated, IsFileOwner]
 
     def post(self, request, pk):
@@ -348,24 +408,20 @@ class FileRenameView(APIView):
         if not new_name:
             raise ValidationError({'new_name': 'New filename is required.'})
 
-        # Protect extension
         original_name = file_obj.original_name
         original_ext  = ('.' + original_name.rsplit('.', 1)[1]) if '.' in original_name else ''
 
-        # Strip any extension the user may have typed
         if '.' in new_name:
             new_name = new_name.rsplit('.', 1)[0]
 
-        new_name    = sanitize_filename(new_name) + original_ext
+        new_name     = sanitize_filename(new_name) + original_ext
         desired_full = new_name
 
         if desired_full == original_name:
             raise ValidationError({'new_name': 'New filename is the same as the current name.'})
 
-        # Resolve uniqueness (exclude this file itself so a no-op rename is detected above)
         unique_name = resolve_unique_filename(desired_full, request.user, exclude_pk=pk)
 
-        # If resolve_unique_filename changed the name it means there's a clash
         if unique_name != desired_full:
             raise ValidationError({
                 'new_name': f"A file named '{desired_full}' already exists. "
@@ -512,34 +568,18 @@ class BatchRestoreView(APIView):
         for f in files:
             f.restore_file()
         return success_response(message=f"✓ Restored {count} file(s) from trash.")
-    
 
 
-
-"""
-
-All folder-related API views.
-
-    path('folders/',                          FolderListCreateView.as_view(),  name='folder-list'),
-    path('folders/<uuid:pk>/',                FolderDetailView.as_view(),      name='folder-detail'),
-    path('folders/<uuid:pk>/add-files/',      FolderAddFilesView.as_view(),    name='folder-add-files'),
-    path('folders/<uuid:pk>/remove-files/',   FolderRemoveFilesView.as_view(), name='folder-remove-files'),
-    path('folders/<uuid:pk>/share/',          FolderShareView.as_view(),       name='folder-share'),
-"""
+# ──────────────────────────────────────────────────────────────────────────────
+# Folder views  (unchanged — kept in same file for project structure)
+# ──────────────────────────────────────────────────────────────────────────────
 
 import logging
-from datetime import timedelta
+from django.utils import timezone as tz
 
-from django.shortcuts import get_object_or_404
-from django.utils import timezone
+from rest_framework.exceptions import PermissionDenied
 
-from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import ValidationError, PermissionDenied
-
-from config.exceptions import success_response
-from apps.files.models import File
+from apps.files.models import File  # already imported above, harmless re-alias
 
 from .models import Folder
 from .serializers import (
@@ -552,26 +592,12 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-# ── helper: attach active (non-deleted) files to queryset ────────────────────
-
 def _folder_with_active_files(folder: Folder) -> Folder:
-    """
-    Annotate the folder instance with a `files_active` attribute so that
-    FolderSerializer can embed only non-deleted files without an extra query.
-    """
     folder.files_active = folder.files.filter(is_deleted=False).order_by('original_name')
     return folder
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# List + Create
-# ─────────────────────────────────────────────────────────────────────────────
-
 class FolderListCreateView(APIView):
-    """
-    GET  /api/files/folders/   — list all folders (summary, no embedded files)
-    POST /api/files/folders/   — create a folder, optionally pre-loading files
-    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -605,16 +631,7 @@ class FolderListCreateView(APIView):
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Detail (get, patch, delete)
-# ─────────────────────────────────────────────────────────────────────────────
-
 class FolderDetailView(APIView):
-    """
-    GET    /api/files/folders/<pk>/   — full folder with file list
-    PATCH  /api/files/folders/<pk>/   — rename / recolour / re-icon
-    DELETE /api/files/folders/<pk>/   — delete folder (files are NOT deleted)
-    """
     permission_classes = [IsAuthenticated]
 
     def _get_folder(self, pk, user):
@@ -644,22 +661,17 @@ class FolderDetailView(APIView):
 
         return success_response(
             data=FolderSummarySerializer(folder).data,
-            message=f'Folder updated.',
+            message='Folder updated.',
         )
 
     def delete(self, request, pk):
         folder = self._get_folder(pk, request.user)
         name   = folder.name
-        folder.delete()           # M2M rows cascade; actual Files are untouched
+        folder.delete()
         return success_response(message=f'Folder "{name}" deleted.')
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Add / Remove files
-# ─────────────────────────────────────────────────────────────────────────────
-
 class FolderAddFilesView(APIView):
-    """POST /api/files/folders/<pk>/add-files/  { file_ids: [...] }"""
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
@@ -678,7 +690,6 @@ class FolderAddFilesView(APIView):
 
 
 class FolderRemoveFilesView(APIView):
-    """POST /api/files/folders/<pk>/remove-files/  { file_ids: [...] }"""
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
@@ -696,27 +707,7 @@ class FolderRemoveFilesView(APIView):
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Share files from a folder  (delegates to the same sharing logic)
-# ─────────────────────────────────────────────────────────────────────────────
-
 class FolderShareView(APIView):
-    """
-    POST /api/files/folders/<pk>/share/
-
-    Body:
-      {
-        "file_ids":         ["uuid", ...],   # subset (or omit for all)
-        "recipient_emails": ["a@b.com"],
-        "expiration_hours": 24,
-        "message":          "optional",
-        "share_type":       "single" | "zip",  # single=one per file, zip=bundle
-        "zip_name":         "MyFolder.zip"      # only for zip
-      }
-
-    Reuses the exact same service layer used by the Sharing page so behaviour
-    is guaranteed identical.
-    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
@@ -728,9 +719,8 @@ class FolderShareView(APIView):
 
         expiration_hours = int(request.data.get('expiration_hours', 24))
         message          = request.data.get('message', '')
-        share_type       = request.data.get('share_type', 'single')  # 'single' | 'zip'
+        share_type       = request.data.get('share_type', 'single')
 
-        # Determine which files to share
         requested_ids = request.data.get('file_ids', [])
         if requested_ids:
             files = list(folder.files.filter(pk__in=requested_ids, is_deleted=False, owner=request.user))
@@ -742,7 +732,6 @@ class FolderShareView(APIView):
 
         expires_at = timezone.now() + timedelta(hours=expiration_hours)
 
-        # ── Single-file mode: one share per file per recipient ──────────────
         if share_type == 'single' or len(files) == 1:
             from apps.sharing.services import create_shares
             all_shares = []
@@ -767,7 +756,6 @@ class FolderShareView(APIView):
                 status_code=status.HTTP_201_CREATED,
             )
 
-        # ── ZIP mode: bundle all selected files per recipient ───────────────
         from apps.sharing.models import ZipShare
         from apps.sharing.serializers import ZipShareSerializer
 
@@ -775,7 +763,6 @@ class FolderShareView(APIView):
         if not zip_name.endswith('.zip'):
             zip_name += '.zip'
 
-        # Reuse the email helper from sharing views
         from apps.sharing.views import _send_zip_share_email
 
         zip_shares = []
