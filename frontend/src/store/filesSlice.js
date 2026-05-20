@@ -15,11 +15,15 @@ export const fetchFiles = createAsyncThunk(
   }
 )
 
+// FIX: The component dispatches upload({ files, expiryOption }).
+// Previously the thunk received the whole object as `files` and passed it
+// directly to uploadFiles(), breaking both upload and expiry.
+// Now we destructure properly and forward expiryOption to the API helper.
 export const upload = createAsyncThunk(
   'files/upload',
-  async (files, { rejectWithValue }) => {
+  async ({ files, expiryOption = 'never' }, { rejectWithValue }) => {
     try {
-      const { data } = await uploadFiles(files)
+      const { data } = await uploadFiles(files, expiryOption)
       return data.data
     } catch (err) {
       const errors = err.response?.data?.errors || err.response?.data?.message
@@ -116,11 +120,6 @@ const filesSlice = createSlice({
       })
 
     // ── Upload Files ────────────────────────────────────────────────────
-    // FIX: Handle multiple possible API response shapes defensively.
-    // The component now calls fetchFiles after a successful upload, so the
-    // slice only needs to flip the uploading flag — it does NOT need to
-    // manually splice files into the list.  The optimistic prepend is kept
-    // as a fallback in case your API *does* return the uploaded file objects.
     builder
       .addCase(upload.pending, (state) => {
         state.uploading = true
@@ -132,18 +131,16 @@ const filesSlice = createSlice({
         // Normalise: accept { uploaded: [...] }, { results: [...] }, or a
         // plain array — whatever your API returns.
         const uploaded =
-          payload?.uploaded ??      // { uploaded: [...] }
-          payload?.results ??       // { results: [...] }
-          (Array.isArray(payload) ? payload : null) // bare array
+          payload?.uploaded ??
+          payload?.results ??
+          (Array.isArray(payload) ? payload : null)
 
         if (uploaded?.length) {
           // Optimistic prepend so the UI feels instant even before fetchFiles
-          // completes.  Duplicates are removed once fetchFiles resolves.
+          // completes. Duplicates are removed once fetchFiles resolves.
           state.files = [...uploaded, ...state.files]
           state.pagination.count += uploaded.length
         }
-        // If the API returns nothing useful, fetchFiles (called by the
-        // component after dispatch) will refresh the list correctly.
       })
       .addCase(upload.rejected, (state, { payload }) => {
         state.uploading = false

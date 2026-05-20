@@ -1,9 +1,9 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchFiles, fetchStorage } from '@/store/filesSlice'
-import { fetchShares } from '@/store/sharingSlice'
-import { downloadFile } from '@/api/filesApi'
+import { fetchShares, fetchZipShares, fetchGlobalAnalytics } from '@/store/sharingSlice'
+import { downloadFile, getFiles } from '@/api/filesApi'
 
 const timeAgo = (date) => {
   if (!date) return 'Unknown'
@@ -63,12 +63,9 @@ function useFileBlobUrl(file) {
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false) })
 
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [file?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Revoke when file changes or component unmounts
   useEffect(() => {
     return () => { if (blobUrl) URL.revokeObjectURL(blobUrl) }
   }, [blobUrl])
@@ -76,7 +73,7 @@ function useFileBlobUrl(file) {
   return { blobUrl, blobLoading }
 }
 
-// ── Shared file detail modal — used for both search result and recent file ───
+// ── Shared file detail modal ──────────────────────────────────────────────────
 function FileDetailModal({ file, shares, onClose, onDownload }) {
   const { blobUrl, blobLoading } = useFileBlobUrl(file)
 
@@ -90,7 +87,6 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
           </button>
         </div>
 
-        {/* ── Image / video / audio preview ── */}
         {file.mime_type?.includes('image') && (
           <div className="mb-6 rounded-2xl overflow-hidden bg-indigo-50 border border-indigo-100 flex items-center justify-center min-h-[120px]">
             {blobLoading ? (
@@ -99,11 +95,7 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
                 <p className="text-xs">Loading preview…</p>
               </div>
             ) : blobUrl ? (
-              <img
-                src={blobUrl}
-                alt={file.original_name}
-                className="w-full max-h-56 object-contain rounded-2xl"
-              />
+              <img src={blobUrl} alt={file.original_name} className="w-full max-h-56 object-contain rounded-2xl" />
             ) : (
               <div className="py-10 flex flex-col items-center gap-2 text-slate-400">
                 <i className="fas fa-image text-4xl text-blue-300"></i>
@@ -141,7 +133,6 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
           </div>
         )}
 
-        {/* Icon fallback for non-media files */}
         {!file.mime_type?.includes('image') &&
          !file.mime_type?.includes('video') &&
          !file.mime_type?.includes('audio') && (
@@ -153,7 +144,6 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
           </div>
         )}
 
-        {/* If image/video/audio, show filename below preview */}
         {(file.mime_type?.includes('image') ||
           file.mime_type?.includes('video') ||
           file.mime_type?.includes('audio')) && (
@@ -176,9 +166,7 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Status</p>
             <p className="text-sm font-bold text-slate-800">
-              {shares.some((s) => s.file_id === file.id && s.status === 'active')
-                ? '🔗 Shared'
-                : '🔒 Private'}
+              {shares.some((s) => s.file_id === file.id && s.status === 'active') ? '🔗 Shared' : '🔒 Private'}
             </p>
           </div>
         </div>
@@ -190,13 +178,6 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
           >
             <i className="fas fa-download"></i> Download File
           </button>
-          {/* <Link
-            to="/sharing"
-            onClick={onClose}
-            className="block w-full py-3 text-center bg-purple-50 text-purple-700 rounded-2xl font-bold hover:bg-purple-100 transition-colors text-sm"
-          >
-            <i className="fas fa-share-alt mr-2"></i> Share File
-          </Link> */}
           <Link
             to="/files"
             onClick={onClose}
@@ -220,19 +201,23 @@ export default function Dashboard() {
   const dispatch = useDispatch()
   const { user } = useSelector((s) => s.auth)
   const { files, storage, loading: filesLoading } = useSelector((s) => s.files)
-  const { shares } = useSelector((s) => s.sharing)
+  const { shares, pagination, zipShares, zipPagination, globalAnalytics } = useSelector((s) => s.sharing)
 
-  const [greeting, setGreeting]               = useState('')
-  const [searchQuery, setSearchQuery]         = useState('')
+  const [greeting, setGreeting]             = useState('')
+  const [searchQuery, setSearchQuery]       = useState('')
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
-  const [selectedFile, setSelectedFile]       = useState(null)
+  const [selectedFile, setSelectedFile]     = useState(null)
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
   const [selectedRecentFile, setSelectedRecentFile] = useState(null)
+
+  // ── Dedicated search state (not the Redux files slice) ────────────────────
+  const [searchResults,  setSearchResults]  = useState([])
+  const [searchLoading,  setSearchLoading]  = useState(false)
+  const debounceTimer = useRef(null)
 
   const searchRef      = useRef(null)
   const searchInputRef = useRef(null)
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (searchRef.current && !searchRef.current.contains(e.target)) {
@@ -243,11 +228,44 @@ export default function Dashboard() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Keyboard navigation for search
+  const runSearch = useCallback(async (query) => {
+    if (!query.trim()) {
+      setSearchResults([])
+      setSearchLoading(false)
+      return
+    }
+    setSearchLoading(true)
+    try {
+      const { data } = await getFiles(1, query.trim(), '-uploaded_at')
+      setSearchResults(data?.data?.results?.slice(0, 8) ?? [])
+    } catch {
+      setSearchResults([])
+    } finally {
+      setSearchLoading(false)
+    }
+  }, [])
+
+  const handleSearchChange = (query) => {
+    setSearchQuery(query)
+    setHighlightedIndex(-1)
+
+    if (!query.trim()) {
+      setShowSearchDropdown(false)
+      setSearchResults([])
+      clearTimeout(debounceTimer.current)
+      return
+    }
+
+    setShowSearchDropdown(true)
+    setSearchLoading(true)
+
+    clearTimeout(debounceTimer.current)
+    debounceTimer.current = setTimeout(() => runSearch(query), 350)
+  }
+
+  useEffect(() => () => clearTimeout(debounceTimer.current), [])
+
   const handleSearchKeydown = (e) => {
-    const searchResults = searchQuery.trim()
-      ? files.filter((f) => f.original_name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 8)
-      : []
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault()
@@ -263,6 +281,7 @@ export default function Dashboard() {
           setSelectedFile(searchResults[highlightedIndex])
           setShowSearchDropdown(false)
           setSearchQuery('')
+          setSearchResults([])
         }
         break
       case 'Escape':
@@ -285,13 +304,9 @@ export default function Dashboard() {
     dispatch(fetchFiles({ page: 1 }))
     dispatch(fetchStorage())
     dispatch(fetchShares({ page: 1 }))
+    dispatch(fetchZipShares({ page: 1 }))
+    dispatch(fetchGlobalAnalytics())
   }, [dispatch])
-
-  const handleSearchChange = (query) => {
-    setSearchQuery(query)
-    setShowSearchDropdown(query.trim().length > 0)
-    setHighlightedIndex(-1)
-  }
 
   const handleDownload = async (file) => {
     try {
@@ -309,11 +324,28 @@ export default function Dashboard() {
 
   const usedPercentage = storage ? Math.round((storage.used_bytes / storage.total_bytes) * 100) : 0
   const recentFiles    = files.slice(0, 5)
-  const activeShares   = shares.filter((s) => s.status === 'active').length
 
-  const searchResults = searchQuery.trim()
-    ? files.filter((f) => f.original_name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 8)
-    : []
+  // ── FIX: Active shares count ──────────────────────────────────────────────
+  // The old logic counted only the current page of single-file shares in
+  // Redux state, completely missing ZIP shares and shares on other pages.
+  //
+  // Correct approach (priority order):
+  //   1. Use globalAnalytics.totals.active_count — the most accurate number,
+  //      already fetched on mount, covers both singles AND ZIPs across ALL pages.
+  //   2. Fall back to summing pagination.active_count fields if analytics not
+  //      yet loaded (avoids showing 0 on first render).
+  //   3. Last resort: count local state arrays (original buggy behaviour, kept
+  //      only as a safety net for the very brief window before any data loads).
+  const activeShares = (() => {
+    // Prefer the analytics total — covers all pages, both singles and ZIPs
+    if (globalAnalytics?.totals?.active_count != null) {
+      return globalAnalytics.totals.active_count
+    }
+    // Fallback: sum current-page local arrays while analytics is loading
+    const singleActive = shares.filter((s) => s.status === 'active').length
+    const zipActive    = zipShares.filter((z) => z.status === 'active').length
+    return singleActive + zipActive
+  })()
 
   const avatarUrl = `https://ui-avatars.com/api/?name=${user?.first_name || 'User'}&background=6366f1&color=fff`
 
@@ -357,9 +389,9 @@ export default function Dashboard() {
               {/* Search Dropdown */}
               {showSearchDropdown && (
                 <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 max-h-96 overflow-y-auto">
-                  {filesLoading ? (
+                  {searchLoading ? (
                     <div className="p-4 text-center text-slate-400 text-sm">
-                      <i className="fas fa-spinner fa-spin mr-2"></i>Loading...
+                      <i className="fas fa-spinner fa-spin mr-2"></i>Searching…
                     </div>
                   ) : searchResults.length > 0 ? (
                     <>
@@ -374,7 +406,12 @@ export default function Dashboard() {
                           return (
                             <div
                               key={file.id}
-                              onClick={() => { setSelectedFile(file); setShowSearchDropdown(false); setSearchQuery('') }}
+                              onClick={() => {
+                                setSelectedFile(file)
+                                setShowSearchDropdown(false)
+                                setSearchQuery('')
+                                setSearchResults([])
+                              }}
                               onMouseEnter={() => setHighlightedIndex(index)}
                               className={`p-4 cursor-pointer transition-colors ${
                                 highlightedIndex === index ? 'bg-indigo-50' : 'hover:bg-slate-50'
@@ -407,8 +444,12 @@ export default function Dashboard() {
                         })}
                       </div>
                       <div className="p-3 border-t border-slate-100 bg-slate-50">
-                        <Link to="/files" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
-                          View all files <i className="fas fa-arrow-right"></i>
+                        <Link
+                          to={`/files?search=${encodeURIComponent(searchQuery)}`}
+                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                          onClick={() => setShowSearchDropdown(false)}
+                        >
+                          See all results in Files <i className="fas fa-arrow-right"></i>
                         </Link>
                       </div>
                     </>
@@ -423,10 +464,6 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* <button className="relative h-11 flex items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm hover:bg-slate-50 transition px-3">
-              <i className="fas fa-bell text-slate-600"></i>
-              <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
-            </button> */}
             <Link to="/settings">
               <img src={avatarUrl} alt="avatar" className="h-11 w-11 rounded-full ring-2 ring-white shadow-md cursor-pointer hover:opacity-80 transition" />
             </Link>
@@ -459,7 +496,8 @@ export default function Dashboard() {
               </div>
             </div>
             <p className="mt-4 text-3xl font-bold tracking-tight text-slate-900">{activeShares}</p>
-            <p className="mt-1 text-xs text-slate-500">shared files</p>
+            {/* ✅ FIX: label clarifies this is singles + ZIPs combined */}
+            <p className="mt-1 text-xs text-slate-500">singles &amp; ZIP shares</p>
             <Link to="/sharing" className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-sky-600 hover:gap-2 transition-all">
               View All <i className="fas fa-arrow-right text-xs"></i>
             </Link>
@@ -636,7 +674,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── File detail modals — now with image/video/audio preview ── */}
+      {/* Modals */}
       {selectedFile && (
         <FileDetailModal
           file={selectedFile}

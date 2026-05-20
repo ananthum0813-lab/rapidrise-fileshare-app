@@ -1,11 +1,6 @@
 /**
- * Files.jsx
+ * Files.jsx 
  *
- * Fix summary vs previous version:
- *  - Removed the duplicate <FolderSidebar> rendered unconditionally OUTSIDE
- *    the main grid (was causing a blank-page render crash)
- *  - AddToFolderModal onAdded callback clears batchSelected properly
- *  - All other features preserved
  */
 
 import { useEffect, useState, useRef } from 'react'
@@ -29,10 +24,16 @@ import {
   checkDuplicate,
   deleteFile as apiDeleteFile,
 } from '@/api/filesApi'
-import Alert from '@/components/ui/Alert'
+import Alert          from '@/components/ui/Alert'
 import DuplicateModal from '@/components/DuplicateModal'
 import { resolveFileName, stageFiles } from '@/utils/fileNaming'
 import AddToFolderModal from '@/components/modals/AddToFolderModal'
+import FileShareModal   from '@/components/modals/FileShareModal'
+import SetExpiryModal, {  // ← NEW
+  getExpiryInfo,
+  variantClasses,
+  EXPIRY_OPTIONS,
+} from '@/components/modals/SetExpiryModal'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ const FOLDER_COLORS = [
   '#3b82f6','#64748b',
 ]
 
-// ─── Email chip input ─────────────────────────────────────────────────────────
+// ─── Email chip input (used inside FolderShareModal) ──────────────────────────
 
 function EmailChipInput({ value, onChange }) {
   const [raw, setRaw] = useState('')
@@ -118,17 +119,19 @@ function FolderShareModal({ folder, preselectedFileIds, onClose }) {
   const [successMsg, setSuccessMsg] = useState('')
   const folderFiles = folder.files || []
 
+  const effectiveShareType = fileIds.length === 1 ? 'single' : shareType
+
   useEffect(() => {
     if (shareResult) {
       const c = shareResult.count ?? 0
       setSuccessMsg(
-        shareType === 'zip'
+        effectiveShareType === 'zip'
           ? `✓ ${shareResult.file_count} files bundled into ${c} ZIP link${c !== 1 ? 's' : ''} sent.`
           : `✓ ${c} unique link${c !== 1 ? 's' : ''} sent by email.`
       )
       dispatch(clearShareResult())
     }
-  }, [shareResult, dispatch, shareType])
+  }, [shareResult, dispatch]) // eslint-disable-line
 
   const toggleFile = (id) =>
     setFileIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
@@ -144,7 +147,7 @@ function FolderShareModal({ folder, preselectedFileIds, onClose }) {
         recipient_emails: emails,
         expiration_hours: Number(expiry),
         message,
-        share_type:       fileIds.length <= 1 && shareType !== 'zip' ? 'single' : shareType,
+        share_type:       effectiveShareType,
         zip_name:         zipName || folder.name,
       },
     }))
@@ -219,7 +222,7 @@ function FolderShareModal({ folder, preselectedFileIds, onClose }) {
             </div>
           )}
 
-          {shareType === 'zip' && fileIds.length !== 1 && (
+          {effectiveShareType === 'zip' && (
             <div>
               <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">ZIP Name</label>
               <div className="flex">
@@ -231,7 +234,9 @@ function FolderShareModal({ folder, preselectedFileIds, onClose }) {
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Recipients <span className="text-red-500">*</span></label>
+            <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">
+              Recipients <span className="text-red-500">*</span>
+            </label>
             <EmailChipInput value={emails} onChange={setEmails} />
           </div>
 
@@ -257,9 +262,10 @@ function FolderShareModal({ folder, preselectedFileIds, onClose }) {
             <div className="flex items-start gap-2 px-3 py-2.5 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-700">
               <i className="fas fa-info-circle mt-0.5 flex-shrink-0" />
               <span>
-                {shareType === 'zip' && fileIds.length !== 1
+                {effectiveShareType === 'zip'
                   ? <><strong>{fileIds.length || folderFiles.length} files</strong> → <strong>{emails.length} private ZIP link{emails.length !== 1 ? 's' : ''}</strong></>
-                  : <><strong>{emails.length} unique private link{emails.length !== 1 ? 's' : ''}</strong> per file.</>}
+                  : <><strong>{emails.length} unique private link{emails.length !== 1 ? 's' : ''}</strong> per file.</>
+                }
               </span>
             </div>
           )}
@@ -375,14 +381,10 @@ function FolderDetailPanel({ folder, onBack, onShare }) {
           </div>
           <div className="divide-y divide-slate-50 bg-white">
             {files.map((f) => (
-              <div
-                key={f.id}
-                onClick={() => toggleFile(f.id)}
-                className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors ${selectedIds.includes(f.id) ? 'bg-indigo-50' : ''}`}
-              >
+              <div key={f.id} onClick={() => toggleFile(f.id)}
+                className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors ${selectedIds.includes(f.id) ? 'bg-indigo-50' : ''}`}>
                 <input type="checkbox" checked={selectedIds.includes(f.id)} onChange={() => toggleFile(f.id)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="w-4 h-4 rounded accent-indigo-600 flex-shrink-0" />
+                  onClick={(e) => e.stopPropagation()} className="w-4 h-4 rounded accent-indigo-600 flex-shrink-0" />
                 <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center flex-shrink-0">
                   <i className={`fas ${getFileIcon(f.mime_type)} text-sm`} />
                 </div>
@@ -404,7 +406,6 @@ function FolderDetailPanel({ folder, onBack, onShare }) {
 function FolderSidebar({ selectedFolderView, onSelectFolder, onBack, onShare }) {
   const dispatch = useDispatch()
   const { folders = [], loading = false, error = null } = useSelector((s) => s.folders ?? {})
-
   const [showCreate,    setShowCreate]    = useState(false)
   const [newName,       setNewName]       = useState('')
   const [newColor,      setNewColor]      = useState('#6366f1')
@@ -458,18 +459,15 @@ function FolderSidebar({ selectedFolderView, onSelectFolder, onBack, onShare }) 
           <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             placeholder="Folder name…" autoFocus
-            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none"
-          />
+            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none" />
           <input type="text" value={newDesc} onChange={(e) => setNewDesc(e.target.value)}
             placeholder="Description (optional)…"
-            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-200 focus:outline-none"
-          />
+            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-200 focus:outline-none" />
           <div className="flex flex-wrap gap-1.5">
             {FOLDER_COLORS.map((c) => (
               <button key={c} onClick={() => setNewColor(c)}
                 className={`w-5 h-5 rounded-full transition-all ${newColor === c ? 'ring-2 ring-offset-1 ring-indigo-500 scale-110' : ''}`}
-                style={{ background: c }}
-              />
+                style={{ background: c }} />
             ))}
           </div>
           <div className="flex gap-2">
@@ -500,8 +498,7 @@ function FolderSidebar({ selectedFolderView, onSelectFolder, onBack, onShare }) 
                 <div className="flex gap-1.5 items-center">
                   <input autoFocus type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setEditFolder(null) }}
-                    className="flex-1 px-2 py-1.5 text-xs bg-white rounded-lg border border-indigo-300 focus:ring-2 focus:ring-indigo-200 focus:outline-none"
-                  />
+                    className="flex-1 px-2 py-1.5 text-xs bg-white rounded-lg border border-indigo-300 focus:ring-2 focus:ring-indigo-200 focus:outline-none" />
                   <button onClick={handleRename} className="p-1.5 bg-indigo-600 text-white rounded-lg text-xs hover:bg-indigo-700">
                     <i className="fas fa-check text-[10px]" />
                   </button>
@@ -587,6 +584,11 @@ export default function Files() {
   const [selectedFolderView, setSelectedFolderView] = useState(null)
   const [addToFolderFiles,   setAddToFolderFiles]   = useState(null)
   const [shareModal,         setShareModal]          = useState(null)
+  const [shareFile,          setShareFile]           = useState(null)
+
+  // ── Auto-expiry states  ───────────────────────────────────────────────
+  const [expiryOption, setExpiryOption] = useState('never')  // for the upload batch
+  const [expiryFile,   setExpiryFile]   = useState(null)     // per-file expiry modal target
 
   const fileInputRef = useRef()
   const filesRef     = useRef(files)
@@ -625,7 +627,7 @@ export default function Files() {
       .catch(() => { if (!cancelled) setPreviewBlobUrl(null) })
       .finally(() => { if (!cancelled) setPreviewLoading(false) })
     return () => { cancelled = true }
-  }, [previewFile])               // eslint-disable-line
+  }, [previewFile]) // eslint-disable-line
   useEffect(() => () => { if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl) }, [previewBlobUrl])
 
   useEffect(() => {
@@ -672,16 +674,19 @@ export default function Files() {
   const handleDrop = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); runDuplicateChecks(Array.from(e.dataTransfer.files)) }
   const handleFileSelect = (e) => { runDuplicateChecks(Array.from(e.target.files || [])); e.target.value = '' }
 
+  // ── Upload — now includes expiryOption ──────────────────────────────
   const handleUpload = async () => {
     if (!selectedFiles.length) return
     const count  = selectedFiles.length
-    const result = await dispatch(upload(selectedFiles))
+    // Pass { files, expiryOption } to the updated thunk
+    const result = await dispatch(upload({ files: selectedFiles, expiryOption }))
     if (!result.error) {
       setUploadSuccess(count === 1 ? `"${selectedFiles[0].name}" uploaded!` : `${count} files uploaded!`)
       await dispatch(fetchFiles({ search, ordering }))
       dispatch(fetchStorage())
     }
     setSelectedFiles([]); setRenamedCount(0)
+    // NOTE: expiryOption is intentionally NOT reset so the next batch inherits the same setting
   }
 
   const handleDownload = async (file) => {
@@ -739,6 +744,11 @@ export default function Files() {
     else setRenameError(result.payload || 'Rename failed.')
   }
 
+  // ── Expiry updated callback: refresh the file list  ─────────────────
+  const handleExpiryUpdated = () => {
+    dispatch(fetchFiles({ page: currentPage, search, ordering }))
+  }
+
   const usedPercentage = storage ? Math.round((storage.used_bytes / storage.total_bytes) * 100) : 0
 
   return (
@@ -757,13 +767,8 @@ export default function Files() {
             </p>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={() => setShowFolderPanel((v) => !v)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-sm transition-all border ${
-                showFolderPanel ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
-              }`}
-            >
+            <button type="button" onClick={() => setShowFolderPanel((v) => !v)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-sm transition-all border ${showFolderPanel ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>
               <i className="fas fa-folder text-base" />
               <span className="hidden sm:inline">Folders</span>
             </button>
@@ -815,12 +820,10 @@ export default function Files() {
               </div>
             </div>
           </div>
-          <div
-            role="button" tabIndex={0}
+          <div role="button" tabIndex={0}
             onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
             onClick={openFilePicker} onKeyDown={(e) => e.key === 'Enter' && openFilePicker()}
-            className={`lg:col-span-2 rounded-3xl p-6 border-2 border-dashed transition-all cursor-pointer flex items-center justify-center gap-6 select-none ${dragActive ? 'border-indigo-400 bg-indigo-50/50' : 'border-gray-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/20'}`}
-          >
+            className={`lg:col-span-2 rounded-3xl p-6 border-2 border-dashed transition-all cursor-pointer flex items-center justify-center gap-6 select-none ${dragActive ? 'border-indigo-400 bg-indigo-50/50' : 'border-gray-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/20'}`}>
             <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center text-2xl pointer-events-none">
               <i className={`fas ${duplicateChecking || uploading ? 'fa-spinner fa-spin' : 'fa-cloud-arrow-up'}`} />
             </div>
@@ -831,29 +834,64 @@ export default function Files() {
           </div>
         </div>
 
-        {/* Upload staging banner */}
+        {/* ── Upload staging banner (expiry selector added) ── */}
         {selectedFiles.length > 0 && (
-          <div className="bg-indigo-900 rounded-3xl p-5 mb-6 text-white flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl shadow-indigo-200">
-            <div className="flex items-center gap-4 min-w-0">
-              <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center flex-shrink-0">
-                <i className="fas fa-file-circle-plus text-xl" />
+          <div className="bg-indigo-900 rounded-3xl p-5 mb-6 text-white shadow-xl shadow-indigo-200">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              {/* File info */}
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center flex-shrink-0">
+                  <i className="fas fa-file-circle-plus text-xl" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold">{selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} ready</p>
+                  <p className="text-xs text-indigo-200 truncate">{selectedFiles.map((f) => f.name).join(', ').slice(0, 60)}…</p>
+                  {renamedCount > 0 && (
+                    <p className="text-xs text-amber-300 font-semibold mt-0.5 flex items-center gap-1">
+                      <i className="fas fa-triangle-exclamation" />{renamedCount} renamed to avoid conflicts
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="font-bold">{selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} ready</p>
-                <p className="text-xs text-indigo-200 truncate">{selectedFiles.map((f) => f.name).join(', ').slice(0, 60)}…</p>
-                {renamedCount > 0 && (
-                  <p className="text-xs text-amber-300 font-semibold mt-0.5 flex items-center gap-1">
-                    <i className="fas fa-triangle-exclamation" />{renamedCount} renamed to avoid conflicts
-                  </p>
-                )}
+
+              {/* Actions */}
+              <div className="flex gap-2 w-full sm:w-auto flex-shrink-0">
+                <button onClick={() => { setSelectedFiles([]); setRenamedCount(0) }} className="px-4 py-2 text-sm font-bold text-indigo-200 hover:text-white">Cancel</button>
+                <button onClick={handleUpload} disabled={uploading}
+                  className="px-6 py-2 bg-white text-indigo-900 rounded-xl font-bold text-sm hover:bg-indigo-50 transition-all flex items-center gap-2 disabled:opacity-60">
+                  {uploading ? <><i className="fas fa-spinner fa-spin" />Uploading…</> : <><i className="fas fa-upload" />Upload</>}
+                </button>
               </div>
             </div>
-            <div className="flex gap-2 w-full sm:w-auto flex-shrink-0">
-              <button onClick={() => { setSelectedFiles([]); setRenamedCount(0) }} className="px-4 py-2 text-sm font-bold text-indigo-200 hover:text-white">Cancel</button>
-              <button onClick={handleUpload} disabled={uploading}
-                className="px-6 py-2 bg-white text-indigo-900 rounded-xl font-bold text-sm hover:bg-indigo-50 transition-all flex items-center gap-2 disabled:opacity-60">
-                {uploading ? <><i className="fas fa-spinner fa-spin" />Uploading…</> : <><i className="fas fa-upload" />Upload</>}
-              </button>
+
+            {/* ── Expiry selector row  ── */}
+            <div className="mt-4 pt-4 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <i className="fas fa-clock text-indigo-300 text-sm" />
+                <span className="text-xs font-bold text-indigo-200 uppercase tracking-wider">Auto-delete</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {EXPIRY_OPTIONS.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setExpiryOption(value)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                      expiryOption === value
+                        ? 'bg-white text-indigo-900 border-white'
+                        : 'bg-white/10 text-indigo-200 border-white/20 hover:bg-white/20'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {expiryOption !== 'never' && (
+                <span className="text-[11px] text-amber-300 font-semibold flex items-center gap-1 ml-auto">
+                  <i className="fas fa-triangle-exclamation text-[10px]" />
+                  Files will auto-delete after {EXPIRY_OPTIONS.find((o) => o.value === expiryOption)?.label.toLowerCase()}
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -876,11 +914,9 @@ export default function Files() {
               <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
                 {batchSelected.length > 0 && (
                   <>
-                    <button
-                      type="button"
+                    <button type="button"
                       onClick={(e) => { e.stopPropagation(); setAddToFolderFiles([...batchSelected]) }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all"
-                    >
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all">
                       <i className="fas fa-folder-plus text-[11px]" /> Add to folder
                     </button>
                     <button onClick={() => setBatchDeleteConfirm(true)}
@@ -904,8 +940,7 @@ export default function Files() {
                   <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs" />
                   <input type="text" placeholder="Search…" value={search}
                     onChange={(e) => { setSearch(e.target.value); dispatch(fetchFiles({ page: 1, search: e.target.value, ordering })); setBatchSelected([]) }}
-                    className="w-48 pl-9 pr-3 py-2 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-100"
-                  />
+                    className="w-48 pl-9 pr-3 py-2 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-100" />
                 </div>
               </div>
             </div>
@@ -933,19 +968,22 @@ export default function Files() {
                         </th>
                         <th className="px-4 py-2 font-bold">File Name</th>
                         <th className="px-4 py-2 font-bold hidden md:table-cell">Size</th>
+                        <th className="px-4 py-2 font-bold hidden lg:table-cell">Expiry</th>{/* ← NEW column */}
                         <th className="px-4 py-2 font-bold hidden sm:table-cell">Uploaded</th>
                         <th className="px-4 py-2 font-bold text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {files.map((file) => {
-                        const isFav     = localFavs[file.id] ?? file.is_favorite
-                        const isBatched = batchSelected.includes(file.id)
+                        const isFav      = localFavs[file.id] ?? file.is_favorite
+                        const isBatched  = batchSelected.includes(file.id)
+                        // compute expiry info for this file
+                        const expiryInfo = getExpiryInfo(file.expires_at)
+
                         return (
-                          <tr
-                            key={file.id}
-                            className={`transition-colors ${isBatched ? 'bg-indigo-50/60' : 'hover:bg-indigo-50/40'}`}
-                          >
+                          <tr key={file.id}
+                            className={`transition-colors ${isBatched ? 'bg-indigo-50/60' : 'hover:bg-indigo-50/40'}`}>
+
                             <td className="px-3 py-3 rounded-l-2xl">
                               <input type="checkbox" checked={isBatched}
                                 onChange={() => toggleBatch(file.id)}
@@ -962,8 +1000,20 @@ export default function Files() {
                                   <div className="flex items-center gap-1.5">
                                     <p className="text-sm font-bold text-gray-800 truncate max-w-[120px] sm:max-w-xs">{file.original_name}</p>
                                     {isFav && <i className="fas fa-star text-yellow-400 text-[10px] flex-shrink-0" />}
+                                    {/* expired badge inline with filename (mobile-visible) */}
+                                    {expiryInfo?.variant === 'expired' && (
+                                      <span className="lg:hidden inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-600 text-[9px] font-bold rounded-full flex-shrink-0">
+                                        <i className="fas fa-clock text-[8px]" /> Expired
+                                      </span>
+                                    )}
                                   </div>
                                   <p className="text-[10px] text-gray-400 uppercase md:hidden">{file.file_size_display}</p>
+                                  {/*  expiry hint on small screens (below filename) */}
+                                  {expiryInfo && expiryInfo.variant !== 'expired' && (
+                                    <p className={`lg:hidden text-[10px] font-semibold flex items-center gap-1 ${variantClasses[expiryInfo.variant]}`}>
+                                      <i className="fas fa-clock text-[9px]" />{expiryInfo.label}
+                                    </p>
+                                  )}
                                 </div>
                               </div>
                             </td>
@@ -972,45 +1022,103 @@ export default function Files() {
                               <span className="text-sm text-gray-500">{file.file_size_display}</span>
                             </td>
 
+                            {/*  dedicated Expiry column (desktop) */}
+                            <td className="px-4 py-3 hidden lg:table-cell">
+                              {expiryInfo ? (
+                                <span
+                                  className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-lg ${
+                                    expiryInfo.variant === 'expired'
+                                      ? 'bg-red-50 text-red-600'
+                                      : expiryInfo.variant === 'critical'
+                                      ? 'bg-orange-50 text-orange-600'
+                                      : expiryInfo.variant === 'warning'
+                                      ? 'bg-amber-50 text-amber-600'
+                                      : 'bg-slate-50 text-slate-500'
+                                  }`}
+                                >
+                                  <i className={`fas fa-clock text-[9px] ${expiryInfo.variant === 'expired' ? 'text-red-400' : ''}`} />
+                                  {expiryInfo.label}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-300 font-medium">Never</span>
+                              )}
+                            </td>
+
                             <td className="px-4 py-3 hidden sm:table-cell">
                               <span className="text-sm text-gray-500">{new Date(file.uploaded_at).toLocaleDateString()}</span>
                             </td>
 
+                            {/* ── Action buttons ── */}
                             <td className="px-4 py-3 rounded-r-2xl text-right">
                               <div className="flex justify-end items-center gap-0.5">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setPreviewFile(file) }}
+
+                                {/* Preview */}
+                                <button onClick={(e) => { e.stopPropagation(); setPreviewFile(file) }}
                                   className="p-2 text-gray-400 hover:text-indigo-600 transition-colors" title="Preview">
                                   <i className="fas fa-eye text-sm" />
                                 </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleDownload(file) }}
+
+                                {/* Download */}
+                                <button onClick={(e) => { e.stopPropagation(); handleDownload(file) }}
                                   className="p-2 text-gray-400 hover:text-indigo-600 transition-colors" title="Download">
                                   <i className="fas fa-download text-sm" />
                                 </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleToggleFavorite(file) }}
+
+                                {/* Star */}
+                                <button onClick={(e) => { e.stopPropagation(); handleToggleFavorite(file) }}
                                   disabled={!!starLoading[file.id]}
                                   className={`p-2 transition-colors disabled:opacity-50 ${isFav ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-400 hover:text-yellow-400'}`}
                                   title={isFav ? 'Unstar' : 'Star'}>
                                   <i className={`fas ${starLoading[file.id] ? 'fa-spinner fa-spin' : 'fa-star'} text-sm`} />
                                 </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setRenameFile(file); setNewFileName(stripExt(file.original_name)); setRenameError(null) }}
+
+                                {/* Rename */}
+                                <button onClick={(e) => { e.stopPropagation(); setRenameFile(file); setNewFileName(stripExt(file.original_name)); setRenameError(null) }}
                                   className="p-2 text-gray-400 hover:text-amber-500 transition-colors" title="Rename">
                                   <i className="fas fa-pen-to-square text-sm" />
                                 </button>
+
+                                {/* Share via email */}
                                 <button
                                   type="button"
+                                  onClick={(e) => { e.stopPropagation(); setShareFile(file) }}
+                                  className="p-2 text-gray-400 hover:text-sky-500 transition-colors"
+                                  title="Share via email"
+                                >
+                                  <i className="fas fa-share-nodes text-sm" />
+                                </button>
+
+                                {/* Set / edit expiry */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setExpiryFile(file) }}
+                                  className={`p-2 transition-colors ${
+                                    expiryInfo
+                                      ? expiryInfo.variant === 'expired'
+                                        ? 'text-red-400 hover:text-red-500'
+                                        : expiryInfo.variant === 'critical' || expiryInfo.variant === 'warning'
+                                        ? 'text-amber-400 hover:text-amber-500'
+                                        : 'text-slate-400 hover:text-indigo-500'
+                                      : 'text-gray-400 hover:text-indigo-500'
+                                  }`}
+                                  title={expiryInfo ? 'Edit expiry' : 'Set auto-delete'}
+                                >
+                                  <i className="fas fa-clock text-sm" />
+                                </button>
+
+                                {/* Add to folder */}
+                                <button type="button"
                                   onClick={(e) => { e.stopPropagation(); setAddToFolderFiles([file.id]) }}
                                   className="p-2 text-gray-400 hover:text-indigo-500 transition-colors" title="Add to folder">
                                   <i className="fas fa-folder-plus text-sm" />
                                 </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setDeleteConfirm(file.id) }}
+
+                                {/* Delete */}
+                                <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm(file.id) }}
                                   className="p-2 text-gray-400 hover:text-red-500 transition-colors" title="Move to trash">
                                   <i className="fas fa-trash-can text-sm" />
                                 </button>
+
                               </div>
                             </td>
                           </tr>
@@ -1023,7 +1131,7 @@ export default function Files() {
             </div>
           </div>
 
-          {/* ── Folder panel — rendered ONCE, inside the grid ── */}
+          {/* Folder panel */}
           {showFolderPanel && (
             <div className="bg-white rounded-3xl shadow-sm border border-gray-50 p-4 h-fit">
               <FolderSidebar
@@ -1193,6 +1301,25 @@ export default function Files() {
                 <div><p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Size</p><p className="text-sm font-bold text-gray-800">{previewFile.file_size_display}</p></div>
                 <div><p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Type</p><p className="text-sm font-bold text-gray-800 break-all">{previewFile.mime_type || 'Unknown'}</p></div>
               </div>
+              {/* show expiry in preview modal */}
+              {previewFile.expires_at && (() => {
+                const info = getExpiryInfo(previewFile.expires_at)
+                return (
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Auto-delete</p>
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-lg ${
+                      info?.variant === 'expired'  ? 'bg-red-50 text-red-600' :
+                      info?.variant === 'critical' ? 'bg-orange-50 text-orange-600' :
+                      info?.variant === 'warning'  ? 'bg-amber-50 text-amber-600' :
+                                                     'bg-slate-50 text-slate-500'}`}>
+                      <i className="fas fa-clock text-[9px]" />
+                      {info?.label}
+                      {' · '}
+                      {new Date(previewFile.expires_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </div>
+                )
+              })()}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => { handleDownload(previewFile); setPreviewFile(null) }}
@@ -1225,6 +1352,23 @@ export default function Files() {
           folder={shareModal.folder}
           preselectedFileIds={shareModal.fileIds}
           onClose={() => setShareModal(null)}
+        />
+      )}
+
+      {/* Per-file share modal */}
+      {shareFile && (
+        <FileShareModal
+          file={shareFile}
+          onClose={() => setShareFile(null)}
+        />
+      )}
+
+      {/* Per-file auto-expiry modal */}
+      {expiryFile && (
+        <SetExpiryModal
+          file={expiryFile}
+          onClose={() => setExpiryFile(null)}
+          onUpdated={handleExpiryUpdated}
         />
       )}
     </div>
