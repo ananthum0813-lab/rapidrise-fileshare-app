@@ -51,7 +51,8 @@ function useFileBlobUrl(file) {
     const isMedia =
       file.mime_type?.includes('image') ||
       file.mime_type?.includes('video') ||
-      file.mime_type?.includes('audio')
+      file.mime_type?.includes('audio') ||
+      file.mime_type?.includes('pdf')
 
     if (!isMedia) return
 
@@ -59,7 +60,14 @@ function useFileBlobUrl(file) {
     setLoading(true)
 
     downloadFile(file.id)
-      .then(({ data }) => { if (!cancelled) setBlobUrl(URL.createObjectURL(data)) })
+      .then(({ data }) => {
+        if (!cancelled) {
+          const blob = new Blob([data], {
+            type: file.mime_type || data.type || 'application/octet-stream',
+          })
+          setBlobUrl(URL.createObjectURL(blob))
+        }
+      })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false) })
 
@@ -76,6 +84,11 @@ function useFileBlobUrl(file) {
 // ── Shared file detail modal ──────────────────────────────────────────────────
 function FileDetailModal({ file, shares, onClose, onDownload }) {
   const { blobUrl, blobLoading } = useFileBlobUrl(file)
+
+  const handleOpen = () => {
+    if (!blobUrl) return
+    window.open(blobUrl, '_blank')
+  }
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -133,9 +146,42 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
           </div>
         )}
 
+        {file.mime_type?.includes('pdf') && (
+          <div className="mb-6 rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 min-h-[500px] relative" style={{ overflow: 'hidden' }}>
+            {blobLoading ? (
+              <div className="py-10 flex flex-col items-center gap-3 text-gray-400">
+                <i className="fas fa-circle-notch fa-spin text-2xl text-indigo-400"></i>
+                <p className="text-xs">Loading PDF…</p>
+              </div>
+            ) : blobUrl ? (
+              <div style={{ height: '500px', position: 'relative', overflow: 'hidden' }}>
+                <iframe
+                  src={`${blobUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&page=1`}
+                  title={file.original_name}
+                  style={{
+                    height: '580px',
+                    border: 'none',
+                    display: 'block',
+                    position: 'absolute',
+                    top: '-46px',
+                    left: 0,
+                    width: '100%',
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="py-12 flex flex-col items-center gap-2 text-gray-400">
+                <i className="fas fa-file-pdf text-4xl text-red-300"></i>
+                <p className="text-sm">PDF preview unavailable</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {!file.mime_type?.includes('image') &&
          !file.mime_type?.includes('video') &&
-         !file.mime_type?.includes('audio') && (
+         !file.mime_type?.includes('audio') &&
+         !file.mime_type?.includes('pdf') && (
           <div className="mb-6 p-6 bg-indigo-50 rounded-2xl text-center">
             <div className={`text-5xl text-${getFileColor(file.mime_type)}-600 mb-3`}>
               <i className={`fas ${getFileIcon(file.mime_type)}`}></i>
@@ -146,7 +192,8 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
 
         {(file.mime_type?.includes('image') ||
           file.mime_type?.includes('video') ||
-          file.mime_type?.includes('audio')) && (
+          file.mime_type?.includes('audio') ||
+          file.mime_type?.includes('pdf')) && (
           <p className="font-bold text-slate-900 break-all text-sm text-center mb-4">{file.original_name}</p>
         )}
 
@@ -178,6 +225,15 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
           >
             <i className="fas fa-download"></i> Download File
           </button>
+          {file.mime_type?.includes('pdf') && (
+            <button
+              onClick={handleOpen}
+              disabled={!blobUrl}
+              className="w-full py-4 bg-slate-100 text-slate-700 rounded-2xl font-bold hover:bg-slate-200 transition-all shadow-sm flex items-center justify-center gap-2 text-sm"
+            >
+              <i className="fas fa-arrow-up-right-from-square"></i> Open PDF
+            </button>
+          )}
           <Link
             to="/files"
             onClick={onClose}

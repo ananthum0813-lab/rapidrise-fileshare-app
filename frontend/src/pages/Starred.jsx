@@ -55,7 +55,8 @@ export default function Starred() {
     const isMedia =
       previewFile.mime_type?.includes('image') ||
       previewFile.mime_type?.includes('video') ||
-      previewFile.mime_type?.includes('audio')
+      previewFile.mime_type?.includes('audio') ||
+      previewFile.mime_type?.includes('pdf')
 
     if (!isMedia) return
 
@@ -63,7 +64,14 @@ export default function Starred() {
     setPreviewLoading(true)
 
     downloadFile(previewFile.id)
-      .then(({ data }) => { if (!cancelled) setPreviewBlobUrl(URL.createObjectURL(data)) })
+      .then(({ data }) => {
+        if (!cancelled) {
+          const blob = new Blob([data], {
+            type: previewFile.mime_type || data.type || 'application/octet-stream',
+          })
+          setPreviewBlobUrl(URL.createObjectURL(blob))
+        }
+      })
       .catch(() => { if (!cancelled) setPreviewBlobUrl(null) })
       .finally(() => { if (!cancelled) setPreviewLoading(false) })
 
@@ -78,7 +86,10 @@ export default function Starred() {
   const handleDownload = async (file) => {
     try {
       const { data } = await downloadFile(file.id)
-      const url = window.URL.createObjectURL(data)
+      const blob = new Blob([data], {
+        type: file.mime_type || data.type || 'application/octet-stream',
+      })
+      const url = window.URL.createObjectURL(blob)
       const a   = document.createElement('a')
       a.href     = url
       a.download = file.original_name
@@ -87,6 +98,11 @@ export default function Starred() {
     } catch {
       alert('Download failed.')
     }
+  }
+
+  const handleOpenPreview = () => {
+    if (!previewBlobUrl) return
+    window.open(previewBlobUrl, '_blank')
   }
 
   // ── Unstar (toggle) ──────────────────────────────────────────────────────
@@ -231,6 +247,39 @@ export default function Starred() {
             <audio controls className="w-full" src={previewBlobUrl} />
           ) : (
             <p className="text-sm text-center text-gray-500">Audio preview unavailable</p>
+          )}
+        </div>
+      )
+    }
+    if (mime_type?.includes('pdf')) {
+      return (
+        <div className="mb-6 rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 min-h-[500px] relative" style={{ overflow: 'hidden' }}>
+          {previewLoading ? (
+            <div className="py-12 flex flex-col items-center gap-3 text-gray-400">
+              <i className="fas fa-circle-notch fa-spin text-2xl text-indigo-400"></i>
+              <p className="text-xs">Loading PDF…</p>
+            </div>
+          ) : previewBlobUrl ? (
+            <div style={{ height: '500px', position: 'relative', overflow: 'hidden' }}>
+              <iframe
+                src={`${previewBlobUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&page=1`}
+                title={file.original_name}
+                style={{
+                  height: '580px',
+                  border: 'none',
+                  display: 'block',
+                  position: 'absolute',
+                  top: '-46px',
+                  left: 0,
+                  width: '100%',
+                }}
+              />
+            </div>
+          ) : (
+            <div className="py-12 flex flex-col items-center gap-2 text-gray-400">
+              <i className="fas fa-file-pdf text-4xl text-red-300"></i>
+              <p className="text-sm">PDF preview unavailable</p>
+            </div>
           )}
         </div>
       )
@@ -556,10 +605,18 @@ export default function Starred() {
                 className="py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 text-sm">
                 <i className="fas fa-download"></i> Download
               </button>
-              <button onClick={() => setPreviewFile(null)}
-                className="py-3 bg-gray-100 text-gray-700 rounded-2xl font-bold hover:bg-gray-200 transition-all text-sm">
-                Close
-              </button>
+              {previewFile.mime_type?.includes('pdf') ? (
+                <button onClick={handleOpenPreview}
+                  disabled={!previewBlobUrl}
+                  className="py-3 bg-slate-100 text-slate-700 rounded-2xl font-bold hover:bg-slate-200 transition-all flex items-center justify-center gap-2 text-sm">
+                  <i className="fas fa-arrow-up-right-from-square"></i> Open
+                </button>
+              ) : (
+                <button onClick={() => setPreviewFile(null)}
+                  className="py-3 bg-gray-100 text-gray-700 rounded-2xl font-bold hover:bg-gray-200 transition-all text-sm">
+                  Close
+                </button>
+              )}
             </div>
           </div>
         </div>

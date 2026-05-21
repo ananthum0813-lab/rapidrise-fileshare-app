@@ -618,12 +618,20 @@ export default function Files() {
     if (previewBlobUrl) { URL.revokeObjectURL(previewBlobUrl); setPreviewBlobUrl(null) }
     if (!previewFile) return
     const isMedia = previewFile.mime_type?.includes('image') ||
-      previewFile.mime_type?.includes('video') || previewFile.mime_type?.includes('audio')
+      previewFile.mime_type?.includes('video') || previewFile.mime_type?.includes('audio') ||
+      previewFile.mime_type?.includes('pdf')
     if (!isMedia) return
     let cancelled = false
     setPreviewLoading(true)
     downloadFile(previewFile.id)
-      .then(({ data }) => { if (!cancelled) setPreviewBlobUrl(URL.createObjectURL(data)) })
+      .then(({ data }) => {
+        if (!cancelled) {
+          const blob = new Blob([data], {
+            type: previewFile.mime_type || data.type || 'application/octet-stream',
+          })
+          setPreviewBlobUrl(URL.createObjectURL(blob))
+        }
+      })
       .catch(() => { if (!cancelled) setPreviewBlobUrl(null) })
       .finally(() => { if (!cancelled) setPreviewLoading(false) })
     return () => { cancelled = true }
@@ -692,11 +700,19 @@ export default function Files() {
   const handleDownload = async (file) => {
     try {
       const { data } = await downloadFile(file.id)
-      const url = window.URL.createObjectURL(data)
+      const blob = new Blob([data], {
+        type: file.mime_type || data.type || 'application/octet-stream',
+      })
+      const url = window.URL.createObjectURL(blob)
       const a   = document.createElement('a')
       a.href = url; a.download = file.original_name; a.click()
       window.URL.revokeObjectURL(url)
     } catch { alert('Download failed.') }
+  }
+
+  const handleOpenPreview = () => {
+    if (!previewBlobUrl) return
+    window.open(previewBlobUrl, '_blank')
   }
 
   const handleDelete = async (fileId) => {
@@ -1264,7 +1280,7 @@ export default function Files() {
 
       {previewFile && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-[2.5rem] p-8 w-full shadow-2xl max-h-[90vh] overflow-y-auto max-w-lg">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-bold text-gray-900 text-lg">Preview</h3>
               <button onClick={() => setPreviewFile(null)} className="text-gray-400 hover:text-gray-600 text-xl"><i className="fas fa-times" /></button>
@@ -1288,6 +1304,35 @@ export default function Files() {
                 {previewLoading
                   ? <div className="flex items-center justify-center gap-3 text-indigo-400 py-2"><i className="fas fa-circle-notch fa-spin" /></div>
                   : previewBlobUrl ? <audio controls className="w-full" src={previewBlobUrl} /> : null}
+              </div>
+            ) : previewFile.mime_type?.includes('pdf') ? (
+              <div className="mb-6 rounded-2xl overflow-hidden bg-gray-50 border border-gray-100"
+                style={{ height: '520px', overflow: 'hidden', position: 'relative' }}>
+                {previewLoading ? (
+                  <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-400">
+                    <i className="fas fa-circle-notch fa-spin text-2xl text-indigo-400" />
+                    <p className="text-xs">Loading PDF…</p>
+                  </div>
+                ) : previewBlobUrl ? (
+                  <iframe
+                    src={`${previewBlobUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&page=1`}
+                    title={previewFile.original_name}
+                    style={{
+                      border: 'none',
+                      display: 'block',
+                      width: '100%',
+                      height: '580px',
+                      position: 'absolute',
+                      top: '-46px',
+                      left: 0,
+                    }}
+                  />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center gap-2 text-gray-400">
+                    <i className="fas fa-file-pdf text-4xl text-red-300" />
+                    <p className="text-sm">PDF preview unavailable</p>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="mb-6 bg-gray-50 rounded-2xl p-12 text-center border border-gray-100">
@@ -1321,11 +1366,18 @@ export default function Files() {
                 )
               })()}
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className={`grid gap-3 ${previewFile.mime_type?.includes('pdf') ? 'grid-cols-3' : 'grid-cols-2'}`}>
               <button onClick={() => { handleDownload(previewFile); setPreviewFile(null) }}
                 className="py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 flex items-center justify-center gap-2">
                 <i className="fas fa-download" /> Download
               </button>
+              {previewFile.mime_type?.includes('pdf') && (
+                <button onClick={handleOpenPreview}
+                  disabled={!previewBlobUrl}
+                  className="py-3 bg-slate-100 text-slate-700 rounded-2xl font-bold hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
+                  <i className="fas fa-arrow-up-right-from-square" /> Open
+                </button>
+              )}
               <button onClick={() => { handleToggleFavorite(previewFile); setPreviewFile(null) }}
                 disabled={!!starLoading[previewFile.id]}
                 className={`py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${(localFavs[previewFile.id] ?? previewFile.is_favorite) ? 'bg-yellow-50 text-yellow-600 hover:bg-yellow-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>

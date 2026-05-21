@@ -373,8 +373,6 @@ function SharesPanel() {
   } = useSelector((s) => s.sharing)
 
   const [showForm,        setShowForm]        = useState(false)
-  // Singles and ZIPs are independently paginated — using one shared page
-  // caused Math.max(total_pages) to show ghost pages for the shorter list.
   const [singlesPage,     setSinglesPage]     = useState(1)
   const [zipsPage,        setZipsPage]        = useState(1)
   const [successMsg,      setSuccessMsg]      = useState('')
@@ -383,7 +381,6 @@ function SharesPanel() {
   const [actionConfirm,   setActionConfirm]   = useState(null)
   const [actionLoading,   setActionLoading]   = useState(false)
   const [initialLoaded,   setInitialLoaded]   = useState(false)
-  // Prevent double-submit on the share form
   const [formSubmitting,  setFormSubmitting]  = useState(false)
 
   const { register: field, handleSubmit, reset } = useForm({
@@ -392,12 +389,10 @@ function SharesPanel() {
 
   useEffect(() => { dispatch(fetchAllFiles()) }, [dispatch])
 
-  // Fetch singles whenever singlesPage changes
   useEffect(() => {
     dispatch(fetchShares({ page: singlesPage })).then(() => setInitialLoaded(true))
   }, [dispatch, singlesPage])
 
-  // Fetch zips whenever zipsPage changes
   useEffect(() => {
     dispatch(fetchZipShares({ page: zipsPage }))
   }, [dispatch, zipsPage])
@@ -408,7 +403,6 @@ function SharesPanel() {
   const isZipMode    = selectedFiles.length >= 2
   const isSingleMode = selectedFiles.length === 1
   const isFormValid  = emails.length > 0 && selectedFiles.length >= 1
-  // isSubmitting: Redux async flags OR local guard — whichever fires first
   const isSubmitting = sharing || zipSharing || formSubmitting
 
   const flash = (msg) => {
@@ -417,7 +411,6 @@ function SharesPanel() {
   }
 
   const onSubmit = async (data) => {
-    // Guard: prevent double-submit from rapid clicks
     if (!isFormValid || formSubmitting) return
     setFormSubmitting(true)
 
@@ -456,7 +449,6 @@ function SharesPanel() {
       setEmails([])
       setSelectedFiles([])
       setShowForm(false)
-      // Reset both paginators to page 1 after a new share
       setSinglesPage(1)
       setZipsPage(1)
       await Promise.all([
@@ -478,7 +470,6 @@ function SharesPanel() {
       } else {
         type === 'zip' ? await dispatch(deleteZipShare(id)) : await dispatch(deleteShare(id))
       }
-      // Re-fetch the correct page for each list independently
       await Promise.all([
         dispatch(fetchShares({ page: singlesPage })),
         dispatch(fetchZipShares({ page: zipsPage })),
@@ -495,7 +486,6 @@ function SharesPanel() {
     return [...singles, ...zips].sort((a, b) => new Date(b.shared_at) - new Date(a.shared_at))
   }, [shares, zipShares])
 
-  // Independent pagination per list — avoids ghost pages from Math.max
   const singlesTotalPages = pagination?.total_pages    || 1
   const singlesCount      = pagination?.count          || 0
   const zipsTotalPages    = zipPagination?.total_pages || 1
@@ -769,7 +759,6 @@ function AnalyticsPanel() {
         <p className="text-sm text-slate-500">Aggregated stats across single-file shares and ZIP bundles.</p>
       </div>
 
-     
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatTile icon="fa-share-nodes"  label="Total Shares"    value={fmt(totals?.total_shares)}    color="indigo"  />
         <StatTile icon="fa-download"     label="Total Downloads" value={fmt(totals?.total_downloads)} color="emerald" />
@@ -834,7 +823,6 @@ function AnalyticsPanel() {
                   <p className="text-xs text-slate-400">{s.recipient_email}</p>
                 </div>
                 <div className="flex items-center gap-4 text-xs flex-shrink-0">
-                  {/* ── FIXED: removed view_count display, only show downloads ── */}
                   <span className="flex items-center gap-1 text-emerald-600 font-semibold"><i className="fas fa-download text-[10px]"></i>{fmt(s.download_count)}</span>
                   <StatusBadge status={s.status} />
                 </div>
@@ -860,7 +848,9 @@ function RequestsPanel() {
   const [currentPage,     setCurrentPage]     = useState(1)
   const [emailError,      setEmailError]      = useState('')
   const [initialLoaded,   setInitialLoaded]   = useState(false)
-  // Prevent double-submit from rapid button clicks
+  // ── FIX: formSubmitting tracks the local async operation independently
+  // of the Redux requestLoading flag, so the button animates correctly
+  // even between dispatch and selector update.
   const [formSubmitting,  setFormSubmitting]  = useState(false)
 
   const { register: field, handleSubmit, reset, formState: { errors } } = useForm({
@@ -876,6 +866,9 @@ function RequestsPanel() {
     load()
   }, [dispatch, currentPage])
 
+  // ── Combined submitting state used for button disabled + spinner
+  const isSubmitting = formSubmitting || requestLoading
+
   const validateAndSubmit = (data) => {
     if (recipientEmails.length === 0) {
       setEmailError('At least one recipient email is required. Upload links are sent by email only.')
@@ -886,7 +879,7 @@ function RequestsPanel() {
   }
 
   const onSubmit = async (data) => {
-    // Guard: prevent double-submit from rapid clicks
+    // Guard: prevent double-submit
     if (formSubmitting) return
     setFormSubmitting(true)
 
@@ -894,9 +887,7 @@ function RequestsPanel() {
       ? data.allowed_extensions.split(/[,\s]+/).map((e) => e.trim().replace(/^\./, '').toLowerCase()).filter(Boolean)
       : []
 
-    // max_files is PER RECIPIENT. Each recipient gets their own upload slot
-    // quota, so we send the value directly to the backend.
-    const perRecipientMax  = Number(data.max_files)
+    const perRecipientMax = Number(data.max_files)
 
     const payload = {
       title:              data.title,
@@ -970,6 +961,11 @@ function RequestsPanel() {
               <i className="fas fa-virus-slash mt-0.5 flex-shrink-0"></i>
               <span>All uploaded files are <strong>automatically scanned for viruses</strong> before they appear in your inbox. Infected files are quarantined and flagged immediately.</span>
             </div>
+            {/* ── OTP security notice ── */}
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-700">
+              <i className="fas fa-key mt-0.5 flex-shrink-0"></i>
+              <span>Recipients must <strong>verify their email via a one-time code (OTP)</strong> before they can upload. This ensures only the intended person can use each upload link.</span>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit(validateAndSubmit)} className="space-y-4">
@@ -1017,8 +1013,19 @@ function RequestsPanel() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Max Files</label>
-                <input type="number" min="1" max="50" {...field('max_files')} className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none" />
+                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">
+                  Max Files Per Recipient
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  {...field('max_files')}
+                  className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  <i className="fas fa-info-circle mr-1"></i>Each recipient gets this many upload slots independently.
+                </p>
               </div>
             </div>
 
@@ -1039,20 +1046,26 @@ function RequestsPanel() {
               <div className="flex items-start gap-3 px-4 py-3 bg-emerald-50 rounded-xl border border-emerald-100">
                 <i className="fas fa-check-circle text-emerald-500 mt-0.5 flex-shrink-0"></i>
                 <p className="text-xs text-emerald-700 leading-relaxed">
-                  <strong>{recipientEmails.length} private upload link{recipientEmails.length !== 1 ? 's' : ''}</strong> will be sent by email. Links are unique per recipient. All uploads will be virus-scanned before delivery to your inbox.
+                  <strong>{recipientEmails.length} private upload link{recipientEmails.length !== 1 ? 's' : ''}</strong> will be sent by email. Each recipient must verify via OTP before uploading. All uploads are virus-scanned before delivery.
                 </p>
               </div>
             )}
 
             <div className="flex flex-col sm:flex-row gap-3 pt-1">
+              {/* ── FIX: use isSubmitting (formSubmitting || requestLoading) for
+                  both disabled state AND spinner so button always animates
+                  during the full async lifecycle ── */}
               <button
                 type="submit"
-                disabled={requestLoading}
-                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-sm"
               >
-                {requestLoading
-                  ? <><i className="fas fa-spinner fa-spin"></i>Creating…</>
-                  : <><i className="fas fa-paper-plane"></i>Create & Send {recipientEmails.length > 0 ? `(${recipientEmails.length} recipient${recipientEmails.length !== 1 ? 's' : ''})` : 'Request'}</>}
+                {isSubmitting ? (
+                  // ── Sending animation (matches SharesPanel pattern)
+                  <><i className="fas fa-spinner fa-spin text-sm"></i>Sending…</>
+                ) : (
+                  <><i className="fas fa-paper-plane"></i>Create &amp; Send {recipientEmails.length > 0 ? `(${recipientEmails.length} recipient${recipientEmails.length !== 1 ? 's' : ''})` : 'Request'}</>
+                )}
               </button>
               <button type="button" onClick={() => setShowForm(false)} className="sm:w-auto px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all">
                 Cancel
@@ -1077,13 +1090,7 @@ function RequestsPanel() {
       ) : (
         <div className="space-y-3">
           {requests.map((req) => {
-            const recipients = req.recipients || []
-
-            // ── FIXED: submission_count comes from the backend's accurate
-            // count (non-rejected submissions). We display it as "X received"
-            // at the request level and show per-recipient counts inline.
-            // The top-level "X/Y submissions" chip is removed — it was
-            // misleading when counts differed from per-recipient badges.
+            const recipients      = req.recipients || []
             const submissionCount = req.submission_count ?? 0
             const perRecipientMax = req.max_files ?? 0
             const recipientCount  = recipients.length || 1
@@ -1098,9 +1105,6 @@ function RequestsPanel() {
                       <p className="text-sm font-bold text-slate-900">{req.title}</p>
                       <StatusBadge status={req.status} />
                       {req.is_expired && <span className="text-xs text-red-500 font-semibold">Expired</span>}
-                      {/* ── FIXED: show a single accurate progress badge instead
-                          of the old "X/Y submissions" meta chip that was shown
-                          alongside per-recipient counts and could conflict ── */}
                       {totalMaxFiles > 0 && (
                         <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold border ${
                           allReceived
@@ -1120,6 +1124,13 @@ function RequestsPanel() {
                       {recipients.length > 0 && (
                         <span><i className="fas fa-users mr-1"></i>{recipients.length} recipient{recipients.length !== 1 ? 's' : ''}</span>
                       )}
+                      {/* ── FIX: show per-recipient max as context ── */}
+                      {perRecipientMax > 0 && (
+                        <span className="flex items-center gap-1">
+                          <i className="fas fa-upload text-[10px]"></i>
+                          {perRecipientMax} file{perRecipientMax !== 1 ? 's' : ''} max per recipient
+                        </span>
+                      )}
                       {req.allowed_extensions?.length > 0 && (
                         <span><i className="fas fa-filter mr-1"></i>{req.allowed_extensions.join(', ')}</span>
                       )}
@@ -1134,31 +1145,42 @@ function RequestsPanel() {
                   </div>
                 </div>
 
-                {/* ── Recipients list ─────────────────────────────────────────
-                    FIXED: show files_submitted (accurate inbox count from the
-                    backend serializer) rather than upload_count (raw POST hits
-                    that don't decrement on rejection / removal). If the backend
-                    returns upload_count as a fallback, prefer files_submitted. ── */}
+                {/* ── Recipients list with per-recipient upload count + max ── */}
                 {recipients.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-slate-100">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                       Recipients · {recipients.length}
+                      {perRecipientMax > 0 && (
+                        <span className="ml-1.5 normal-case font-normal text-slate-300">
+                          (each allowed {perRecipientMax} file{perRecipientMax !== 1 ? 's' : ''})
+                        </span>
+                      )}
                     </p>
                     <div className="space-y-1.5">
                       {recipients.map((r) => {
-                        // Prefer the accurate inbox-derived count; fall back to upload_count
+                        // ── FIX: prefer files_submitted (accurate inbox-derived
+                        // count) over upload_count (raw POST hit counter)
                         const filesUploaded = r.files_submitted ?? r.upload_count ?? 0
+                        const isFull        = perRecipientMax > 0 && filesUploaded >= perRecipientMax
+
                         return (
                           <div key={r.id} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl">
                             <i className="fas fa-user text-slate-300 text-[11px] flex-shrink-0"></i>
-                            <span className="text-xs font-medium text-slate-700 truncate">{r.email}</span>
+                            <span className="text-xs font-medium text-slate-700 truncate flex-1">{r.email}</span>
+
+                            {/* ── Per-recipient upload progress badge ── */}
                             {filesUploaded > 0 ? (
-                              <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold flex-shrink-0 ml-auto">
-                                ✓ {filesUploaded} uploaded
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 flex items-center gap-1 ${
+                                isFull
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : 'bg-blue-50 text-blue-700'
+                              }`}>
+                                <i className={`fas ${isFull ? 'fa-circle-check' : 'fa-upload'} text-[9px]`}></i>
+                                {filesUploaded}{perRecipientMax > 0 ? `/${perRecipientMax}` : ''} uploaded
                               </span>
                             ) : (
-                              <span className="text-[10px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ml-auto">
-                                Awaiting upload
+                              <span className="text-[10px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">
+                                0{perRecipientMax > 0 ? `/${perRecipientMax}` : ''} — awaiting
                               </span>
                             )}
                           </div>
@@ -1182,7 +1204,6 @@ function RequestsPanel() {
             )
           })}
 
-          {/* ── FIXED: Pagination wired up for requests panel ── */}
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
@@ -1499,7 +1520,6 @@ function InboxPanel() {
             )
           })}
 
-          {/* ── Inbox pagination ── */}
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
