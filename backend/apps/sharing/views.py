@@ -1,5 +1,5 @@
 """
-apps/sharing/views.py  
+apps/sharing/views.py
 ─────────────────────────────────────────────────────────────────────────────
 """
 
@@ -30,6 +30,8 @@ from apps.files.serializers import FileSerializer, sanitize_filename, get_mime_t
 from .models import (
     FileShare, ShareAnalyticsEvent,
     FileRequest, RequestRecipient, SubmissionInbox, ZipShare,
+    OTP_EXPIRY_MINUTES, OTP_SESSION_MINUTES,
+    OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN, OTP_MAX_SENDS_HOUR,
 )
 from .serializers import (
     CreateShareSerializer,
@@ -53,11 +55,8 @@ from .services import (
     record_analytics_event,
     create_file_request,
     create_submission,
+    send_otp_email,
 )
-
-#    import dispatch_scan instead of scan_uploaded_file directly.
-#    dispatch_scan honours task_routes (queue='celery') and has a built-in
-#    synchronous fallback when the broker is unavailable.
 from .tasks import dispatch_scan
 
 logger = logging.getLogger(__name__)
@@ -140,11 +139,8 @@ def _content_disposition(filename: str, attachment: bool = True) -> str:
     )
 
 
-from django.conf import settings
-from django.core.mail import send_mail
-
-
 def _send_zip_share_email(zip_share, shared_by, file_names):
+    from django.core.mail import send_mail
     sender_name  = getattr(shared_by, 'full_name', None) or shared_by.email
     download_url = zip_share.share_url
     expires_str  = zip_share.expires_at.strftime('%Y-%m-%d %H:%M UTC')
@@ -166,7 +162,6 @@ def _send_zip_share_email(zip_share, shared_by, file_names):
     )
 
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com')
-
     send_mail(
         subject=subject,
         message=body_plain,
@@ -175,11 +170,8 @@ def _send_zip_share_email(zip_share, shared_by, file_names):
         fail_silently=False,
     )
 
+
 def _zip_stream_generator(files_queryset):
-    """
-    Build a ZIP archive in memory and yield 64 KB chunks.
-    Uses Django's storage API so it works with S3/GCS/Azure too.
-    """
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, mode='w', compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
         seen_names: dict[str, int] = {}
@@ -194,10 +186,8 @@ def _zip_stream_generator(files_queryset):
                     arcname = f'{base}_{seen_names[arcname]}.{ext}' if ext else f'{arcname}_{seen_names[arcname]}'
                 else:
                     seen_names[arcname] = 0
-
                 with file_obj.file.open('rb') as fh:
                     data = fh.read()
-
                 info = zipfile.ZipInfo(filename=arcname)
                 info.compress_type = zipfile.ZIP_DEFLATED
                 zf.writestr(info, data)
@@ -212,6 +202,24 @@ def _zip_stream_generator(files_queryset):
         if not chunk:
             break
         yield chunk
+
+
+# ─── helper: count per-recipient active submissions ───────────────────────────
+
+_ACTIVE_STATUSES = [
+    SubmissionInbox.Status.PENDING,
+    SubmissionInbox.Status.APPROVED,
+    SubmissionInbox.Status.NEEDS_ACTION,
+    SubmissionInbox.Status.COMPLETE,
+]
+
+
+def _recipient_submission_count(recipient: RequestRecipient) -> int:
+    """How many active (non-rejected) submissions this specific recipient has."""
+    return SubmissionInbox.objects.filter(
+        recipient=recipient,
+        status__in=_ACTIVE_STATUSES,
+    ).count()
 
 
 # ─── All-files endpoint ───────────────────────────────────────────────────────
@@ -288,7 +296,6 @@ class SharedFileListView(APIView):
         file_id = request.query_params.get('file_id', '').strip()
         if file_id:
             qs = qs.filter(file__id=file_id)
-
         paginator = SharePagination()
         page      = paginator.paginate_queryset(qs, request)
         return success_response(data={
@@ -337,7 +344,6 @@ class GlobalShareAnalyticsView(APIView):
         fs_agg = fs_qs.aggregate(
             total_shares=Count('id'),
             total_downloads=Sum('download_count'),
-            # removed total_views / view_count — no longer included in analytics
             active_count=Count('id', filter=Q(status='active')),
             expired_count=Count('id', filter=Q(status='expired')),
             revoked_count=Count('id', filter=Q(status='revoked')),
@@ -358,7 +364,6 @@ class GlobalShareAnalyticsView(APIView):
             'totals': {
                 'total_shares':    (fs_agg['total_shares'] or 0) + (zs_agg['total_zip_shares'] or 0),
                 'total_downloads': (fs_agg['total_downloads'] or 0) + (zs_agg['total_zip_downloads'] or 0),
-                #  total_views removed entirely
                 'active_count':    (fs_agg['active_count'] or 0) + (zs_agg['zip_active'] or 0),
                 'expired_count':   (fs_agg['expired_count'] or 0) + (zs_agg['zip_expired'] or 0),
                 'revoked_count':   (fs_agg['revoked_count'] or 0) + (zs_agg['zip_revoked'] or 0),
@@ -386,7 +391,6 @@ class CreateZipShareView(APIView):
 
         from datetime import timedelta
         expires_at = timezone.now() + timedelta(hours=exp_hours)
-
         file_names = [f.original_name for f in files]
         zip_shares = []
 
@@ -402,7 +406,6 @@ class CreateZipShareView(APIView):
             )
             zs.files.set(files)
             zip_shares.append(zs)
-
             try:
                 _send_zip_share_email(zip_share=zs, shared_by=request.user, file_names=file_names)
             except Exception:
@@ -473,14 +476,12 @@ class PublicZipShareInfoView(APIView):
                 f'ZIP share not found for token "{token}". '
                 'Use the share_token UUID from the creation response, not the id.'
             )
-
         if zs.status == ZipShare.Status.REVOKED:
             raise NotFound(f'This ZIP share has been revoked (id={zs.id}).')
         if zs.status == ZipShare.Status.EXPIRED or zs.is_expired:
             raise NotFound(f'This ZIP share has expired (expires_at={zs.expires_at}).')
         if not zs.is_active:
             raise NotFound(f'This ZIP share is not active (status={zs.status}).')
-
         return success_response(data=PublicZipShareSerializer(zs).data)
 
 
@@ -492,7 +493,6 @@ class PublicZipShareDownloadView(APIView):
             zs = ZipShare.objects.prefetch_related('files').get(share_token=str(token))
         except ZipShare.DoesNotExist:
             raise NotFound('ZIP share not found.')
-
         if zs.status == ZipShare.Status.REVOKED:
             raise NotFound('This ZIP share link has been revoked.')
         if zs.status == ZipShare.Status.EXPIRED or zs.is_expired:
@@ -579,7 +579,6 @@ class FileRequestListView(APIView):
         status_filter = request.query_params.get('status', '').strip()
         if status_filter in [c[0] for c in FileRequest.Status.choices]:
             qs = qs.filter(status=status_filter)
-
         paginator = SharePagination()
         page      = paginator.paginate_queryset(qs, request)
         return success_response(data={
@@ -640,7 +639,152 @@ class FileRequestDetailView(APIView):
         return success_response(message='File request closed.')
 
 
-# ─── Public per-recipient upload ──────────────────────────────────────────────
+# ─── Public per-recipient OTP endpoints ──────────────────────────────────────
+
+class SendOTPView(APIView):
+    """
+    POST /api/sharing/requests/upload/<token>/send-otp/
+
+    Generates a fresh OTP and emails it to the recipient.
+    Called automatically when the public upload page loads, and on resend.
+
+    Behaviour:
+    - If OTP already sent and still fresh (within cooldown): return wait_seconds
+      without generating a new code so the previous one stays valid.
+    - If cooldown elapsed: generate a new OTP and send it.
+    - Respects hourly send cap (OTP_MAX_SENDS_HOUR).
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, token):
+        try:
+            recipient = get_valid_recipient(str(token))
+        except ValueError as e:
+            raise NotFound(str(e))
+
+        # Hard hourly cap
+        if recipient.hourly_sends_exceeded:
+            return success_response(
+                data={
+                    'sent':         False,
+                    'wait_seconds': 0,
+                    'hourly_limit': True,
+                },
+                message=(
+                    f'Too many verification emails sent this hour '
+                    f'(max {OTP_MAX_SENDS_HOUR}). Please try again later.'
+                ),
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        # Cooldown — return wait time without regenerating the existing code
+        if not recipient.can_resend_otp:
+            wait = recipient.resend_wait_seconds
+            return success_response(
+                data={
+                    'sent':            False,
+                    'wait_seconds':    wait,
+                    'expires_minutes': OTP_EXPIRY_MINUTES,
+                },
+                message=f'Please wait {wait} seconds before requesting a new code.',
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        # Generate OTP and dispatch email
+        plaintext = recipient.generate_otp()
+        req       = recipient.file_request
+        owner_name = getattr(req.owner, 'full_name', None) or req.owner.email
+
+        try:
+            send_otp_email(
+                recipient_email=recipient.email,
+                otp_code=plaintext,
+                owner_name=owner_name,
+                title=req.title,
+            )
+            logger.info('OTP sent to %s for request %s', recipient.email, req.id)
+        except Exception:
+            logger.exception('SendOTPView: email send failed for recipient %s', recipient.id)
+            # Don't expose delivery failure — OTP is still valid in the DB
+            # so the user can try resend after cooldown.
+
+        return success_response(
+            data={
+                'sent':            True,
+                'wait_seconds':    OTP_RESEND_COOLDOWN,
+                'expires_minutes': OTP_EXPIRY_MINUTES,
+            },
+            message=f'A verification code has been sent to {recipient.email}.',
+            status_code=status.HTTP_200_OK,
+        )
+
+
+class VerifyOTPView(APIView):
+    """
+    POST /api/sharing/requests/upload/<token>/verify-otp/
+    Body: { "otp": "483291" }
+
+    Verifies the submitted OTP.
+    On success: opens a 30-minute verified session and destroys the hash.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, token):
+        try:
+            recipient = get_valid_recipient(str(token))
+        except ValueError as e:
+            raise NotFound(str(e))
+
+        otp_input = str(request.data.get('otp', '')).strip()
+        if not otp_input:
+            raise ValidationError({'otp': 'OTP is required.'})
+
+        # Already in an active verified session — no need to re-verify
+        if recipient.is_otp_verified:
+            return success_response(
+                data={
+                    'verified':       True,
+                    'session_minutes': OTP_SESSION_MINUTES,
+                },
+                message='Already verified.',
+            )
+
+        success, error_msg = recipient.verify_otp(otp_input)
+
+        if not success:
+            logger.warning(
+                'VerifyOTPView: failed attempt for recipient %s (attempt %s)',
+                recipient.id, recipient.otp_attempts,
+            )
+            # Generic message to prevent enumeration
+            raise ValidationError({'otp': error_msg or 'Invalid or expired OTP.'})
+
+        logger.info('OTP verified for recipient %s (request %s)', recipient.id, recipient.file_request_id)
+
+        return success_response(
+            data={
+                'verified':        True,
+                'session_minutes': OTP_SESSION_MINUTES,
+            },
+            message='Email verified successfully.',
+        )
+
+
+class ResendOTPView(APIView):
+    """
+    POST /api/sharing/requests/upload/<token>/resend-otp/
+
+    Convenience alias for SendOTPView — generates a new OTP and emails it.
+    Shares the same rate-limiting logic.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, token):
+        # Delegate entirely to SendOTPView
+        return SendOTPView().post(request, token=token)
+
+
+# ─── Public per-recipient info ────────────────────────────────────────────────
 
 class PublicRecipientInfoView(APIView):
     permission_classes = [AllowAny]
@@ -650,46 +794,34 @@ class PublicRecipientInfoView(APIView):
             recipient = get_valid_recipient(str(token))
         except ValueError as e:
             raise NotFound(str(e))
-        req       = recipient.file_request
-        #    remaining_slots is per-request total, not per-recipient.
-        #    Use the total non-rejected submission count vs max_files.
-        total_submitted = SubmissionInbox.objects.filter(
-            file_request=req,
-            status__in=[
-                SubmissionInbox.Status.PENDING,
-                SubmissionInbox.Status.APPROVED,
-                SubmissionInbox.Status.NEEDS_ACTION,
-                SubmissionInbox.Status.COMPLETE,
-            ]
-        ).count()
-        remaining = max(0, req.max_files - total_submitted)
-        # Per-recipient: how many files this specific recipient has uploaded
-        recipient_submitted = SubmissionInbox.objects.filter(
-            recipient=recipient,
-            status__in=[
-                SubmissionInbox.Status.PENDING,
-                SubmissionInbox.Status.APPROVED,
-                SubmissionInbox.Status.NEEDS_ACTION,
-                SubmissionInbox.Status.COMPLETE,
-            ]
-        ).count()
+
+        req = recipient.file_request
+
+        # Per-recipient slot calculation (FIX: each recipient has their own quota)
+        recipient_submitted = _recipient_submission_count(recipient)
+        remaining = max(0, req.max_files - recipient_submitted)
+
         data = PublicRequestInfoSerializer({
-            'id':                     req.id,
-            'title':                  req.title,
-            'description':            req.description,
-            'owner_name':             getattr(req.owner, 'full_name', None) or req.owner.email,
-            'expires_at':             req.expires_at,
-            'max_files':              req.max_files,
-            'allowed_extensions':     req.allowed_extensions,
-            'required_files':         req.required_files,
-            'submission_count':       total_submitted,
-            'remaining_slots':        remaining,
-            'recipient_email':        recipient.email,
-            'recipient_name':         recipient.name,
-            'recipient_upload_count': recipient_submitted,
+            'id':                      req.id,
+            'title':                   req.title,
+            'description':             req.description,
+            'owner_name':              getattr(req.owner, 'full_name', None) or req.owner.email,
+            'expires_at':              req.expires_at,
+            'max_files':               req.max_files,
+            'allowed_extensions':      req.allowed_extensions,
+            'required_files':          req.required_files,
+            # submission_count = THIS recipient's count (not global)
+            'submission_count':        recipient_submitted,
+            'remaining_slots':         remaining,
+            'recipient_email':         recipient.email,
+            'recipient_name':          recipient.name,
+            'recipient_upload_count':  recipient_submitted,
         }).data
+
         return success_response(data=data)
 
+
+# ─── Public per-recipient upload ──────────────────────────────────────────────
 
 class PublicRecipientUploadView(APIView):
     permission_classes = [AllowAny]
@@ -699,31 +831,46 @@ class PublicRecipientUploadView(APIView):
             recipient = get_valid_recipient(str(token))
         except ValueError as e:
             raise ValidationError({'token': str(e)})
+
         req = recipient.file_request
 
-        #    count ALL active submissions across the entire request (not
-        #    just PENDING+APPROVED) to get the true remaining slot count.
-        current_count = SubmissionInbox.objects.filter(
-            file_request=req,
-            status__in=[
-                SubmissionInbox.Status.PENDING,
-                SubmissionInbox.Status.APPROVED,
-                SubmissionInbox.Status.NEEDS_ACTION,
-                SubmissionInbox.Status.COMPLETE,
-            ]
-        ).count()
+        # ── OTP gate ──────────────────────────────────────────────────────────
+        if not recipient.is_otp_verified:
+            raise ValidationError({
+                'otp': (
+                    'Email verification required. '
+                    'Please verify the OTP sent to your email before uploading.'
+                )
+            })
+
+        # ── Per-recipient slot check (FIX: quota is per recipient, not shared) ─
+        current_count = _recipient_submission_count(recipient)
 
         if current_count >= req.max_files:
-            raise ValidationError({'files': f'Request limit of {req.max_files} files reached.'})
+            raise ValidationError({
+                'files': (
+                    f'You have already uploaded the maximum of {req.max_files} '
+                    f'file(s) allowed for this request.'
+                )
+            })
+
         files = request.FILES.getlist('files')
         if not files:
             raise ValidationError({'files': 'No files provided.'})
+
         remaining_slots = req.max_files - current_count
         if len(files) > remaining_slots:
-            raise ValidationError({'files': f'Only {remaining_slots} more file(s) can be uploaded.'})
+            raise ValidationError({
+                'files': (
+                    f'You can upload {remaining_slots} more file(s). '
+                    f'You submitted {len(files)}.'
+                )
+            })
+
         ip      = _get_client_ip(request)
         created = []
         errors  = []
+
         for f in files:
             validation_errors, mime = _validate_file(f, req.allowed_extensions or None)
             if validation_errors:
@@ -732,36 +879,45 @@ class PublicRecipientUploadView(APIView):
             try:
                 clean_name  = sanitize_filename(f.name)
                 file_record = File.objects.create(
-                    owner=req.owner, original_name=clean_name, file=f,
-                    file_size=f.size, mime_type=mime, scan_status=File.ScanStatus.PENDING,
+                    owner=req.owner,
+                    original_name=clean_name,
+                    file=f,
+                    file_size=f.size,
+                    mime_type=mime,
+                    scan_status=File.ScanStatus.PENDING,
                 )
                 create_submission(
-                    owner=req.owner, source_type=SubmissionInbox.SourceType.FILE_REQUEST,
-                    original_filename=clean_name, file_size=f.size, mime_type=mime,
-                    submitter_email=recipient.email, submitter_name=recipient.name,
-                    submitter_ip=ip, file_request=req, recipient=recipient, file=file_record,
+                    owner=req.owner,
+                    source_type=SubmissionInbox.SourceType.FILE_REQUEST,
+                    original_filename=clean_name,
+                    file_size=f.size,
+                    mime_type=mime,
+                    submitter_email=recipient.email,
+                    submitter_name=recipient.name,
+                    submitter_ip=ip,
+                    file_request=req,
+                    recipient=recipient,
+                    file=file_record,
                 )
                 created.append({'filename': clean_name, 'size': f.size, 'scan_status': 'pending'})
-
-                #    use dispatch_scan instead of apply_async(queue='file_scan').
-                #    dispatch_scan routes to the default 'celery' queue via task_routes
-                #    and falls back to a synchronous scan if the broker is unavailable.
                 try:
                     dispatch_scan(str(file_record.id))
                 except Exception:
                     logger.exception('Scan dispatch failed for file %s', file_record.id)
-
             except Exception as exc:
                 logger.exception('Upload failed for %s', f.name)
                 errors.append({'file': f.name, 'errors': [str(exc)]})
+
         if created:
             recipient.record_upload(ip=ip)
+
         if not created:
             return success_response(
                 data={'submitted': 0, 'errors': errors},
                 message='No files uploaded.',
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
+
         return success_response(
             data={'submitted': len(created), 'files': created, 'errors': errors or None},
             message=f'{len(created)} file(s) uploaded and queued for security scanning.',
@@ -772,13 +928,6 @@ class PublicRecipientUploadView(APIView):
 # ─── Public scan-status polling ───────────────────────────────────────────────
 
 class PublicUploadStatusView(APIView):
-    """
-    GET /api/sharing/public-upload-status/<token>/
-
-    Public endpoint — no auth required.
-    Returns the latest scan_status for every file uploaded by a given
-    recipient token.  The frontend polls this until all scans settle.
-    """
     permission_classes = [AllowAny]
 
     def get(self, request, token):
@@ -787,7 +936,6 @@ class PublicUploadStatusView(APIView):
         except ValueError as e:
             raise NotFound(str(e))
 
-        # All inbox submissions for this recipient, newest first
         submissions = (
             SubmissionInbox.objects
             .filter(recipient=recipient)
@@ -858,15 +1006,10 @@ class PublicFileRequestUploadView(APIView):
                     submitter_ip=ip, file_request=req, file=file_record,
                 )
                 created.append(str(file_record.id))
-
-                #    use dispatch_scan instead of apply_async(queue='file_scan').
-                #    dispatch_scan routes to the default 'celery' queue via task_routes
-                #    and falls back to a synchronous scan if the broker is unavailable.
                 try:
                     dispatch_scan(str(file_record.id))
                 except Exception:
                     logger.exception('Scan dispatch failed for file %s', file_record.id)
-
             except Exception as exc:
                 errors.append({'file': f.name, 'errors': [str(exc)]})
         return success_response(
@@ -896,12 +1039,10 @@ class SubmissionInboxListView(APIView):
         scan_filter = request.query_params.get('scan_status', '').strip()
         if scan_filter:
             qs = qs.filter(file__scan_status=scan_filter)
-        # Optional: filter by file_request
         file_request_id = request.query_params.get('file_request_id', '').strip()
         if file_request_id:
             qs = qs.filter(file_request__id=file_request_id)
 
-        # Compute status + scan counts BEFORE pagination (on full qs)
         counts        = qs.values('status').annotate(n=Count('id'))
         status_counts = {row['status']: row['n'] for row in counts}
         scan_counts   = (
@@ -913,7 +1054,6 @@ class SubmissionInboxListView(APIView):
             for row in scan_counts if row['file__scan_status']
         }
 
-        # paginate the inbox 
         paginator = InboxPagination()
         page      = paginator.paginate_queryset(qs, request)
         return success_response(data={
@@ -955,11 +1095,6 @@ class ReviewSubmissionView(APIView):
 
 
 class DeleteInfectedFileView(APIView):
-    """
-    DELETE /api/sharing/inbox/<pk>/delete-file/
-    Hard-deletes the file AND inbox row.
-    Restricted to infected or scan_failed files only (backwards compat).
-    """
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, pk):
@@ -978,10 +1113,6 @@ class DeleteInfectedFileView(APIView):
 
 
 class RemoveInboxItemView(APIView):
-    """
-    DELETE /api/sharing/inbox/<pk>/remove/
-    Universal inbox item removal — works for ALL scan statuses.
-    """
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, pk):

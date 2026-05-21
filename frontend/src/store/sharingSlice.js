@@ -218,7 +218,6 @@ export const reviewInboxItem = createAsyncThunk(
   },
 )
 
-/** Hard-delete an infected/scan_failed file + its inbox row. */
 export const deleteInfectedFile = createAsyncThunk(
   'sharing/deleteInfectedFile',
   async (submissionId, { rejectWithValue }) => {
@@ -231,10 +230,6 @@ export const deleteInfectedFile = createAsyncThunk(
   },
 )
 
-/**
- * Remove any inbox entry (with smart file handling).
- * Infected files → hard-deleted.  Safe files → only the row is removed.
- */
 export const removeInboxItem = createAsyncThunk(
   'sharing/removeInboxItem',
   async (submissionId, { rejectWithValue }) => {
@@ -251,33 +246,27 @@ export const removeInboxItem = createAsyncThunk(
 const sharingSlice = createSlice({
   name: 'sharing',
   initialState: {
-    // All owner files
     allFiles:        [],
     allFilesCount:   0,
     allFilesLoading: false,
 
-    // Single-file shares
     shares:     [],
     pagination: { current_page: 1, total_pages: 1, count: 0, next: null, previous: null },
     sharing:    false,
     error:      null,
 
-    // ZIP shares
     zipShares:     [],
     zipPagination: { current_page: 1, total_pages: 1, count: 0, next: null, previous: null },
     zipSharing:    false,
 
-    // Analytics
     globalAnalytics:  null,
     shareAnalytics:   null,
     analyticsLoading: false,
 
-    // Requests
     requests:          [],
     requestPagination: { current_page: 1, total_pages: 1, count: 0 },
     requestLoading:    false,
 
-    // Inbox
     inbox:             [],
     inboxPagination:   { current_page: 1, total_pages: 1, count: 0 },
     inboxStatusCounts: {},
@@ -384,9 +373,14 @@ const sharingSlice = createSlice({
         s.requestLoading = false
       })
       .addCase(fetchRequests.rejected,  (s) => { s.requestLoading = false })
-      .addCase(createRequest.fulfilled, (s, { payload }) => {
-        if (payload?.id) s.requests.unshift(payload)
-      })
+      // FIX: createRequest now manages requestLoading and error so the
+      // panel never gets stuck in a loading state after form submission.
+      // The fulfilled case no longer does an optimistic unshift — the panel
+      // calls fetchRequests({ page: 1 }) immediately after, which populates
+      // the list correctly without any race condition.
+      .addCase(createRequest.pending,   (s) => { s.requestLoading = true; s.error = null })
+      .addCase(createRequest.fulfilled, (s) => { s.requestLoading = false })
+      .addCase(createRequest.rejected,  (s, { payload }) => { s.requestLoading = false; s.error = payload })
       .addCase(closeRequest.fulfilled, (s, { payload: id }) => {
         s.requests = s.requests.filter((r) => r.id !== id)
       })
@@ -411,7 +405,6 @@ const sharingSlice = createSlice({
         const idx = s.inbox.findIndex((x) => x.id === payload.id)
         if (idx !== -1) s.inbox[idx] = payload
       })
-      // deleteInfectedFile — legacy (still works for backwards compat)
       .addCase(deleteInfectedFile.pending,   (s) => { s.deletingFile = true })
       .addCase(deleteInfectedFile.fulfilled, (s, { payload: id }) => {
         s.inbox        = s.inbox.filter((x) => x.id !== id)
@@ -421,10 +414,9 @@ const sharingSlice = createSlice({
         s.deletingFile = false
         s.error        = payload
       })
-      // removeInboxItem — universal remove
       .addCase(removeInboxItem.pending,   (s) => { s.removingItem = true })
       .addCase(removeInboxItem.fulfilled, (s, { payload: id }) => {
-        s.inbox       = s.inbox.filter((x) => x.id !== id)
+        s.inbox        = s.inbox.filter((x) => x.id !== id)
         s.removingItem = false
       })
       .addCase(removeInboxItem.rejected,  (s, { payload }) => {

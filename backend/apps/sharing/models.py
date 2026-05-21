@@ -1,14 +1,17 @@
 import uuid
+import secrets
+import hashlib
 import zipfile
 import io
 import os
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from datetime import timedelta
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# FileShare — one share token per recipient (single-file)
+# FileShare
 # ──────────────────────────────────────────────────────────────────────────────
 
 class FileShare(models.Model):
@@ -28,9 +31,6 @@ class FileShare(models.Model):
     shared_at       = models.DateTimeField(default=timezone.now)
     accessed_at     = models.DateTimeField(null=True, blank=True)
     download_count  = models.PositiveIntegerField(default=0)
-    # ✅ FIX: view_count retained on model (existing DB column) but no longer
-    #    surfaced in the API. Removing the DB column would require a migration;
-    #    we simply stop exposing it in serializers / analytics views.
     view_count      = models.PositiveIntegerField(default=0)
     last_ip         = models.GenericIPAddressField(null=True, blank=True)
     last_user_agent = models.CharField(max_length=512, blank=True)
@@ -71,7 +71,6 @@ class FileShare(models.Model):
         self.save(update_fields=['accessed_at', 'download_count', 'last_ip', 'last_user_agent'])
 
     def mark_viewed(self, ip=None, user_agent=''):
-        # Still tracked internally but no longer exposed in the API.
         self.view_count     += 1
         self.last_ip         = ip
         self.last_user_agent = (user_agent or '')[:512]
@@ -83,7 +82,7 @@ class FileShare(models.Model):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# ZipShare — multi-file share bundled as a ZIP per recipient
+# ZipShare
 # ──────────────────────────────────────────────────────────────────────────────
 
 class ZipShare(models.Model):
@@ -93,9 +92,7 @@ class ZipShare(models.Model):
         REVOKED = 'revoked', 'Revoked'
 
     id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    shared_by       = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='zip_shares'
-    )
+    shared_by       = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='zip_shares')
     files           = models.ManyToManyField('files.File', related_name='zip_shares')
     recipient_email = models.EmailField()
     share_token     = models.UUIDField(unique=True, default=uuid.uuid4, editable=False, db_index=True)
@@ -108,7 +105,7 @@ class ZipShare(models.Model):
     download_count  = models.PositiveIntegerField(default=0)
     last_ip         = models.GenericIPAddressField(null=True, blank=True)
     last_user_agent = models.CharField(max_length=512, blank=True)
-    file_count      = models.PositiveIntegerField(default=0)  # denormalised for display
+    file_count      = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = 'zip_shares'
@@ -191,9 +188,7 @@ class FileRequest(models.Model):
 
     id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner           = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='file_requests',
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='file_requests',
     )
     title           = models.CharField(max_length=255)
     description     = models.TextField(blank=True, max_length=2000)
@@ -226,14 +221,7 @@ class FileRequest(models.Model):
 
     @property
     def submission_count(self):
-        """
-        ✅ FIX: Count ALL non-rejected, non-deleted submissions for this
-        request — not just PENDING + APPROVED.  NEEDS_ACTION and COMPLETE
-        are legitimate states that represent real uploaded files.
-
-        This is the authoritative count used to check remaining_slots and
-        to display "X of Y files received" on the request card.
-        """
+        """Total non-rejected submissions across ALL recipients (dashboard aggregate)."""
         return self.submissions.filter(
             status__in=[
                 SubmissionInbox.Status.PENDING,
@@ -249,15 +237,24 @@ class FileRequest(models.Model):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# RequestRecipient — unique upload token per recipient
+# OTP constants
+# ──────────────────────────────────────────────────────────────────────────────
+
+OTP_EXPIRY_MINUTES   = 10
+OTP_SESSION_MINUTES  = 30
+OTP_MAX_ATTEMPTS     = 5
+OTP_RESEND_COOLDOWN  = 60    # seconds between resends
+OTP_MAX_SENDS_HOUR   = 5     # max OTP emails per hour per recipient
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# RequestRecipient — unique upload token per recipient + OTP verification
 # ──────────────────────────────────────────────────────────────────────────────
 
 class RequestRecipient(models.Model):
     id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     file_request = models.ForeignKey(
-        FileRequest,
-        on_delete=models.CASCADE,
-        related_name='recipients',
+        FileRequest, on_delete=models.CASCADE, related_name='recipients',
     )
     email        = models.EmailField()
     name         = models.CharField(max_length=255, blank=True)
@@ -267,6 +264,17 @@ class RequestRecipient(models.Model):
     first_uploaded_at = models.DateTimeField(null=True, blank=True)
     upload_count      = models.PositiveIntegerField(default=0)
     last_ip           = models.GenericIPAddressField(null=True, blank=True)
+
+    # ── OTP fields ────────────────────────────────────────────────────────────
+    # Stored as SHA-256 hash — never plaintext.
+    otp_code_hash    = models.CharField(max_length=64, blank=True)
+    otp_expires_at   = models.DateTimeField(null=True, blank=True)
+    otp_verified     = models.BooleanField(default=False)
+    otp_attempts     = models.PositiveIntegerField(default=0)
+    otp_last_sent_at = models.DateTimeField(null=True, blank=True)
+    otp_sends_hour   = models.PositiveIntegerField(default=0)
+    otp_hour_window  = models.DateTimeField(null=True, blank=True)
+    verified_until   = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table        = 'request_recipients'
@@ -287,10 +295,8 @@ class RequestRecipient(models.Model):
     @property
     def files_submitted_count(self):
         """
-        ✅ FIX: Accurate per-recipient file count from the inbox.
-        upload_count only tracks POST requests — if a file is later rejected
-        or removed, upload_count does not decrement. This property queries
-        the inbox for the current accurate count.
+        Accurate per-recipient inbox count.
+        Used for the per-recipient upload badge in the owner dashboard.
         """
         return self.submissions.filter(
             status__in=[
@@ -300,6 +306,109 @@ class RequestRecipient(models.Model):
                 SubmissionInbox.Status.COMPLETE,
             ]
         ).count()
+
+    # ── OTP helpers ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _hash_otp(plaintext: str) -> str:
+        return hashlib.sha256(plaintext.encode()).hexdigest()
+
+    def generate_otp(self) -> str:
+        """
+        Generate a cryptographically secure 6-digit OTP.
+        Stores the SHA-256 hash, resets attempt counter.
+        Returns plaintext for emailing.
+        """
+        plaintext = str(secrets.randbelow(900000) + 100000)  # 100000-999999
+        now = timezone.now()
+
+        # Reset hourly window if expired
+        if (not self.otp_hour_window or
+                now >= self.otp_hour_window + timedelta(hours=1)):
+            self.otp_sends_hour = 0
+            self.otp_hour_window = now
+
+        self.otp_code_hash    = self._hash_otp(plaintext)
+        self.otp_expires_at   = now + timedelta(minutes=OTP_EXPIRY_MINUTES)
+        self.otp_verified     = False
+        self.otp_attempts     = 0
+        self.otp_last_sent_at = now
+        self.otp_sends_hour  += 1
+        self.verified_until   = None  # invalidate prior verified session
+
+        self.save(update_fields=[
+            'otp_code_hash', 'otp_expires_at', 'otp_verified',
+            'otp_attempts', 'otp_last_sent_at',
+            'otp_sends_hour', 'otp_hour_window', 'verified_until',
+        ])
+        return plaintext
+
+    def verify_otp(self, plaintext: str) -> tuple:
+        """
+        Verify a submitted OTP.
+        Returns (success: bool, error_message: str).
+        On success: sets otp_verified=True, opens a 30-min upload session,
+        destroys the stored hash.
+        """
+        now = timezone.now()
+
+        if self.otp_attempts >= OTP_MAX_ATTEMPTS:
+            return False, 'Too many incorrect attempts. Please request a new OTP.'
+
+        if not self.otp_expires_at or now > self.otp_expires_at:
+            return False, 'Invalid or expired OTP.'
+
+        if self._hash_otp(plaintext) != self.otp_code_hash:
+            self.otp_attempts += 1
+            self.save(update_fields=['otp_attempts'])
+            remaining = OTP_MAX_ATTEMPTS - self.otp_attempts
+            if remaining <= 0:
+                return False, 'Too many incorrect attempts. Please request a new OTP.'
+            return False, 'Invalid or expired OTP.'
+
+        # Correct OTP — open verified session and destroy hash
+        self.otp_verified   = True
+        self.otp_code_hash  = ''
+        self.otp_expires_at = None
+        self.otp_attempts   = 0
+        self.verified_until = now + timedelta(minutes=OTP_SESSION_MINUTES)
+        self.save(update_fields=[
+            'otp_verified', 'otp_code_hash',
+            'otp_expires_at', 'otp_attempts', 'verified_until',
+        ])
+        return True, ''
+
+    @property
+    def is_otp_verified(self) -> bool:
+        """True only if OTP was verified AND the 30-min session is still active."""
+        if not self.otp_verified:
+            return False
+        if not self.verified_until:
+            return False
+        return timezone.now() < self.verified_until
+
+    @property
+    def can_resend_otp(self) -> bool:
+        if not self.otp_last_sent_at:
+            return True
+        elapsed = (timezone.now() - self.otp_last_sent_at).total_seconds()
+        return elapsed >= OTP_RESEND_COOLDOWN
+
+    @property
+    def resend_wait_seconds(self) -> int:
+        if not self.otp_last_sent_at:
+            return 0
+        elapsed = (timezone.now() - self.otp_last_sent_at).total_seconds()
+        return max(0, int(OTP_RESEND_COOLDOWN - elapsed))
+
+    @property
+    def hourly_sends_exceeded(self) -> bool:
+        now = timezone.now()
+        if not self.otp_hour_window:
+            return False
+        if now >= self.otp_hour_window + timedelta(hours=1):
+            return False
+        return self.otp_sends_hour >= OTP_MAX_SENDS_HOUR
 
     def record_upload(self, ip=None):
         if not self.first_uploaded_at:
@@ -328,44 +437,31 @@ class SubmissionInbox(models.Model):
 
     id    = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='inbox_submissions',
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='inbox_submissions',
     )
-
     source_type  = models.CharField(max_length=30, choices=SourceType.choices)
     file_request = models.ForeignKey(
-        FileRequest,
-        null=True, blank=True,
-        on_delete=models.SET_NULL,
-        related_name='submissions',
+        FileRequest, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='submissions',
     )
     recipient = models.ForeignKey(
-        RequestRecipient,
-        null=True, blank=True,
-        on_delete=models.SET_NULL,
-        related_name='submissions',
+        RequestRecipient, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='submissions',
     )
-
     submitter_email = models.EmailField(blank=True)
     submitter_name  = models.CharField(max_length=255, blank=True)
     submitter_ip    = models.GenericIPAddressField(null=True, blank=True)
-
     file = models.ForeignKey(
-        'files.File',
-        null=True, blank=True,
-        on_delete=models.SET_NULL,
-        related_name='inbox_entry',
+        'files.File', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='inbox_entry',
     )
     original_filename = models.CharField(max_length=255)
     file_size         = models.BigIntegerField(default=0)
     mime_type         = models.CharField(max_length=100, blank=True)
-
     status           = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     review_note      = models.TextField(blank=True, max_length=1000)
     rejection_reason = models.TextField(blank=True, max_length=1000)
     reviewed_at      = models.DateTimeField(null=True, blank=True)
-
     submitted_at = models.DateTimeField(default=timezone.now, db_index=True)
     updated_at   = models.DateTimeField(auto_now=True)
 
@@ -376,8 +472,6 @@ class SubmissionInbox(models.Model):
             models.Index(fields=['owner', 'status']),
             models.Index(fields=['owner', 'source_type']),
             models.Index(fields=['file_request', 'status']),
-            # ✅ FIX: added index for recipient lookups (used heavily in
-            #    per-recipient count queries)
             models.Index(fields=['recipient', 'status']),
         ]
 

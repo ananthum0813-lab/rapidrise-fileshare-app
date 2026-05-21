@@ -71,7 +71,14 @@ export const submitRecipientUpload = (token, formData, config = {}) =>
     headers: { 'Content-Type': undefined },
     ...config,
   })
+export const sendRecipientOTP = (token) =>
+  publicApi.post(`${SHARING}/requests/upload/${token}/send-otp/`)
 
+export const verifyRecipientOTP = (token, otp) =>
+  publicApi.post(`${SHARING}/requests/upload/${token}/verify-otp/`, { otp })
+
+export const resendRecipientOTP = (token) =>
+  publicApi.post(`${SHARING}/requests/upload/${token}/resend-otp/`)
 /**
  * Poll the latest scan statuses for files uploaded via a recipient token.
  * Public endpoint — no auth required.

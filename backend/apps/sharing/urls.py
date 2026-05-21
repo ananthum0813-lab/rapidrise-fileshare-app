@@ -30,6 +30,10 @@ from .views import (
     ReviewSubmissionView,
     DeleteInfectedFileView,
     RemoveInboxItemView,
+    # OTP endpoints
+    SendOTPView,
+    VerifyOTPView,
+    ResendOTPView,
 )
 
 urlpatterns = [
@@ -40,32 +44,38 @@ urlpatterns = [
     path('check-duplicate/',   CheckDuplicateView.as_view(), name='check-duplicate'),
 
     # ── Single-file shares ────────────────────────────────────────────────────
-    path('',                           SharedFileListView.as_view(),      name='share-list'),
-    path('create/',                    CreateShareView.as_view(),         name='share-create'),
-    path('<uuid:pk>/revoke/',          RevokeShareView.as_view(),         name='share-revoke'),
-    path('<uuid:pk>/',                 DeleteShareView.as_view(),         name='share-delete'),
-    path('<uuid:pk>/analytics/',       ShareAnalyticsView.as_view(),      name='share-analytics'),
+    path('',                           SharedFileListView.as_view(),       name='share-list'),
+    path('create/',                    CreateShareView.as_view(),          name='share-create'),
+    path('<uuid:pk>/revoke/',          RevokeShareView.as_view(),          name='share-revoke'),
+    path('<uuid:pk>/',                 DeleteShareView.as_view(),          name='share-delete'),
+    path('<uuid:pk>/analytics/',       ShareAnalyticsView.as_view(),       name='share-analytics'),
     path('analytics/',                 GlobalShareAnalyticsView.as_view(), name='share-global-analytics'),
 
     # ── Multi-file ZIP shares ─────────────────────────────────────────────────
-    path('zip/',                       ZipShareListView.as_view(),        name='zip-list'),
-    path('zip/create/',                CreateZipShareView.as_view(),      name='zip-create'),
-    path('zip/<uuid:pk>/revoke/',      RevokeZipShareView.as_view(),      name='zip-revoke'),
-    path('zip/<uuid:pk>/',             DeleteZipShareView.as_view(),      name='zip-delete'),
+    path('zip/',                       ZipShareListView.as_view(),         name='zip-list'),
+    path('zip/create/',                CreateZipShareView.as_view(),       name='zip-create'),
+    path('zip/<uuid:pk>/revoke/',      RevokeZipShareView.as_view(),       name='zip-revoke'),
+    path('zip/<uuid:pk>/',             DeleteZipShareView.as_view(),       name='zip-delete'),
 
-    # ── Public ZIP share pages  (must come BEFORE public/<uuid:token>/) ───────
+    # ── Public ZIP share pages (must come BEFORE public/<uuid:token>/) ────────
     path('public/zip/<uuid:token>/',          PublicZipShareInfoView.as_view(),     name='public-zip-info'),
     path('public/zip/<uuid:token>/download/', PublicZipShareDownloadView.as_view(), name='public-zip-download'),
 
-    # ── Public single-file share pages ───────────────────────────────────────
-    path('public/<uuid:token>/',             PublicShareInfoView.as_view(),       name='public-share-info'),
-    path('public/<uuid:token>/download/',    PublicShareDownloadView.as_view(),   name='public-share-download'),
+    # ── Public single-file share pages ────────────────────────────────────────
+    path('public/<uuid:token>/',          PublicShareInfoView.as_view(),     name='public-share-info'),
+    path('public/<uuid:token>/download/', PublicShareDownloadView.as_view(), name='public-share-download'),
 
     # ── File requests (authenticated) ─────────────────────────────────────────
     path('requests/',            FileRequestListView.as_view(),   name='request-list'),
     path('requests/<uuid:pk>/',  FileRequestDetailView.as_view(), name='request-detail'),
 
-    # ── Per-recipient upload (public) ─────────────────────────────────────────
+    # ── Per-recipient OTP verification (public) ───────────────────────────────
+    # These must come BEFORE the generic upload/<token>/ routes.
+    path('requests/upload/<uuid:token>/send-otp/',   SendOTPView.as_view(),   name='recipient-send-otp'),
+    path('requests/upload/<uuid:token>/verify-otp/', VerifyOTPView.as_view(), name='recipient-verify-otp'),
+    path('requests/upload/<uuid:token>/resend-otp/', ResendOTPView.as_view(), name='recipient-resend-otp'),
+
+    # ── Per-recipient info + upload (public) ──────────────────────────────────
     path('requests/upload/<uuid:token>/',        PublicRecipientInfoView.as_view(),   name='recipient-info'),
     path('requests/upload/<uuid:token>/submit/', PublicRecipientUploadView.as_view(), name='recipient-upload'),
 
