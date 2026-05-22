@@ -1,16 +1,7 @@
 """
 apps/sharing/tasks.py
 ═══════════════════════════════════════════════════════════════════════════════
-Changes:
-  ✓ Removed hardcoded custom queue ('file_scan')
-  ✓ Works with normal Celery worker command:
-        celery -A config worker -l info
-  ✓ Better logging
-  ✓ Safer fallback execution
-  ✓ Keeps retry support
-  ✓ Keeps periodic recovery tasks
-  ✓ Fixed: uploaded_at (not created_at) in unstick query
-  ✓ Added: recover_stuck_files() — safe to call directly from Django shell
+Celery tasks related to file scanning and share expiration.
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
