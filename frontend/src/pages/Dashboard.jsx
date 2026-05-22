@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchFiles, fetchStorage } from '@/store/filesSlice'
 import { fetchShares, fetchZipShares, fetchGlobalAnalytics } from '@/store/sharingSlice'
-import { downloadFile, getFiles } from '@/api/filesApi'
+import { downloadFile, getFiles, getStorageDashboard, getFilesWithPageSize } from '@/api/filesApi'
 
 const timeAgo = (date) => {
   if (!date) return 'Unknown'
@@ -39,7 +39,104 @@ const getFileColor = (mimeType) => {
   return 'slate'
 }
 
-// ── Small hook: fetch a blob URL for a file that needs auth headers ──────────
+const CAT_META = {
+  Images:    { colour: '#6366f1', icon: 'fa-image' },
+  Videos:    { colour: '#8b5cf6', icon: 'fa-film' },
+  PDFs:      { colour: '#ef4444', icon: 'fa-file-pdf' },
+  Documents: { colour: '#2563eb', icon: 'fa-file-word' },
+  Archives:  { colour: '#f59e0b', icon: 'fa-file-zipper' },
+  Others:    { colour: '#94a3b8', icon: 'fa-file' },
+}
+
+// ── Activity helpers ──────────────────────────────────────────────────────────
+
+function buildActivityData(files) {
+  const days = []
+  const now  = new Date()
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(now.getDate() - i)
+    days.push({
+      label: d.toLocaleDateString('en-US', { weekday: 'short' }),
+      date:  d.toDateString(),
+      count: 0,
+    })
+  }
+  files.forEach((f) => {
+    if (!f.uploaded_at) return
+    const slot = days.find((d) => d.date === new Date(f.uploaded_at).toDateString())
+    if (slot) slot.count++
+  })
+  return days
+}
+
+// Returns { thisWeek, lastWeek, trend: 'up'|'down'|'same' }
+function calcWeekTrend(files) {
+  const now      = new Date()
+  const msPerDay = 86400000
+  let thisWeek = 0, lastWeek = 0
+  files.forEach((f) => {
+    if (!f.uploaded_at) return
+    const diffDays = (now - new Date(f.uploaded_at)) / msPerDay
+    if (diffDays < 7)        thisWeek++
+    else if (diffDays < 14)  lastWeek++
+  })
+  const trend = thisWeek > lastWeek ? 'up' : thisWeek < lastWeek ? 'down' : 'same'
+  return { thisWeek, lastWeek, trend }
+}
+
+function ActivityChart({ files }) {
+  const data   = buildActivityData(files)
+  const max    = Math.max(...data.map((d) => d.count), 1)
+  const chartH = 68
+  const barW   = 28
+  const gap    = 10
+  const totalW = data.length * (barW + gap) - gap
+
+  return (
+    <svg
+      viewBox={`0 0 ${totalW} ${chartH + 22}`}
+      className="w-full overflow-visible"
+      style={{ maxHeight: 96 }}
+    >
+      <defs>
+        <linearGradient id="dbBarGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="#6366f1" />
+          <stop offset="100%" stopColor="#8b5cf6" />
+        </linearGradient>
+      </defs>
+      {data.map((d, i) => {
+        const barH = max === 0 ? 2 : Math.max(3, (d.count / max) * chartH)
+        const x    = i * (barW + gap)
+        const y    = chartH - barH
+        return (
+          <g key={d.date}>
+            <rect
+              x={x} y={y} width={barW} height={barH} rx={5}
+              fill={d.count === 0 ? '#e2e8f0' : 'url(#dbBarGrad)'}
+            />
+            {d.count > 0 && (
+              <text
+                x={x + barW / 2} y={y - 4}
+                textAnchor="middle" fontSize="8" fill="#6366f1" fontWeight="700"
+              >
+                {d.count}
+              </text>
+            )}
+            <text
+              x={x + barW / 2} y={chartH + 15}
+              textAnchor="middle" fontSize="8.5" fill="#94a3b8" fontWeight="600"
+            >
+              {d.label}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+// ── Blob URL hook ─────────────────────────────────────────────────────────────
 function useFileBlobUrl(file) {
   const [blobUrl, setBlobUrl]     = useState(null)
   const [blobLoading, setLoading] = useState(false)
@@ -47,30 +144,21 @@ function useFileBlobUrl(file) {
   useEffect(() => {
     setBlobUrl(null)
     if (!file) return
-
     const isMedia =
-      file.mime_type?.includes('image') ||
-      file.mime_type?.includes('video') ||
-      file.mime_type?.includes('audio') ||
-      file.mime_type?.includes('pdf')
-
+      file.mime_type?.includes('image') || file.mime_type?.includes('video') ||
+      file.mime_type?.includes('audio') || file.mime_type?.includes('pdf')
     if (!isMedia) return
-
     let cancelled = false
     setLoading(true)
-
     downloadFile(file.id)
       .then(({ data }) => {
         if (!cancelled) {
-          const blob = new Blob([data], {
-            type: file.mime_type || data.type || 'application/octet-stream',
-          })
+          const blob = new Blob([data], { type: file.mime_type || data.type || 'application/octet-stream' })
           setBlobUrl(URL.createObjectURL(blob))
         }
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false) })
-
     return () => { cancelled = true }
   }, [file?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -81,14 +169,10 @@ function useFileBlobUrl(file) {
   return { blobUrl, blobLoading }
 }
 
-// ── Shared file detail modal ──────────────────────────────────────────────────
+// ── File detail modal ─────────────────────────────────────────────────────────
 function FileDetailModal({ file, shares, onClose, onDownload }) {
   const { blobUrl, blobLoading } = useFileBlobUrl(file)
-
-  const handleOpen = () => {
-    if (!blobUrl) return
-    window.open(blobUrl, '_blank')
-  }
+  const handleOpen = () => { if (blobUrl) window.open(blobUrl, '_blank') }
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -126,9 +210,7 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
                 <p className="text-xs text-gray-300">Loading video…</p>
               </div>
             ) : blobUrl ? (
-              <video controls className="w-full max-h-52" src={blobUrl}>
-                Your browser does not support video preview.
-              </video>
+              <video controls className="w-full max-h-52" src={blobUrl}>Your browser does not support video preview.</video>
             ) : null}
           </div>
         )}
@@ -158,15 +240,7 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
                 <iframe
                   src={`${blobUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&page=1`}
                   title={file.original_name}
-                  style={{
-                    height: '580px',
-                    border: 'none',
-                    display: 'block',
-                    position: 'absolute',
-                    top: '-46px',
-                    left: 0,
-                    width: '100%',
-                  }}
+                  style={{ height: '580px', border: 'none', display: 'block', position: 'absolute', top: '-46px', left: 0, width: '100%' }}
                 />
               </div>
             ) : (
@@ -178,10 +252,8 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
           </div>
         )}
 
-        {!file.mime_type?.includes('image') &&
-         !file.mime_type?.includes('video') &&
-         !file.mime_type?.includes('audio') &&
-         !file.mime_type?.includes('pdf') && (
+        {!file.mime_type?.includes('image') && !file.mime_type?.includes('video') &&
+         !file.mime_type?.includes('audio') && !file.mime_type?.includes('pdf') && (
           <div className="mb-6 p-6 bg-indigo-50 rounded-2xl text-center">
             <div className={`text-5xl text-${getFileColor(file.mime_type)}-600 mb-3`}>
               <i className={`fas ${getFileIcon(file.mime_type)}`}></i>
@@ -190,10 +262,8 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
           </div>
         )}
 
-        {(file.mime_type?.includes('image') ||
-          file.mime_type?.includes('video') ||
-          file.mime_type?.includes('audio') ||
-          file.mime_type?.includes('pdf')) && (
+        {(file.mime_type?.includes('image') || file.mime_type?.includes('video') ||
+          file.mime_type?.includes('audio') || file.mime_type?.includes('pdf')) && (
           <p className="font-bold text-slate-900 break-all text-sm text-center mb-4">{file.original_name}</p>
         )}
 
@@ -253,68 +323,56 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
   )
 }
 
+// ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const dispatch = useDispatch()
   const { user } = useSelector((s) => s.auth)
   const { files, storage, loading: filesLoading } = useSelector((s) => s.files)
   const { shares, pagination, zipShares, zipPagination, globalAnalytics } = useSelector((s) => s.sharing)
 
-  const [greeting, setGreeting]             = useState('')
-  const [searchQuery, setSearchQuery]       = useState('')
+  const [searchQuery, setSearchQuery]               = useState('')
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
-  const [selectedFile, setSelectedFile]     = useState(null)
-  const [highlightedIndex, setHighlightedIndex] = useState(-1)
+  const [selectedFile, setSelectedFile]             = useState(null)
+  const [highlightedIndex, setHighlightedIndex]     = useState(-1)
   const [selectedRecentFile, setSelectedRecentFile] = useState(null)
 
-  // ── Dedicated search state (not the Redux files slice) ────────────────────
-  const [searchResults,  setSearchResults]  = useState([])
-  const [searchLoading,  setSearchLoading]  = useState(false)
-  const debounceTimer = useRef(null)
-
+  const [searchResults, setSearchResults] = useState([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const debounceTimer  = useRef(null)
   const searchRef      = useRef(null)
   const searchInputRef = useRef(null)
 
+  const [storageDash, setStorageDash]           = useState(null)
+  const [activityFiles, setActivityFiles]       = useState([])
+  const [activityLoading, setActivityLoading]   = useState(false)
+
+  // ── Click-outside search ──────────────────────────────────────────────────
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (searchRef.current && !searchRef.current.contains(e.target)) {
-        setShowSearchDropdown(false)
-      }
+      if (searchRef.current && !searchRef.current.contains(e.target)) setShowSearchDropdown(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   const runSearch = useCallback(async (query) => {
-    if (!query.trim()) {
-      setSearchResults([])
-      setSearchLoading(false)
-      return
-    }
+    if (!query.trim()) { setSearchResults([]); setSearchLoading(false); return }
     setSearchLoading(true)
     try {
       const { data } = await getFiles(1, query.trim(), '-uploaded_at')
       setSearchResults(data?.data?.results?.slice(0, 8) ?? [])
-    } catch {
-      setSearchResults([])
-    } finally {
-      setSearchLoading(false)
-    }
+    } catch { setSearchResults([]) }
+    finally { setSearchLoading(false) }
   }, [])
 
   const handleSearchChange = (query) => {
     setSearchQuery(query)
     setHighlightedIndex(-1)
-
     if (!query.trim()) {
-      setShowSearchDropdown(false)
-      setSearchResults([])
-      clearTimeout(debounceTimer.current)
-      return
+      setShowSearchDropdown(false); setSearchResults([])
+      clearTimeout(debounceTimer.current); return
     }
-
-    setShowSearchDropdown(true)
-    setSearchLoading(true)
-
+    setShowSearchDropdown(true); setSearchLoading(true)
     clearTimeout(debounceTimer.current)
     debounceTimer.current = setTimeout(() => runSearch(query), 350)
   }
@@ -325,35 +383,72 @@ export default function Dashboard() {
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault()
-        setHighlightedIndex((prev) => (prev < searchResults.length - 1 ? prev + 1 : prev))
+        setHighlightedIndex((p) => (p < searchResults.length - 1 ? p + 1 : p))
         break
       case 'ArrowUp':
         e.preventDefault()
-        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1))
+        setHighlightedIndex((p) => (p > 0 ? p - 1 : -1))
         break
       case 'Enter':
         e.preventDefault()
         if (highlightedIndex >= 0 && searchResults[highlightedIndex]) {
           setSelectedFile(searchResults[highlightedIndex])
-          setShowSearchDropdown(false)
-          setSearchQuery('')
-          setSearchResults([])
+          setShowSearchDropdown(false); setSearchQuery(''); setSearchResults([])
         }
         break
       case 'Escape':
-        e.preventDefault()
-        setShowSearchDropdown(false)
-        break
-      default:
-        break
+        e.preventDefault(); setShowSearchDropdown(false); break
+      default: break
     }
   }
 
-  useEffect(() => {
-    const hour = new Date().getHours()
-    if (hour < 12) setGreeting('Good morning')
-    else if (hour < 17) setGreeting('Good afternoon')
-    else setGreeting('Good evening')
+  // ── Data fetches ──────────────────────────────────────────────────────────
+  const loadStorageDash = useCallback(async () => {
+    try {
+      const { data } = await getStorageDashboard()
+      setStorageDash(data.data)
+    } catch { /* silently fail */ }
+  }, [])
+
+  // ── Activity fetch: paginate until all files from last 7 days are loaded ───
+  // A single page_size=100 call misses users with >100 recent files.
+  // We keep fetching pages (newest-first, 100/page) and stop as soon as the
+  // oldest file on the current page predates the 7-day window, or there are
+  // no more pages. This ensures every upload in the chart window is counted,
+  // which also makes the Top Day insight accurate.
+  const loadActivityFiles = useCallback(async () => {
+    setActivityLoading(true)
+    try {
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - 7)
+      cutoff.setHours(0, 0, 0, 0)          // start of 7 days ago
+
+      let page      = 1
+      let collected = []
+
+      for (;;) {
+        const { data }   = await getFilesWithPageSize(page, '', '-uploaded_at', 100)
+        const results    = data?.data?.results    || []
+        const totalPages = data?.data?.total_pages ?? 1
+
+        if (results.length === 0) break
+        collected = [...collected, ...results]
+
+        // Once the oldest file on this page is before the cutoff, every
+        // subsequent page will be even older — safe to stop.
+        const oldest     = results[results.length - 1]
+        const oldestDate = oldest?.uploaded_at ? new Date(oldest.uploaded_at) : null
+
+        if (page >= totalPages || (oldestDate && oldestDate < cutoff)) break
+        page++
+      }
+
+      setActivityFiles(collected)
+    } catch {
+      setActivityFiles([]) // chart falls back to Redux slice via chartFiles
+    } finally {
+      setActivityLoading(false)
+    }
   }, [])
 
   useEffect(() => {
@@ -362,46 +457,88 @@ export default function Dashboard() {
     dispatch(fetchShares({ page: 1 }))
     dispatch(fetchZipShares({ page: 1 }))
     dispatch(fetchGlobalAnalytics())
-  }, [dispatch])
+    loadStorageDash()
+    loadActivityFiles()
+  }, [dispatch, loadStorageDash, loadActivityFiles])
 
   const handleDownload = async (file) => {
     try {
       const { data } = await downloadFile(file.id)
       const url = window.URL.createObjectURL(data)
       const a   = document.createElement('a')
-      a.href     = url
-      a.download = file.original_name
-      a.click()
+      a.href = url; a.download = file.original_name; a.click()
       window.URL.revokeObjectURL(url)
-    } catch {
-      alert('Download failed.')
-    }
+    } catch { alert('Download failed.') }
   }
 
+  // ── Derived values ────────────────────────────────────────────────────────
   const usedPercentage = storage ? Math.round((storage.used_bytes / storage.total_bytes) * 100) : 0
   const recentFiles    = files.slice(0, 5)
 
-  // ── FIX: Active shares count ──────────────────────────────────────────────
-  // The old logic counted only the current page of single-file shares in
-  // Redux state, completely missing ZIP shares and shares on other pages.
-  //
-  // Correct approach (priority order):
-  //   1. Use globalAnalytics.totals.active_count — the most accurate number,
-  //      already fetched on mount, covers both singles AND ZIPs across ALL pages.
-  //   2. Fall back to summing pagination.active_count fields if analytics not
-  //      yet loaded (avoids showing 0 on first render).
-  //   3. Last resort: count local state arrays (original buggy behaviour, kept
-  //      only as a safety net for the very brief window before any data loads).
   const activeShares = (() => {
-    // Prefer the analytics total — covers all pages, both singles and ZIPs
-    if (globalAnalytics?.totals?.active_count != null) {
-      return globalAnalytics.totals.active_count
-    }
-    // Fallback: sum current-page local arrays while analytics is loading
-    const singleActive = shares.filter((s) => s.status === 'active').length
-    const zipActive    = zipShares.filter((z) => z.status === 'active').length
-    return singleActive + zipActive
+    if (globalAnalytics?.totals?.active_count != null) return globalAnalytics.totals.active_count
+    return shares.filter((s) => s.status === 'active').length +
+           zipShares.filter((z) => z.status === 'active').length
   })()
+
+  const fileTypeBreakdown = (storageDash?.type_usage || []).map((row) => ({
+    label:  row.category,
+    count:  row.count,
+    bytes:  row.bytes,
+    colour: CAT_META[row.category]?.colour || '#94a3b8',
+    icon:   CAT_META[row.category]?.icon   || 'fa-file',
+  }))
+  const totalFileCount = fileTypeBreakdown.reduce((sum, t) => sum + t.count, 0)
+
+  // ── Activity: prefer the 100-file fetch, fall back to Redux files ─────────
+  // This ensures the chart always has data to render if files exist at all.
+  const chartFiles   = activityFiles.length > 0 ? activityFiles : files
+  const hasAnyFiles  = (storage?.file_count ?? 0) > 0
+  // Only show "no data" empty state if we genuinely have 0 files in the account
+  const showChart    = hasAnyFiles
+
+  // Week-over-week trend (uses chartFiles for the comparison)
+  const weekTrend = calcWeekTrend(chartFiles)
+
+  // Today's upload count from the best available source
+  const todayUploads = chartFiles.filter((f) => {
+    if (!f.uploaded_at) return false
+    return new Date(f.uploaded_at).toDateString() === new Date().toDateString()
+  }).length
+
+  // Top file type for the new "dominant type" badge
+  const topType = fileTypeBreakdown.length > 0
+    ? fileTypeBreakdown.reduce((a, b) => (b.count > a.count ? b : a))
+    : null
+
+  // ── Insights strip derived values ────────────────────────────────────────
+  // Average file size (bytes) across all typed files from storageDash
+  const totalBytes   = fileTypeBreakdown.reduce((s, t) => s + (t.bytes || 0), 0)
+  const avgFileBytes = totalFileCount > 0 ? Math.round(totalBytes / totalFileCount) : 0
+  const fmtBytes = (b) => {
+    if (!b) return '0 B'
+    const units = ['B', 'KB', 'MB', 'GB']
+    let v = b, i = 0
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+    return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+  }
+
+  // Most active upload day across chartFiles
+  const dayCounts = chartFiles.reduce((acc, f) => {
+    if (!f.uploaded_at) return acc
+    const day = new Date(f.uploaded_at).toLocaleDateString('en-US', { weekday: 'short' })
+    acc[day] = (acc[day] || 0) + 1
+    return acc
+  }, {})
+  const mostActiveDay = Object.keys(dayCounts).length > 0
+    ? Object.entries(dayCounts).sort((a, b) => b[1] - a[1])[0][0]
+    : null
+
+  // Shared ratio
+  const sharedFileIds = new Set(shares.filter((s) => s.status === 'active').map((s) => s.file_id))
+  const sharedRatio   = (storage?.file_count ?? 0) > 0
+    ? Math.round((sharedFileIds.size / storage.file_count) * 100)
+    : 0
 
   const avatarUrl = `https://ui-avatars.com/api/?name=${user?.first_name || 'User'}&background=6366f1&color=fff`
 
@@ -409,26 +546,34 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/40">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 
-        {/* Header */}
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between mb-8">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Dashboard</span>
+        {/* ── Header ───────────────────────────────────────────────────────── */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 shadow-md shadow-indigo-200">
+              <i className="fas fa-layer-group text-white text-base"></i>
             </div>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-              {greeting},{' '}
-              <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                {user?.first_name ?? 'User'}
-              </span>
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-            </p>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-lg font-bold text-slate-900 leading-tight">
+                  {user?.first_name ? `${user.first_name}'s Workspace` : 'My Workspace'}
+                </h1>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 border border-emerald-100">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
+                  Active
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                {todayUploads > 0 && (
+                  <span className="ml-2 text-indigo-500 font-medium">
+                    · {todayUploads} upload{todayUploads !== 1 ? 's' : ''} today
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {/* Search Bar */}
             <div className="relative flex-1 sm:flex-none" ref={searchRef}>
               <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
               <input
@@ -441,8 +586,6 @@ export default function Dashboard() {
                 onFocus={() => searchQuery.trim().length > 0 && setShowSearchDropdown(true)}
                 className="w-full sm:w-80 pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-transparent transition text-sm"
               />
-
-              {/* Search Dropdown */}
               {showSearchDropdown && (
                 <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 max-h-96 overflow-y-auto">
                   {searchLoading ? (
@@ -463,15 +606,11 @@ export default function Dashboard() {
                             <div
                               key={file.id}
                               onClick={() => {
-                                setSelectedFile(file)
-                                setShowSearchDropdown(false)
-                                setSearchQuery('')
-                                setSearchResults([])
+                                setSelectedFile(file); setShowSearchDropdown(false)
+                                setSearchQuery(''); setSearchResults([])
                               }}
                               onMouseEnter={() => setHighlightedIndex(index)}
-                              className={`p-4 cursor-pointer transition-colors ${
-                                highlightedIndex === index ? 'bg-indigo-50' : 'hover:bg-slate-50'
-                              }`}
+                              className={`p-4 cursor-pointer transition-colors ${highlightedIndex === index ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}
                             >
                               <div className="flex items-center gap-3">
                                 <div className={`w-10 h-10 rounded-lg bg-${getFileColor(file.mime_type)}-50 text-${getFileColor(file.mime_type)}-600 flex items-center justify-center text-sm flex-shrink-0`}>
@@ -519,14 +658,13 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
-
             <Link to="/settings">
               <img src={avatarUrl} alt="avatar" className="h-11 w-11 rounded-full ring-2 ring-white shadow-md cursor-pointer hover:opacity-80 transition" />
             </Link>
           </div>
         </div>
 
-        {/* Stats Grid */}
+        {/* ── Stats Grid ──────────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4 mb-6">
           <div className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
             <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 opacity-10 blur-2xl" />
@@ -538,7 +676,14 @@ export default function Dashboard() {
             </div>
             <p className="mt-4 text-3xl font-bold tracking-tight text-slate-900">{storage?.file_count ?? 0}</p>
             <p className="mt-1 text-xs text-slate-500">in your account</p>
-            <Link to="/files" className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:gap-2 transition-all">
+            {/* NEW: dominant type badge */}
+            {topType && (
+              <p className="mt-1 text-xs" style={{ color: topType.colour }}>
+                <i className={`fas ${topType.icon} mr-1`}></i>
+                Mostly {topType.label.toLowerCase()}
+              </p>
+            )}
+            <Link to="/files" className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:gap-2 transition-all">
               View All <i className="fas fa-arrow-right text-xs"></i>
             </Link>
           </div>
@@ -552,7 +697,6 @@ export default function Dashboard() {
               </div>
             </div>
             <p className="mt-4 text-3xl font-bold tracking-tight text-slate-900">{activeShares}</p>
-            {/* ✅ FIX: label clarifies this is singles + ZIPs combined */}
             <p className="mt-1 text-xs text-slate-500">singles &amp; ZIP shares</p>
             <Link to="/sharing" className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-sky-600 hover:gap-2 transition-all">
               View All <i className="fas fa-arrow-right text-xs"></i>
@@ -590,19 +734,21 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Bottom Grid */}
+        {/* ── Bottom Grid ─────────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
 
-          {/* Storage Overview */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between">
+          {/* ── Col 1: Storage Overview + File Types ─────────────────────── */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm self-start">
+            <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold text-slate-900">Storage Overview</h2>
               <button className="text-slate-400 hover:text-slate-600 transition">
                 <i className="fas fa-ellipsis-h"></i>
               </button>
             </div>
-            <div className="mt-6 flex items-center justify-center">
-              <div className="relative h-44 w-44">
+
+            {/* Donut — smaller than before (h-32 instead of h-40) */}
+            <div className="flex items-center justify-center">
+              <div className="relative h-32 w-32">
                 <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
                   <circle cx="50" cy="50" r="42" strokeWidth="10" className="fill-none stroke-slate-100" />
                   <circle
@@ -612,125 +758,348 @@ export default function Dashboard() {
                   />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-3xl font-bold text-slate-900">{usedPercentage}%</span>
-                  <span className="mt-1 text-xs text-slate-500">Used</span>
+                  <span className="text-2xl font-bold text-slate-900">{usedPercentage}%</span>
+                  <span className="text-[10px] text-slate-500">Used</span>
                 </div>
               </div>
             </div>
-            <div className="mt-6 space-y-3">
+
+            {/* Used / Free — tighter spacing */}
+            <div className="mt-3 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-indigo-500"></div>
-                  <span className="text-sm text-slate-600">Used Space</span>
+                  <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
+                  <span className="text-xs text-slate-600">Used Space</span>
                 </div>
-                <span className="text-sm font-semibold text-slate-900">{storage?.used_mb} MB</span>
+                <span className="text-xs font-semibold text-slate-900">{storage?.used_mb} MB</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-slate-200"></div>
-                  <span className="text-sm text-slate-600">Free Space</span>
+                  <div className="w-2 h-2 rounded-full bg-slate-200"></div>
+                  <span className="text-xs text-slate-600">Free Space</span>
                 </div>
-                <span className="text-sm font-semibold text-slate-900">
+                <span className="text-xs font-semibold text-slate-900">
                   {storage ? (storage.total_gb * 1024 - storage.used_mb) : 0} MB
                 </span>
               </div>
             </div>
-            <div className="mt-6 p-4 bg-emerald-50 rounded-xl border border-emerald-100">
-              <div className="flex items-center gap-2">
-                <i className="fas fa-check-circle text-emerald-600"></i>
-                <div>
-                  <p className="text-xs font-semibold text-emerald-900">Healthy Storage</p>
-                  <p className="text-xs text-emerald-700 mt-0.5">You're using less than 2% of your total storage</p>
+
+            {/* File Types — from server type_usage aggregate */}
+            {fileTypeBreakdown.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-slate-100">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">File Types</p>
+                <div className="space-y-2">
+                  {fileTypeBreakdown.map((type) => {
+                    const pct = totalFileCount > 0 ? Math.round((type.count / totalFileCount) * 100) : 0
+                    return (
+                      <div key={type.label}>
+                        <div className="flex items-center justify-between text-xs mb-0.5">
+                          <span className="flex items-center gap-1.5 font-medium text-slate-600">
+                            <i className={`fas ${type.icon} text-[10px]`} style={{ color: type.colour }}></i>
+                            {type.label}
+                          </span>
+                          <span className="text-slate-400">{type.count} file{type.count !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{ width: `${pct}%`, background: type.colour }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* Skeleton while loading */}
+            {!storageDash && fileTypeBreakdown.length === 0 && (
+              <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">File Types</p>
+                {[1, 2, 3].map((n) => (
+                  <div key={n} className="animate-pulse">
+                    <div className="flex justify-between mb-1">
+                      <div className="h-3 w-16 bg-slate-100 rounded"></div>
+                      <div className="h-3 w-10 bg-slate-100 rounded"></div>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-slate-100"></div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* ── green tick removed ── */}
           </div>
 
-          {/* Recent Files */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-slate-900">Recent Files</h2>
-              <Link to="/files" className="text-sm font-medium text-indigo-600 hover:underline">View All</Link>
-            </div>
-            <div className="space-y-2">
-              {recentFiles.length > 0 ? (
-                recentFiles.map((file) => {
-                  const isShared = shares.some((s) => s.file_id === file.id && s.status === 'active')
-                  return (
-                    <div
-                      key={file.id}
-                      onClick={() => setSelectedRecentFile(file)}
-                      className="group flex items-center gap-3 rounded-xl border border-transparent p-3 transition hover:border-slate-200 hover:bg-slate-50 cursor-pointer"
-                    >
-                      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-${getFileColor(file.mime_type)}-50 text-${getFileColor(file.mime_type)}-600`}>
-                        <i className={`fas ${getFileIcon(file.mime_type)}`}></i>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-slate-900">{file.original_name}</p>
-                        <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                          {file.file_size_display}
-                          {isShared && (
-                            <><span>•</span><i className="fas fa-share-alt"></i><span>Shared</span></>
-                          )}
-                        </p>
-                      </div>
-                      <button className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-slate-200 transition text-sm">
-                        <i className="fas fa-eye"></i>
-                      </button>
-                    </div>
-                  )
-                })
+          {/* ── Col 2: Activity Chart + Recent Files ─────────────────────── */}
+          <div className="flex flex-col gap-6">
+
+            {/* Upload Activity Chart */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold text-slate-900">Upload Activity</h2>
+                <div className="flex items-center gap-2">
+                  {/* NEW: week-over-week trend badge */}
+                  {hasAnyFiles && !activityLoading && (
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                      weekTrend.trend === 'up'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                        : weekTrend.trend === 'down'
+                          ? 'bg-red-50 text-red-600 border-red-100'
+                          : 'bg-slate-50 text-slate-500 border-slate-100'
+                    }`}>
+                      <i className={`fas fa-arrow-${weekTrend.trend === 'up' ? 'up' : weekTrend.trend === 'down' ? 'down' : 'right'} text-[8px]`}></i>
+                      {weekTrend.thisWeek} this week
+                    </span>
+                  )}
+                  <span className="text-xs text-slate-400 font-medium bg-slate-50 rounded-lg px-2 py-1 border border-slate-100">
+                    Last 7 days
+                  </span>
+                </div>
+              </div>
+
+              {activityLoading ? (
+                <div className="py-6 text-center text-slate-400">
+                  <i className="fas fa-circle-notch fa-spin text-xl text-indigo-300 mb-2 block"></i>
+                  <p className="text-xs">Loading activity…</p>
+                </div>
+              ) : showChart ? (
+                <>
+                  <ActivityChart files={chartFiles} />
+                  {/* Show a note if files exist but none in last 7 days */}
+                  {weekTrend.thisWeek === 0 && (
+                    <p className="text-center text-xs text-slate-400 mt-2">
+                      No uploads in the last 7 days
+                    </p>
+                  )}
+                </>
               ) : (
-                <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
-                  <i className="fas fa-inbox text-2xl text-slate-300 mb-2 block"></i>
-                  No recent files found
+                <div className="py-6 text-center text-slate-400">
+                  <i className="fas fa-chart-bar text-3xl text-slate-200 mb-2 block"></i>
+                  <p className="text-xs">No upload data yet</p>
                 </div>
               )}
-            </div>
-          </div>
 
-          {/* Quick Actions */}
-          <div className="relative overflow-hidden rounded-2xl border border-indigo-400/20 bg-gradient-to-br from-indigo-600 via-indigo-600 to-purple-600 p-6 text-white shadow-lg shadow-indigo-500/30">
-            <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
-            <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
-            <div className="relative">
-              <h2 className="text-base font-semibold">Quick Actions</h2>
-              <p className="mt-1 text-sm text-indigo-100">Get things done faster</p>
-              <div className="mt-6 space-y-2">
-                <Link to="/files" className="flex items-center justify-between rounded-xl bg-white/10 p-3 backdrop-blur-sm transition hover:bg-white/20">
-                  <span className="flex items-center gap-3 text-sm font-medium">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20">
-                      <i className="fas fa-cloud-arrow-up text-sm"></i>
-                    </span>
-                    Upload Files
-                  </span>
-                  <i className="fas fa-arrow-right text-xs opacity-70"></i>
-                </Link>
-                <Link to="/sharing" className="flex items-center justify-between rounded-xl bg-white/10 p-3 backdrop-blur-sm transition hover:bg-white/20">
-                  <span className="flex items-center gap-3 text-sm font-medium">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20">
-                      <i className="fas fa-share-nodes text-sm"></i>
-                    </span>
-                    Share Files
-                  </span>
-                  <i className="fas fa-arrow-right text-xs opacity-70"></i>
-                </Link>
-                <Link to="/settings" className="flex items-center justify-between rounded-xl bg-white/10 p-3 backdrop-blur-sm transition hover:bg-white/20">
-                  <span className="flex items-center gap-3 text-sm font-medium">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20">
-                      <i className="fas fa-cog text-sm"></i>
-                    </span>
-                    Settings
-                  </span>
-                  <i className="fas fa-arrow-right text-xs opacity-70"></i>
+              <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-xs text-slate-400">
+                  {storage?.file_count ?? 0} total file{(storage?.file_count ?? 0) !== 1 ? 's' : ''} in workspace
+                </span>
+                <Link to="/files" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+                  View All →
                 </Link>
               </div>
             </div>
+
+            {/* Recent Files */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex-1">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-semibold text-slate-900">Recent Files</h2>
+                <Link to="/files" className="text-sm font-medium text-indigo-600 hover:underline">View All</Link>
+              </div>
+              <div className="space-y-1">
+                {recentFiles.length > 0 ? (
+                  recentFiles.map((file) => {
+                    const isShared = shares.some((s) => s.file_id === file.id && s.status === 'active')
+                    return (
+                      <div
+                        key={file.id}
+                        onClick={() => setSelectedRecentFile(file)}
+                        className="group flex items-center gap-3 rounded-xl border border-transparent p-2.5 transition hover:border-slate-200 hover:bg-slate-50 cursor-pointer"
+                      >
+                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-${getFileColor(file.mime_type)}-50 text-${getFileColor(file.mime_type)}-600`}>
+                          <i className={`fas ${getFileIcon(file.mime_type)} text-sm`}></i>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-slate-900">{file.original_name}</p>
+                          <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                            {file.file_size_display}
+                            {isShared && (
+                              <><span>•</span><i className="fas fa-share-alt text-[10px]"></i><span>Shared</span></>
+                            )}
+                          </p>
+                        </div>
+                        <button className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-slate-200 transition text-xs">
+                          <i className="fas fa-eye"></i>
+                        </button>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
+                    <i className="fas fa-inbox text-2xl text-slate-300 mb-2 block"></i>
+                    No recent files found
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
+
+          {/* ── Col 3: Quick Actions + NEW Storage Health tips ────────────── */}
+          <div className="flex flex-col gap-6">
+            <div className="relative overflow-hidden rounded-2xl border border-indigo-400/20 bg-gradient-to-br from-indigo-600 via-indigo-600 to-purple-600 p-5 text-white shadow-lg shadow-indigo-500/30">
+              <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+              <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+              <div className="relative">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-300 mb-0.5">Navigation</p>
+                <h2 className="text-base font-semibold text-white mb-4">Quick Actions</h2>
+                <div className="space-y-2">
+                  {[
+                    { to: '/files',   icon: 'fa-cloud-arrow-up', label: 'Upload Files' },
+                    { to: '/sharing', icon: 'fa-share-nodes',    label: 'Share Files' },
+                    { to: '/storage', icon: 'fa-database',       label: 'Manage Storage' },
+                    { to: '/settings',icon: 'fa-cog',            label: 'Settings' },
+                  ].map(({ to, icon, label }) => (
+                    <Link key={to} to={to} className="flex items-center justify-between rounded-xl bg-white/10 px-3 py-2.5 backdrop-blur-sm transition hover:bg-white/20">
+                      <span className="flex items-center gap-2.5 text-sm font-medium">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/20 shrink-0">
+                          <i className={`fas ${icon} text-xs`}></i>
+                        </span>
+                        {label}
+                      </span>
+                      <i className="fas fa-arrow-right text-xs opacity-60"></i>
+                    </Link>
+                  ))}
+                </div>
+
+                {/* Storage mini-bar */}
+                <div className="mt-4 pt-4 border-t border-white/10">
+                  <div className="flex items-center justify-between text-xs mb-1.5">
+                    <span className="text-indigo-200 font-medium">Storage</span>
+                    <span className="text-indigo-200">{usedPercentage}% used</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-white/20 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-white/70 transition-all duration-700"
+                      style={{ width: `${usedPercentage}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-indigo-300 mt-1.5">
+                    {storage?.used_mb ?? 0} MB of {storage?.total_gb ?? 1} GB used
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* ── NEW: Storage Health card ─────────────────────────────── */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50">
+                  <i className="fas fa-lightbulb text-amber-500 text-xs"></i>
+                </div>
+                <h2 className="text-sm font-semibold text-slate-900">Storage Health</h2>
+              </div>
+              <div className="space-y-2">
+                {/* Tip 1: usage level */}
+                <div className={`flex items-start gap-2.5 rounded-xl p-2.5 ${
+                  usedPercentage >= 80 ? 'bg-red-50' : usedPercentage >= 50 ? 'bg-amber-50' : 'bg-slate-50'
+                }`}>
+                  <i className={`fas ${usedPercentage >= 80 ? 'fa-triangle-exclamation text-red-500' : 'fa-circle-check text-emerald-500'} text-xs mt-0.5 shrink-0`}></i>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {usedPercentage >= 80
+                      ? 'Storage is almost full. Delete or move files to free space.'
+                      : usedPercentage >= 50
+                        ? 'Over halfway used. Consider cleaning up older files.'
+                        : `Storage is healthy — ${100 - usedPercentage}% still available.`}
+                  </p>
+                </div>
+                {/* Tip 2: trash reminder if storageDash has trash info */}
+                {(storageDash?.trash_count ?? 0) > 0 && (
+                  <div className="flex items-start gap-2.5 rounded-xl p-2.5 bg-orange-50">
+                    <i className="fas fa-trash text-orange-400 text-xs mt-0.5 shrink-0"></i>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      {storageDash.trash_count} file{storageDash.trash_count !== 1 ? 's' : ''} in trash.{' '}
+                      <Link to="/trash" className="text-indigo-600 font-medium hover:underline">Empty trash</Link> to free space.
+                    </p>
+                  </div>
+                )}
+                {/* Tip 3: uploads this week */}
+                <div className="flex items-start gap-2.5 rounded-xl p-2.5 bg-indigo-50">
+                  <i className="fas fa-arrow-up-from-bracket text-indigo-400 text-xs mt-0.5 shrink-0"></i>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {weekTrend.thisWeek > 0
+                      ? `${weekTrend.thisWeek} file${weekTrend.thisWeek !== 1 ? 's' : ''} uploaded this week.`
+                      : 'No uploads this week yet.'}
+                    {weekTrend.trend === 'up' && weekTrend.lastWeek > 0 && (
+                      <span className="text-emerald-600 font-medium"> Up from {weekTrend.lastWeek} last week.</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* ── Insights Strip ──────────────────────────────────────────────── */}
+        {/* Full-width row of 4 compact metric tiles — fills the space below  */}
+        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
+
+          {/* Tile 1: Avg file size */}
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+              <i className="fas fa-weight-hanging text-sm"></i>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 leading-none mb-0.5">Avg Size</p>
+              <p className="text-sm font-bold text-slate-900 truncate">{fmtBytes(avgFileBytes)}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">per file</p>
+            </div>
+          </div>
+
+          {/* Tile 2: Shared ratio */}
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+              <i className="fas fa-share-nodes text-sm"></i>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 leading-none mb-0.5">Shared</p>
+              <p className="text-sm font-bold text-slate-900">{sharedRatio}%</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">of your files</p>
+            </div>
+          </div>
+
+          {/* Tile 3: Most active upload day */}
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+              <i className="fas fa-calendar-day text-sm"></i>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 leading-none mb-0.5">Top Day</p>
+              <p className="text-sm font-bold text-slate-900">{mostActiveDay ?? '—'}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">most uploads</p>
+            </div>
+          </div>
+
+          {/* Tile 4: This week vs last week */}
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm">
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+              weekTrend.trend === 'up' ? 'bg-emerald-50 text-emerald-600'
+              : weekTrend.trend === 'down' ? 'bg-red-50 text-red-500'
+              : 'bg-slate-50 text-slate-500'
+            }`}>
+              <i className={`fas text-sm ${
+                weekTrend.trend === 'up' ? 'fa-arrow-trend-up'
+                : weekTrend.trend === 'down' ? 'fa-arrow-trend-down'
+                : 'fa-minus'
+              }`}></i>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 leading-none mb-0.5">This Week</p>
+              <p className="text-sm font-bold text-slate-900">{weekTrend.thisWeek} uploads</p>
+              <p className="text-[10px] mt-0.5 font-medium" style={{
+                color: weekTrend.trend === 'up' ? '#10b981' : weekTrend.trend === 'down' ? '#ef4444' : '#94a3b8'
+              }}>
+                {weekTrend.lastWeek > 0
+                  ? `vs ${weekTrend.lastWeek} last week`
+                  : 'no data last week'}
+              </p>
+            </div>
+          </div>
+
         </div>
       </div>
 
-      {/* Modals */}
+      {/* ── Modals ──────────────────────────────────────────────────────────── */}
       {selectedFile && (
         <FileDetailModal
           file={selectedFile}

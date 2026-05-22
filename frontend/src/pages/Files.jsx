@@ -3,7 +3,7 @@
  *
  */
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchFiles, upload, remove, fetchStorage, rename } from '@/store/filesSlice'
 import {
@@ -34,6 +34,9 @@ import SetExpiryModal, {  // ← NEW
   variantClasses,
   EXPIRY_OPTIONS,
 } from '@/components/modals/SetExpiryModal'
+
+// ─── Poll interval: matches Celery beat (60s) — catches purge within one extra cycle ──
+const POLL_INTERVAL_MS = 30_000   // 30 s
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -594,11 +597,31 @@ export default function Files() {
   const filesRef     = useRef(files)
   useEffect(() => { filesRef.current = files }, [files])
 
+  // keep search/ordering in refs so the polling closure always sees latest values
+  const searchRef   = useRef(search)
+  const orderingRef = useRef(ordering)
+  useEffect(() => { searchRef.current = search },     [search])
+  useEffect(() => { orderingRef.current = ordering }, [ordering])
+
+  // ── Initial load ──────────────────────────────────────────────────────
   useEffect(() => {
     dispatch(fetchFiles())
     dispatch(fetchStorage())
     dispatch(fetchFolders())
   }, [dispatch])
+
+  // ── Background polling ────────────────────────────────────────────────
+  // Silently re-fetches every POLL_INTERVAL_MS so that when the Celery task
+  // purges expired files the list updates automatically without the user
+  // needing to refresh the page.
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      dispatch(fetchFiles({ page: pagination.current_page ?? 1, search: searchRef.current, ordering: orderingRef.current }))
+      dispatch(fetchStorage())
+    }, POLL_INTERVAL_MS)
+
+    return () => clearInterval(intervalId)   // clean up on unmount
+  }, [dispatch, pagination.current_page])
 
   useEffect(() => {
     const map = {}

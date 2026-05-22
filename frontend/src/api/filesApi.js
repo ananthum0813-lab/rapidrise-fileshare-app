@@ -6,6 +6,24 @@ export const getFiles = (page = 1, search = '', ordering = '-uploaded_at') =>
   api.get('/api/files/', { params: { page, search, ordering } })
 
 /**
+ * Same as getFiles but exposes page_size so callers can fetch up to 100
+ * results per page. Used by the Dashboard activity chart to collect all
+ * uploads from the last 7 days without being limited to the default page
+ * size of 10.
+ *
+ * The backend FilePagination already supports page_size (max_page_size=100).
+ */
+export const getFilesWithPageSize = (
+  page     = 1,
+  search   = '',
+  ordering = '-uploaded_at',
+  pageSize = 10,
+) =>
+  api.get('/api/files/', {
+    params: { page, search, ordering, page_size: pageSize },
+  })
+
+/**
  * Compute SHA-256 of a File/Blob in the browser using SubtleCrypto.
  * Returns the hex string.
  */
@@ -60,11 +78,6 @@ export const getStorageInfo = () => api.get('/api/files/storage/')
  *
  * @param {string}  fileId       — UUID of the file
  * @param {string}  expiryOption — 'never' | '1_hour' | '1_day' | '7_days' | '30_days'
- *
- * POST /api/files/<pk>/set-expiry/
- * Body: { expiry_option: string }
- *
- * Returns the updated FileSerializer payload ({ id, expires_at, … }).
  */
 export const setFileExpiry = (fileId, expiryOption) =>
   api.post(`/api/files/${fileId}/set-expiry/`, { expiry_option: expiryOption })
