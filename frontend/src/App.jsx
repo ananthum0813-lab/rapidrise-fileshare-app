@@ -16,6 +16,7 @@ import Dashboard from '@/pages/Dashboard'
 import Files     from '@/pages/Files'
 import Folders   from '@/pages/Folders'
 import Sharing   from '@/pages/Sharing'
+import Storage   from '@/pages/Storage'
 import Settings  from '@/pages/Settings'
 import Starred   from '@/pages/Starred'
 import Trash     from '@/pages/Trash'
@@ -68,6 +69,7 @@ function AppRoutes() {
           <Route path="/files"     element={<Files />} />
           <Route path="/folders"   element={<Folders />} />
           <Route path="/sharing"   element={<Sharing />} />
+          <Route path="/storage"   element={<Storage />} />
           <Route path="/starred"   element={<Starred />} />
           <Route path="/trash"     element={<Trash />} />
           <Route path="/settings"  element={<Settings />} />

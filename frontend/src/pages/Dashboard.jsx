@@ -569,7 +569,7 @@ export default function Dashboard() {
             </div>
             <p className="mt-4 text-3xl font-bold tracking-tight text-slate-900">{storage?.used_mb ?? 0} MB</p>
             <p className="mt-1 text-xs text-slate-500">Used of {storage?.total_gb ?? 1} GB</p>
-            <Link to="/files" className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-amber-600 hover:gap-2 transition-all">
+            <Link to="/storage" className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-amber-600 hover:gap-2 transition-all">
               Manage <i className="fas fa-arrow-right text-xs"></i>
             </Link>
           </div>
@@ -583,7 +583,7 @@ export default function Dashboard() {
               </div>
             </div>
             <p className="mt-4 text-3xl font-bold tracking-tight text-slate-900">{usedPercentage}%</p>
-            <p className="mt-1 text-xs text-slate-500">space remaining</p>
+            <p className="mt-1 text-xs text-slate-500">storage used</p>
             <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
               <i className="fas fa-pulse text-xs"></i> Active
             </span>

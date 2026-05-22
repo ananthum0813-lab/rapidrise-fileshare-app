@@ -17,6 +17,10 @@ const NAV = [
     icon: <i className="fas fa-share-nodes text-lg w-6"></i>,
   },
   {
+    to: '/storage', label: 'Storage',
+    icon: <i className="fas fa-database text-lg w-6"></i>,
+  },
+  {
     to: '/starred', label: 'Starred',
     icon: <i className="fas fa-star text-lg w-6"></i>,
   },

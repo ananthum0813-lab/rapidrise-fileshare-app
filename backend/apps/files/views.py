@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Max, Q
 from django.conf import settings
 from django.utils import timezone
 
@@ -28,27 +28,18 @@ class FilePagination(PageNumberPagination):
 
 
 # ── Expiry option → timedelta mapping ────────────────────────────────────────
-# Single source of truth shared by FileUploadView and SetExpiryView.
-# 'never' / None / unrecognised → None (no expiry).
 
 _EXPIRY_DELTAS = {
-    '1_minute': timedelta(minutes=1),  
-    '1_hour':  timedelta(hours=1),
-    '1_day':   timedelta(days=1),
-    '7_days':  timedelta(days=7),
-    '30_days': timedelta(days=30),
+    '1_minute': timedelta(minutes=1),
+    '1_hour':   timedelta(hours=1),
+    '1_day':    timedelta(days=1),
+    '7_days':   timedelta(days=7),
+    '30_days':  timedelta(days=30),
 }
 
-def _expiry_option_to_dt(expiry_option: str | None):
-    """
-    Convert an expiry_option string to an aware datetime (or None).
 
-    Returns
-    -------
-    datetime | None
-        The absolute expiry moment, or None when expiry_option is
-        'never', empty, or unrecognised.
-    """
+def _expiry_option_to_dt(expiry_option: str | None):
+    """Convert an expiry_option string to an aware datetime (or None)."""
     if not expiry_option or expiry_option == 'never':
         return None
     delta = _EXPIRY_DELTAS.get(expiry_option)
@@ -60,13 +51,6 @@ def _expiry_option_to_dt(expiry_option: str | None):
 # ── Shared expiry guard ───────────────────────────────────────────────────────
 
 def _assert_not_expired(file_obj) -> None:
-    """
-    Raise a 410-Gone APIException if the file's expiry time has passed.
-
-    This provides an immediate barrier even in the window between the
-    file's expires_at and the next Celery cleanup run (≤ 1 hour by default).
-    Files with expires_at=None are permanent and always pass this check.
-    """
     if file_obj.is_expired:
         from rest_framework.exceptions import APIException
         raise APIException(
@@ -75,12 +59,9 @@ def _assert_not_expired(file_obj) -> None:
         )
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Robust server-side filename deduplication
-# ──────────────────────────────────────────────────────────────────────────────
+# ── Filename deduplication ────────────────────────────────────────────────────
 
 def _split_name(filename: str) -> tuple[str, str]:
-    """Split 'report (2).pdf' → ('report', '.pdf')."""
     if '.' in filename:
         dot = filename.rfind('.')
         return filename[:dot], filename[dot:]
@@ -142,9 +123,7 @@ def resolve_unique_filename(desired_name: str, owner, exclude_pk=None) -> str:
     return f'{root_base} ({counter}){ext}'
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# SHA-256 helper
-# ──────────────────────────────────────────────────────────────────────────────
+# ── SHA-256 helper ────────────────────────────────────────────────────────────
 
 def _compute_sha256(f) -> str:
     h = hashlib.sha256()
@@ -154,15 +133,35 @@ def _compute_sha256(f) -> str:
     return h.hexdigest()
 
 
+# ── MIME category helper (shared by dashboard views) ─────────────────────────
+
+_CATEGORY_PREFIXES = {
+    'Images':    ('image/',),
+    'Videos':    ('video/',),
+    'PDFs':      ('application/pdf',),
+    'Documents': (
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument',
+        'application/vnd.oasis.opendocument',
+        'text/plain',
+        'text/csv',
+    ),
+}
+
+
+def _categorise_mime(mime: str) -> str:
+    for category, prefixes in _CATEGORY_PREFIXES.items():
+        if any(mime.startswith(p) for p in prefixes):
+            return category
+    return 'Others'
+
+
 # ──────────────────────────────────────────────────────────────────────────────
-# Duplicate check endpoint
+# Duplicate check
 # ──────────────────────────────────────────────────────────────────────────────
 
 class CheckDuplicateView(APIView):
-    """
-    POST /api/files/check-duplicate/
-    Body: { "sha256": "<64-char hex>" }
-    """
+    """POST /api/files/check-duplicate/"""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -193,15 +192,14 @@ class CheckDuplicateView(APIView):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Upload  (now honours expiry_option from the request body)
+# Upload
 # ──────────────────────────────────────────────────────────────────────────────
 
 class FileUploadView(APIView):
-    """Upload one or multiple files (multipart/form-data, field name: 'files').
-
-    Optional body field:
-      expiry_option  — 'never' | '1_hour' | '1_day' | '7_days' | '30_days'
-                       Omitting it or sending 'never' means no auto-delete.
+    """
+    POST /api/files/upload/
+    Multipart field name: 'files'
+    Optional body field: expiry_option — 'never' | '1_hour' | '1_day' | '7_days' | '30_days'
     """
     permission_classes = [IsAuthenticated]
 
@@ -210,12 +208,10 @@ class FileUploadView(APIView):
         if not files:
             raise ValidationError({'files': 'No files provided.'})
 
-        # FIX: read expiry_option and convert to an absolute datetime once,
-        # then apply the same expires_at to every file in this batch.
         expiry_option = request.data.get('expiry_option', 'never')
         expires_at    = _expiry_option_to_dt(expiry_option)
 
-        user      = request.user
+        user       = request.user
         used_bytes = File.objects.filter(owner=user, is_deleted=False).aggregate(
             total=Sum('file_size')
         )['total'] or 0
@@ -264,7 +260,7 @@ class FileUploadView(APIView):
                     file_size=f.size,
                     mime_type=mime_type,
                     sha256=sha256,
-                    expires_at=expires_at,   # FIX: was never set before
+                    expires_at=expires_at,
                 )
                 uploaded.append(FileSerializer(record, context={'request': request}).data)
                 available -= f.size
@@ -283,18 +279,11 @@ class FileUploadView(APIView):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Set / clear expiry on an existing file  ← NEW VIEW (was completely missing)
+# Set expiry
 # ──────────────────────────────────────────────────────────────────────────────
 
 class SetExpiryView(APIView):
-    """
-    POST /api/files/<pk>/set-expiry/
-    Body: { "expiry_option": "never" | "1_hour" | "1_day" | "7_days" | "30_days" }
-
-    Sets or clears the auto-delete expiry for an existing file.
-    Returns the updated FileSerializer payload so the frontend can
-    refresh the row without an extra fetchFiles call.
-    """
+    """POST /api/files/<pk>/set-expiry/"""
     permission_classes = [IsAuthenticated, IsFileOwner]
 
     def post(self, request, pk):
@@ -302,8 +291,6 @@ class SetExpiryView(APIView):
         self.check_object_permissions(request, file_obj)
 
         expiry_option = request.data.get('expiry_option', 'never')
-
-        # Validate — accept known values + 'never'
         valid_options = {'never', '1_minute', '1_hour', '1_day', '7_days', '30_days'}
         if expiry_option not in valid_options:
             raise ValidationError({
@@ -313,7 +300,7 @@ class SetExpiryView(APIView):
                 )
             })
 
-        expires_at = _expiry_option_to_dt(expiry_option)   # None for 'never'
+        expires_at = _expiry_option_to_dt(expiry_option)
         file_obj.expires_at = expires_at
         file_obj.save(update_fields=['expires_at'])
 
@@ -330,7 +317,7 @@ class SetExpiryView(APIView):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Remaining views — unchanged
+# File list / detail / download / rename
 # ──────────────────────────────────────────────────────────────────────────────
 
 class FileListView(APIView):
@@ -438,6 +425,10 @@ class FileRenameView(APIView):
         )
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Storage info (original, kept for backward compat)
+# ──────────────────────────────────────────────────────────────────────────────
+
 class StorageInfoView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -458,7 +449,208 @@ class StorageInfoView(APIView):
         })
 
 
-# ── Favorites ─────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Storage dashboard  (NEW)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class StorageDashboardView(APIView):
+    """
+    GET /api/files/storage/dashboard/
+
+    Single round-trip snapshot for the Storage page:
+      - quota / usage numbers
+      - trash size + count
+      - per-category byte totals
+      - top-5 largest files
+      - 5 most recent files
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user       = request.user
+        active_qs  = File.objects.filter(owner=user, is_deleted=False)
+
+        agg = active_qs.aggregate(
+            used=Sum('file_size'),
+            file_count=Count('id'),
+        )
+        used        = agg['used'] or 0
+        file_count  = agg['file_count'] or 0
+        total_bytes = settings.MAX_STORAGE_BYTES
+        available   = max(0, total_bytes - used)
+        usage_pct   = round((used / total_bytes) * 100, 2) if total_bytes else 0
+
+        # Trash
+        trash_agg = File.objects.filter(owner=user, is_deleted=True).aggregate(
+            trash_size=Sum('file_size'),
+            trash_count=Count('id'),
+        )
+        trash_size  = trash_agg['trash_size'] or 0
+        trash_count = trash_agg['trash_count'] or 0
+
+        # File-type breakdown
+        mime_rows = (
+            active_qs
+            .values('mime_type')
+            .annotate(total=Sum('file_size'), count=Count('id'))
+        )
+        category_totals: dict[str, dict] = {}
+        for row in mime_rows:
+            cat = _categorise_mime(row['mime_type'] or '')
+            if cat not in category_totals:
+                category_totals[cat] = {'bytes': 0, 'count': 0}
+            category_totals[cat]['bytes'] += row['total'] or 0
+            category_totals[cat]['count'] += row['count'] or 0
+
+        type_usage = [
+            {'category': cat, 'bytes': v['bytes'], 'count': v['count']}
+            for cat, v in category_totals.items()
+        ]
+        type_usage.sort(key=lambda x: x['bytes'], reverse=True)
+
+        # Top-5 largest
+        largest      = active_qs.order_by('-file_size')[:5]
+        largest_data = FileSerializer(largest, many=True, context={'request': request}).data
+
+        # 5 most recent
+        recent      = active_qs.order_by('-uploaded_at')[:5]
+        recent_data = FileSerializer(recent, many=True, context={'request': request}).data
+
+        return success_response(data={
+            'used_bytes':      used,
+            'total_bytes':     total_bytes,
+            'available_bytes': available,
+            'used_mb':         round(used / (1024 ** 2), 2),
+            'total_gb':        settings.MAX_STORAGE_GB,
+            'usage_percent':   usage_pct,
+            'file_count':      file_count,
+            'trash_bytes':     trash_size,
+            'trash_count':     trash_count,
+            'type_usage':      type_usage,
+            'largest_files':   largest_data,
+            'recent_files':    recent_data,
+        })
+
+
+class LargestFilesView(APIView):
+    """
+    GET /api/files/storage/largest/?search=&ordering=&page=
+
+    Paginated file list; default order is largest first.
+    Supports search by filename and ordering by size, date, or name.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = File.objects.filter(owner=request.user, is_deleted=False)
+
+        search = request.query_params.get('search', '').strip()
+        if search:
+            qs = qs.filter(original_name__icontains=search)
+
+        ordering = request.query_params.get('ordering', '-file_size')
+        valid = {
+            '-file_size', 'file_size',
+            '-uploaded_at', 'uploaded_at',
+            'original_name', '-original_name',
+        }
+        if ordering not in valid:
+            ordering = '-file_size'
+        qs = qs.order_by(ordering)
+
+        paginator = FilePagination()
+        page      = paginator.paginate_queryset(qs, request)
+
+        return success_response(data={
+            'results':      FileSerializer(page, many=True, context={'request': request}).data,
+            'count':        paginator.page.paginator.count,
+            'total_pages':  paginator.page.paginator.num_pages,
+            'current_page': paginator.page.number,
+            'next':         paginator.get_next_link(),
+            'previous':     paginator.get_previous_link(),
+        })
+
+
+class RecentFilesView(APIView):
+    """
+    GET /api/files/storage/recent/?page=
+
+    Files ordered newest-first, paginated.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = (
+            File.objects
+            .filter(owner=request.user, is_deleted=False)
+            .order_by('-uploaded_at')
+        )
+        paginator = FilePagination()
+        page      = paginator.paginate_queryset(qs, request)
+
+        return success_response(data={
+            'results':      FileSerializer(page, many=True, context={'request': request}).data,
+            'count':        paginator.page.paginator.count,
+            'total_pages':  paginator.page.paginator.num_pages,
+            'current_page': paginator.page.number,
+        })
+
+
+class FileTypeUsageView(APIView):
+    """
+    GET /api/files/storage/type-usage/
+
+    Bytes and file count grouped by human-readable category.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        mime_rows = (
+            File.objects
+            .filter(owner=request.user, is_deleted=False)
+            .values('mime_type')
+            .annotate(total=Sum('file_size'), count=Count('id'))
+        )
+
+        category_totals: dict[str, dict] = {}
+        for row in mime_rows:
+            cat = _categorise_mime(row['mime_type'] or '')
+            if cat not in category_totals:
+                category_totals[cat] = {'bytes': 0, 'count': 0}
+            category_totals[cat]['bytes'] += row['total'] or 0
+            category_totals[cat]['count'] += row['count'] or 0
+
+        result = [
+            {'category': cat, 'bytes': v['bytes'], 'count': v['count']}
+            for cat, v in category_totals.items()
+        ]
+        result.sort(key=lambda x: x['bytes'], reverse=True)
+
+        return success_response(data={'type_usage': result})
+
+
+class TrashInfoView(APIView):
+    """
+    GET /api/files/storage/trash-info/
+
+    Total bytes and file count currently in the user's trash.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        agg = File.objects.filter(owner=request.user, is_deleted=True).aggregate(
+            trash_size=Sum('file_size'),
+            trash_count=Count('id'),
+        )
+        return success_response(data={
+            'trash_bytes': agg['trash_size'] or 0,
+            'trash_count': agg['trash_count'] or 0,
+        })
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Favorites
+# ──────────────────────────────────────────────────────────────────────────────
 
 class ToggleFavoriteView(APIView):
     permission_classes = [IsAuthenticated, IsFileOwner]
@@ -488,7 +680,9 @@ class FavoritesListView(APIView):
         })
 
 
-# ── Trash ─────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Trash
+# ──────────────────────────────────────────────────────────────────────────────
 
 class TrashListView(APIView):
     permission_classes = [IsAuthenticated]
@@ -540,7 +734,9 @@ class PermanentlyDeleteView(APIView):
         return success_response(message=f"✓ Permanently deleted '{name}'.")
 
 
-# ── Batch ─────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Batch
+# ──────────────────────────────────────────────────────────────────────────────
 
 class BatchDeleteView(APIView):
     permission_classes = [IsAuthenticated]
@@ -571,16 +767,13 @@ class BatchRestoreView(APIView):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Folder views  (unchanged — kept in same file for project structure)
+# Folder views
 # ──────────────────────────────────────────────────────────────────────────────
 
 import logging
 from django.utils import timezone as tz
-
 from rest_framework.exceptions import PermissionDenied
-
-from apps.files.models import File  # already imported above, harmless re-alias
-
+from apps.files.models import File  # harmless re-alias
 from .models import Folder
 from .serializers import (
     FolderSerializer,

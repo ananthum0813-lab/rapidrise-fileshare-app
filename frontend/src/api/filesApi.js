@@ -43,7 +43,6 @@ export const uploadFiles = (files, expiryOption = 'never') => {
   })
 }
 
-// FIX: DELETE hits FileDetailView.delete() → calls file_obj.delete_file() → soft delete (move to trash)
 export const deleteFile = (fileId) => api.delete(`/api/files/${fileId}/`)
 
 export const downloadFile = (fileId) =>
@@ -83,11 +82,9 @@ export const getFavorites = (page = 1) =>
 export const getTrash = (page = 1) =>
   api.get('/api/files/trash/', { params: { page } })
 
-// FIX: POST to /restore/ hits RestoreFileView → calls file_obj.restore_file()
 export const restoreFile = (fileId) =>
   api.post(`/api/files/${fileId}/restore/`)
 
-// FIX: POST to /delete-permanently/ hits PermanentlyDeleteView → calls file_obj.permanently_delete()
 export const permanentlyDelete = (fileId) =>
   api.post(`/api/files/${fileId}/delete-permanently/`)
 
@@ -101,3 +98,39 @@ export const batchDelete = (fileIds) =>
 
 export const batchRestore = (fileIds) =>
   api.post('/api/files/batch-restore/', { file_ids: fileIds })
+
+// ── Storage dashboard ─────────────────────────────────────────────────────────
+
+/**
+ * Full dashboard snapshot — used by the redesigned Storage page.
+ * Returns quota, trash info, type breakdown, largest 5, and recent 5 files.
+ */
+export const getStorageDashboard = () => api.get('/api/files/storage/dashboard/')
+
+/**
+ * Paginated largest-files list.
+ *
+ * @param {object} params
+ * @param {number} params.page
+ * @param {string} params.search    — filter by filename
+ * @param {string} params.ordering  — '-file_size' | 'file_size' | '-uploaded_at' | 'uploaded_at' | 'original_name' | '-original_name'
+ */
+export const getLargestFiles = ({ page = 1, search = '', ordering = '-file_size' } = {}) =>
+  api.get('/api/files/storage/largest/', { params: { page, search, ordering } })
+
+/**
+ * Paginated recent-files list ordered by upload date descending.
+ */
+export const getRecentFiles = (page = 1) =>
+  api.get('/api/files/storage/recent/', { params: { page } })
+
+/**
+ * Per-category byte and file-count totals
+ * (Images, Videos, PDFs, Documents, Others).
+ */
+export const getFileTypeUsage = () => api.get('/api/files/storage/type-usage/')
+
+/**
+ * Trash size in bytes + file count.
+ */
+export const getTrashInfo = () => api.get('/api/files/storage/trash-info/')
