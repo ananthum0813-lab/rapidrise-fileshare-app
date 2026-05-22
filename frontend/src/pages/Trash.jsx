@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useSelector } from 'react-redux'
 import {
   getTrash,
@@ -8,41 +8,71 @@ import {
   batchRestore,
 } from '@/api/filesApi'
 
+// ── Poll interval: match Celery beat schedule (60s) so UI reflects purge quickly ──
+const POLL_INTERVAL_MS = 30_000   // 30 s → catches the purge within one extra cycle
+
 export default function Trash() {
   const { user } = useSelector((s) => s.auth)
-  const [trashedFiles, setTrashedFiles]           = useState([])
-  const [loading, setLoading]                     = useState(true)
-  const [pagination, setPagination]               = useState({})
+  const [trashedFiles, setTrashedFiles]             = useState([])
+  const [loading, setLoading]                       = useState(true)
+  const [pagination, setPagination]                 = useState({})
   const [selectedCheckboxes, setSelectedCheckboxes] = useState(new Set())
-  const [deleteConfirm, setDeleteConfirm]         = useState(null)
-  const [showBatchDelete, setShowBatchDelete]     = useState(false)
-  const [showEmptyTrash, setShowEmptyTrash]       = useState(false)
-  const [restoreLoading, setRestoreLoading]       = useState({})
-  const [actionLoading, setActionLoading]         = useState(null)
-  const [currentPage, setCurrentPage]             = useState(1)
+  const [deleteConfirm, setDeleteConfirm]           = useState(null)
+  const [showBatchDelete, setShowBatchDelete]        = useState(false)
+  const [showEmptyTrash, setShowEmptyTrash]         = useState(false)
+  const [restoreLoading, setRestoreLoading]         = useState({})
+  const [actionLoading, setActionLoading]           = useState(null)
+  const [currentPage, setCurrentPage]               = useState(1)
+
+  // track current page in a ref so the interval closure always sees the latest value
+  const currentPageRef = useRef(1)
 
   // ── Fetch ────────────────────────────────────────────────────────────────
-  const fetchTrash = async (page = 1) => {
+  const fetchTrash = useCallback(async (page = 1, { silent = false } = {}) => {
     try {
-      setLoading(true)
-      // Uses api instance → JWT token sent automatically
+      if (!silent) setLoading(true)
       const response = await getTrash(page)
-      setTrashedFiles(response.data.data.results || [])
+      const data     = response.data.data
+
+      setTrashedFiles(data.results || [])
       setPagination({
-        current_page: response.data.data.current_page,
-        total_pages:  response.data.data.total_pages,
-        count:        response.data.data.count,
+        current_page: data.current_page,
+        total_pages:  data.total_pages,
+        count:        data.count,
       })
       setCurrentPage(page)
+      currentPageRef.current = page
+
+      // If Celery wiped everything on this page and it's not page 1, step back
+      if ((data.results || []).length === 0 && page > 1) {
+        fetchTrash(page - 1, { silent })
+      }
     } catch (err) {
       console.error('Fetch trash error:', err)
-      alert('Failed to fetch trash. Please try again.')
+      if (!silent) alert('Failed to fetch trash. Please try again.')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
-  }
+  }, [])
 
-  useEffect(() => { fetchTrash() }, [])
+  // ── Initial load ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    fetchTrash()
+  }, [fetchTrash])
+
+  // ── Background polling ───────────────────────────────────────────────────
+  // Silently re-fetches every POLL_INTERVAL_MS so that when the Celery task
+  // purges expired trash items the list updates automatically without the
+  // user needing to refresh the page.
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      // skip poll while a user-triggered action is in flight to avoid flicker
+      if (actionLoading) return
+      fetchTrash(currentPageRef.current, { silent: true })
+    }, POLL_INTERVAL_MS)
+
+    return () => clearInterval(intervalId)   // clean up on unmount
+  }, [fetchTrash, actionLoading])
 
   // ── Helpers ──────────────────────────────────────────────────────────────
   const getDaysRemaining = (deletedAt) => {
@@ -55,8 +85,8 @@ export default function Trash() {
   const handleRestoreFile = async (fileId) => {
     try {
       setRestoreLoading((prev) => ({ ...prev, [fileId]: true }))
-      await restoreFile(fileId)              // uses api → auth headers included
-      await fetchTrash(currentPage)
+      await restoreFile(fileId)
+      await fetchTrash(currentPageRef.current)
     } catch {
       alert('Failed to restore file. Please try again.')
     } finally {
@@ -68,9 +98,9 @@ export default function Trash() {
   const handlePermanentlyDelete = async (fileId) => {
     try {
       setActionLoading('delete')
-      await permanentlyDelete(fileId)        // uses api → auth headers included
+      await permanentlyDelete(fileId)
       setDeleteConfirm(null)
-      await fetchTrash(currentPage)
+      await fetchTrash(currentPageRef.current)
     } catch {
       alert('Failed to permanently delete file. Please try again.')
     } finally {
@@ -83,9 +113,9 @@ export default function Trash() {
     try {
       setActionLoading('restore')
       const fileIds = Array.from(selectedCheckboxes)
-      await batchRestore(fileIds)            // uses api → auth headers included
+      await batchRestore(fileIds)
       setSelectedCheckboxes(new Set())
-      await fetchTrash(currentPage)
+      await fetchTrash(currentPageRef.current)
     } catch {
       alert('Batch restore failed. Please try again.')
     } finally {
@@ -103,7 +133,7 @@ export default function Trash() {
       }
       setSelectedCheckboxes(new Set())
       setShowBatchDelete(false)
-      await fetchTrash(currentPage)
+      await fetchTrash(currentPageRef.current)
     } catch {
       alert('Batch delete failed. Please try again.')
     } finally {
@@ -115,9 +145,9 @@ export default function Trash() {
   const handleEmptyTrash = async () => {
     try {
       setActionLoading('empty')
-      await emptyTrash()                     // uses api → auth headers included
+      await emptyTrash()
       setShowEmptyTrash(false)
-      await fetchTrash()
+      await fetchTrash(1)
     } catch {
       alert('Failed to empty trash. Please try again.')
     } finally {
@@ -248,7 +278,7 @@ export default function Trash() {
                 </thead>
                 <tbody>
                   {trashedFiles.map((file) => {
-                    const daysLeft   = getDaysRemaining(file.deleted_at)
+                    const daysLeft    = getDaysRemaining(file.deleted_at)
                     const urgentColor = daysLeft <= 3 ? 'text-red-600' : daysLeft <= 7 ? 'text-orange-500' : 'text-amber-600'
                     const barColor    = daysLeft <= 3 ? 'bg-red-500'   : daysLeft <= 7 ? 'bg-orange-500'   : 'bg-amber-400'
                     return (

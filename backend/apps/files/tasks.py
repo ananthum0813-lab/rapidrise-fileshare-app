@@ -163,3 +163,101 @@ def _soft_delete(file_obj, now) -> None:
     file_obj.is_deleted = True
     file_obj.deleted_at = now
     file_obj.save(update_fields=['is_deleted', 'deleted_at'])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Auto-purge trashed files after a retention window
+# ─────────────────────────────────────────────────────────────────────────────
+
+@shared_task(
+    bind=True,
+    name='apps.files.tasks.delete_trashed_files',
+    max_retries=3,
+    default_retry_delay=60,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def delete_trashed_files(self):
+    """
+    Permanently delete (hard-delete) every File that has been in the trash
+    longer than TRASH_RETENTION_SECONDS.
+
+    PRODUCTION → TRASH_RETENTION_SECONDS = 2_592_000    (30 days)
+    TESTING    → TRASH_RETENTION_SECONDS = 60           (1 minute)
+
+    To switch to testing mode, replace the constant below with 60 and update
+    the beat schedule in celery.py (swap crontab(minute=0) for 60.0).
+
+    The task is safe to run concurrently: select_for_update(skip_locked=True)
+    inside atomic() ensures each row is processed by exactly one worker.
+    """
+    from .models import File
+    from datetime import timedelta
+
+    # ── Retention window ──────────────────────────────────────────────────────
+    # PRODUCTION → 2_592_000  (30 days  =  60 × 60 × 24 × 30)
+    # TESTING    → 60         (1 minute — swap in during local/staging runs only)
+    TRASH_RETENTION_SECONDS = 2_592_000
+
+    now    = timezone.now()
+    cutoff = now - timedelta(seconds=TRASH_RETENTION_SECONDS)
+
+    # Fetch IDs outside the transaction to minimise lock duration.
+    due_ids = list(
+        File.objects.filter(
+            is_deleted=True,
+            deleted_at__isnull=False,
+            deleted_at__lte=cutoff,
+        ).values_list('id', flat=True)
+    )
+
+    total = len(due_ids)
+    logger.info('delete_trashed_files | starting | %d file(s) due for purge', total)
+
+    purged_count = 0
+    failed_count = 0
+
+    for file_id in due_ids:
+        try:
+            with transaction.atomic():
+                try:
+                    file_obj = (
+                        File.objects
+                        .select_for_update(skip_locked=True)
+                        .get(id=file_id, is_deleted=True)
+                    )
+                except File.DoesNotExist:
+                    # Another worker already purged this file — skip silently.
+                    logger.debug('delete_trashed_files | already handled | id=%s', file_id)
+                    continue
+
+                # Re-check inside the lock (race-condition safety).
+                if not file_obj.deleted_at or file_obj.deleted_at > cutoff:
+                    logger.debug('delete_trashed_files | deleted_at shifted | id=%s', file_id)
+                    continue
+
+                # Hard-delete: remove physical bytes then the DB row.
+                _delete_physical_file(file_obj)   # reuse existing helper above
+                file_obj.delete()                 # permanent DB row removal
+
+            purged_count += 1
+            logger.info(
+                'delete_trashed_files | purged | name="%s" id=%s deleted_at=%s',
+                file_obj.original_name,
+                file_obj.id,
+                file_obj.deleted_at,
+            )
+
+        except Exception as exc:
+            failed_count += 1
+            logger.error(
+                'delete_trashed_files | FAILED | id=%s error=%s',
+                file_id, exc,
+                exc_info=True,
+            )
+
+    logger.info(
+        'delete_trashed_files | done | purged=%d  failed=%d  total=%d',
+        purged_count, failed_count, total,
+    )
+    return {'purged': purged_count, 'failed': failed_count}
