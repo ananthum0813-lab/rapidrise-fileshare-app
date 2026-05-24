@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PublicZipSharePage.jsx
  * ─────────────────────────────────────────────────────────────────────────────
  * Route: /zip-share/:token   (no auth required)
@@ -17,7 +17,6 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getPublicZipShareInfo, downloadPublicZipShare } from '@/api/sharingApi'
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
 
 function fmtDate(iso) {
   if (!iso) return '—'
@@ -35,7 +34,7 @@ function fmtDateTime(iso) {
 }
 
 function mimeIcon(mime) {
-  if (!mime)                                                   return 'fa-file text-slate-400'
+  if (!mime)                                                   return 'fa-file text-gray-400'
   if (mime.includes('pdf'))                                    return 'fa-file-pdf text-red-500'
   if (mime.includes('image'))                                  return 'fa-file-image text-blue-500'
   if (mime.includes('video'))                                  return 'fa-file-video text-purple-500'
@@ -47,69 +46,65 @@ function mimeIcon(mime) {
   if (mime.includes('zip') || mime.includes('archive') ||
       mime.includes('compressed'))                             return 'fa-file-zipper text-amber-500'
   if (mime.includes('text') || mime.includes('csv'))           return 'fa-file-lines text-gray-500'
-  return 'fa-file text-slate-400'
+  return 'fa-file text-gray-400'
 }
 
-// ─── Error screen ─────────────────────────────────────────────────────────────
 
 function ErrorScreen({ type, message }) {
   const config = {
     expired:  { emoji: '⏰', title: 'Link Expired',         sub: 'This ZIP share link has expired and is no longer available.',    color: 'text-amber-600',  bg: 'from-amber-50 to-orange-50' },
-    revoked:  { emoji: '🔒', title: 'Link Revoked',          sub: 'This share link has been revoked by the sender.',                color: 'text-slate-600',  bg: 'from-slate-50 to-gray-100'  },
-    invalid:  { emoji: '🔗', title: 'Link Not Found',        sub: 'This share link is invalid or has been removed.',               color: 'text-slate-600',  bg: 'from-slate-50 to-gray-100'  },
+    revoked:  { emoji: '🔒', title: 'Link Revoked',          sub: 'This share link has been revoked by the sender.',                color: 'text-gray-600',  bg: 'from-gray-50 to-gray-100'  },
+    invalid:  { emoji: '🔗', title: 'Link Not Found',        sub: 'This share link is invalid or has been removed.',               color: 'text-gray-600',  bg: 'from-gray-50 to-gray-100'  },
     error:    { emoji: '⚠️', title: 'Something Went Wrong',  sub: message || 'An unexpected error occurred. Please try again.',   color: 'text-red-600',    bg: 'from-red-50 to-rose-50'     },
   }[type] || { emoji: '⚠️', title: 'Error', sub: message, color: 'text-red-600', bg: 'from-red-50 to-rose-50' }
 
   return (
     <div className={`min-h-screen bg-gradient-to-br ${config.bg} flex items-center justify-center p-4`}>
-      <div className="bg-white rounded-3xl shadow-xl p-10 max-w-md w-full text-center border border-slate-100">
+      <div className="bg-white rounded-lg shadow-dropdown p-10 max-w-md w-full text-center border border-gray-100">
         <div className="text-6xl mb-5 select-none">{config.emoji}</div>
         <h2 className={`text-2xl font-bold mb-3 ${config.color}`}>{config.title}</h2>
-        <p className="text-slate-500 text-sm leading-relaxed">{config.sub}</p>
+        <p className="text-gray-500 text-sm leading-relaxed">{config.sub}</p>
       </div>
     </div>
   )
 }
 
-// ─── Loading screen ───────────────────────────────────────────────────────────
 
 function LoadingScreen() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-violet-50 to-indigo-50 flex items-center justify-center">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="text-center space-y-3">
-        <div className="w-14 h-14 rounded-2xl bg-violet-100 flex items-center justify-center mx-auto">
+        <div className="w-14 h-14 rounded-lg bg-violet-100 flex items-center justify-center mx-auto">
           <i className="fas fa-file-zipper text-2xl text-violet-500 animate-pulse"></i>
         </div>
-        <p className="text-sm text-slate-500 font-medium">Validating share link…</p>
+        <p className="text-sm text-gray-500 font-medium">Validating share link…</p>
       </div>
     </div>
   )
 }
 
-// ─── File list item ───────────────────────────────────────────────────────────
 
 function FileListItem({ file }) {
   return (
-    <div className="flex items-center gap-3 py-2.5 px-1 border-b border-slate-100 last:border-0">
-      <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+    <div className="flex items-center gap-3 py-2.5 px-1 border-b border-gray-100 last:border-0">
+      <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
         <i className={`fas ${mimeIcon(file.mime_type)} text-sm`}></i>
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-800 truncate">{file.original_name}</p>
+        <p className="text-sm font-medium text-gray-800 truncate">{file.original_name}</p>
         {file.mime_type && (
-          <p className="text-[10px] text-slate-400 mt-0.5">
+          <p className="text-[10px] text-gray-400 mt-0.5">
             {file.mime_type.split('/')[1]?.toUpperCase() || file.mime_type}
           </p>
         )}
       </div>
       {file.file_size_display && (
-        <span className="text-xs text-slate-400 font-medium flex-shrink-0">{file.file_size_display}</span>
+        <span className="text-xs text-gray-400 font-medium flex-shrink-0">{file.file_size_display}</span>
       )}
     </div>
   )
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function PublicZipSharePage() {
   const { token } = useParams()
@@ -121,7 +116,6 @@ export default function PublicZipSharePage() {
   const [downloaded,  setDownloaded]  = useState(false)
   const [dlError,     setDlError]     = useState('')
 
-  // ── Fetch ZIP share info ─────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -150,7 +144,6 @@ export default function PublicZipSharePage() {
     return () => { cancelled = true }
   }, [token])
 
-  // ── Download handler ─────────────────────────────────────────────────────
   const handleDownload = async () => {
     if (downloading) return
     setDownloading(true)
@@ -176,7 +169,6 @@ export default function PublicZipSharePage() {
     }
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────
   if (loading) return <LoadingScreen />
   if (error)   return <ErrorScreen type={error.type} message={error.message} />
 
@@ -185,26 +177,22 @@ export default function PublicZipSharePage() {
   const isExpired  = info.expires_at && new Date(info.expires_at) < new Date()
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-violet-50 via-indigo-50 to-slate-50 flex items-start justify-center p-4 pt-8 sm:pt-16">
+    <div className="min-h-screen bg-gradient-to-br from-violet-50 via-brand-50 to-slate-50 flex items-start justify-center p-4 pt-8 sm:pt-16">
       <div className="max-w-lg w-full space-y-4">
 
-        {/* ── Header card ── */}
-        <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8 text-center">
-          {/* ZIP icon */}
-          <div className="w-20 h-20 bg-gradient-to-br from-violet-100 to-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-inner">
+                <div className="bg-white rounded-lg shadow-dropdown border border-gray-100 p-8 text-center">
+                    <div className="w-20 h-20 bg-gradient-to-br from-violet-100 to-brand-100 rounded-lg flex items-center justify-center mx-auto mb-5 shadow-inner">
             <i className="fas fa-file-zipper text-4xl text-violet-600"></i>
           </div>
 
-          {/* ZIP name */}
-          <h1 className="text-xl font-bold text-slate-900 break-all leading-tight">
+                    <h1 className="text-xl font-bold text-gray-900 break-all leading-tight">
             {info.zip_name || 'shared_files.zip'}
           </h1>
-          <p className="text-sm text-slate-400 mt-1.5">
+          <p className="text-sm text-gray-400 mt-1.5">
             {fileCount} file{fileCount !== 1 ? 's' : ''} bundled as a ZIP archive
           </p>
 
-          {/* Message from sender */}
-          {info.message && (
+                    {info.message && (
             <div className="mt-5 px-4 py-3 bg-violet-50 border-l-4 border-violet-400 rounded-r-2xl text-left">
               <p className="text-[10px] font-bold text-violet-500 uppercase tracking-wider mb-1">Message from sender</p>
               <p className="text-sm text-violet-900 leading-relaxed">"{info.message}"</p>
@@ -212,37 +200,35 @@ export default function PublicZipSharePage() {
           )}
         </div>
 
-        {/* ── Meta grid ── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-5">
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-50 rounded-xl px-4 py-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Files</p>
-              <p className="text-lg font-bold text-slate-900 mt-0.5">{fileCount}</p>
+            <div className="bg-gray-50 rounded-xl px-4 py-3">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Files</p>
+              <p className="text-lg font-bold text-gray-900 mt-0.5">{fileCount}</p>
             </div>
-            <div className="bg-slate-50 rounded-xl px-4 py-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Shared</p>
-              <p className="text-sm font-bold text-slate-900 mt-0.5">{fmtDate(info.shared_at)}</p>
+            <div className="bg-gray-50 rounded-xl px-4 py-3">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shared</p>
+              <p className="text-sm font-bold text-gray-900 mt-0.5">{fmtDate(info.shared_at)}</p>
             </div>
-            <div className={`col-span-2 rounded-xl px-4 py-3 ${isExpired ? 'bg-red-50' : 'bg-slate-50'}`}>
-              <p className={`text-[10px] font-bold uppercase tracking-wider ${isExpired ? 'text-red-400' : 'text-slate-400'}`}>
+            <div className={`col-span-2 rounded-xl px-4 py-3 ${isExpired ? 'bg-red-50' : 'bg-gray-50'}`}>
+              <p className={`text-[10px] font-bold uppercase tracking-wider ${isExpired ? 'text-red-400' : 'text-gray-400'}`}>
                 {isExpired ? 'Expired' : 'Expires'}
               </p>
-              <p className={`text-sm font-bold mt-0.5 ${isExpired ? 'text-red-600' : 'text-slate-900'}`}>
+              <p className={`text-sm font-bold mt-0.5 ${isExpired ? 'text-red-600' : 'text-gray-900'}`}>
                 {fmtDateTime(info.expires_at)}
               </p>
             </div>
           </div>
         </div>
 
-        {/* ── File list ── */}
-        {files.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+                {files.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <i className="fas fa-list text-violet-500 text-sm"></i>
-                <span className="text-sm font-bold text-slate-900">Files in this bundle</span>
+                <span className="text-sm font-bold text-gray-900">Files in this bundle</span>
               </div>
-              <span className="text-xs text-slate-400 font-medium">{files.length} item{files.length !== 1 ? 's' : ''}</span>
+              <span className="text-xs text-gray-400 font-medium">{files.length} item{files.length !== 1 ? 's' : ''}</span>
             </div>
             <div className="px-5 py-2 max-h-64 overflow-y-auto">
               {files.map((f) => (
@@ -252,32 +238,28 @@ export default function PublicZipSharePage() {
           </div>
         )}
 
-        {/* ── Download card ── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 space-y-4">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-5 space-y-4">
 
-          {/* Error from download attempt */}
-          {dlError && (
+                    {dlError && (
             <div className="flex items-start gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
               <i className="fas fa-circle-exclamation mt-0.5 flex-shrink-0"></i>
               <span>{dlError}</span>
             </div>
           )}
 
-          {/* Success hint */}
-          {downloaded && !dlError && (
+                    {downloaded && !dlError && (
             <div className="flex items-center gap-3 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-700">
               <i className="fas fa-circle-check flex-shrink-0"></i>
               <span>ZIP downloaded successfully!</span>
             </div>
           )}
 
-          {/* Download button */}
-          <button
+                    <button
             onClick={handleDownload}
             disabled={downloading || isExpired}
-            className={`w-full py-4 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2.5 shadow-lg ${
+            className={`w-full py-4 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2.5 shadow-lg ${
               isExpired
-                ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                ? 'bg-slate-200 text-gray-400 cursor-not-allowed shadow-none'
                 : downloading
                   ? 'bg-violet-400 text-white cursor-wait shadow-violet-200'
                   : downloaded
@@ -296,13 +278,12 @@ export default function PublicZipSharePage() {
             )}
           </button>
 
-          {/* Security / privacy notice */}
           {!isExpired && (
             <div className="flex items-start gap-3">
               <i className="fas fa-shield-halved text-emerald-400 mt-0.5 flex-shrink-0 text-sm"></i>
-              <p className="text-xs text-slate-400 leading-relaxed">
+              <p className="text-xs text-gray-400 leading-relaxed">
                 This link is private to you. All files have been scanned for malware before being
-                shared. The link expires on <strong className="text-slate-500">{fmtDateTime(info.expires_at)}</strong>.
+                shared. The link expires on <strong className="text-gray-500">{fmtDateTime(info.expires_at)}</strong>.
               </p>
             </div>
           )}

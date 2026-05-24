@@ -1,4 +1,4 @@
-/**
+﻿/**
  * components/modals/FileShareModal.jsx
  *
  * Fixes in this version:
@@ -13,7 +13,6 @@
 import { useState, useCallback } from 'react'
 import { createShare } from '@/api/sharingApi'
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 
 const EXPIRY_OPTIONS = [
   { value: 1,   label: '1 hour'  },
@@ -25,10 +24,9 @@ const EXPIRY_OPTIONS = [
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const getFileIcon = (mime) => {
-  if (!mime)                                                   return 'fa-file text-slate-400'
+  if (!mime)                                                   return 'fa-file text-gray-400'
   if (mime.includes('pdf'))                                    return 'fa-file-pdf text-red-400'
   if (mime.includes('image'))                                  return 'fa-image text-blue-400'
   if (mime.includes('video'))                                  return 'fa-video text-purple-400'
@@ -37,7 +35,7 @@ const getFileIcon = (mime) => {
   if (mime.includes('zip') || mime.includes('archive'))        return 'fa-file-zipper text-orange-400'
   if (mime.includes('audio'))                                  return 'fa-file-audio text-pink-400'
   if (mime.includes('text'))                                   return 'fa-file-lines text-gray-400'
-  return 'fa-file text-slate-400'
+  return 'fa-file text-gray-400'
 }
 
 /**
@@ -89,7 +87,6 @@ function parseDRFError(err) {
   return { general: parts.join(' | '), field: null }
 }
 
-// ─── Email chip input ─────────────────────────────────────────────────────────
 
 function EmailChipInput({ value, onChange, disabled, hasError }) {
   const [raw, setRaw] = useState('')
@@ -128,13 +125,13 @@ function EmailChipInput({ value, onChange, disabled, hasError }) {
           onBlur={() => { if (raw.trim()) { flush(raw); setRaw('') } }}
           disabled={disabled}
           placeholder="name@example.com — Enter or comma to add"
-          className={`w-full px-3 py-2.5 bg-slate-50 rounded-xl border text-sm
-                      focus:ring-2 focus:ring-indigo-200 focus:outline-none
+          className={`w-full px-3 py-2.5 bg-gray-50 rounded-xl border text-sm
+                      focus:ring-2 focus:ring-brand-200 focus:outline-none
                       disabled:opacity-60 disabled:cursor-not-allowed transition-colors
-                      ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
+                      ${hasError ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
         />
         {value.length > 0 && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-0.5 rounded-full pointer-events-none select-none">
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-brand-100 text-brand-700 text-xs font-bold px-2 py-0.5 rounded-full pointer-events-none select-none">
             {value.length}
           </span>
         )}
@@ -145,7 +142,7 @@ function EmailChipInput({ value, onChange, disabled, hasError }) {
           {value.map((email) => (
             <span
               key={email}
-              className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full border border-indigo-100"
+              className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-brand-50 text-brand-700 text-xs font-semibold rounded-full border border-brand-100"
             >
               {email}
               <button
@@ -155,7 +152,7 @@ function EmailChipInput({ value, onChange, disabled, hasError }) {
                 className="flex items-center justify-center w-3.5 h-3.5 rounded-full hover:bg-red-100 transition-colors disabled:opacity-50"
                 title={`Remove ${email}`}
               >
-                <i className="fas fa-xmark text-[9px] text-indigo-400 hover:text-red-500" />
+                <i className="fas fa-xmark text-[9px] text-brand-500 hover:text-red-500" />
               </button>
             </span>
           ))}
@@ -165,7 +162,6 @@ function EmailChipInput({ value, onChange, disabled, hasError }) {
   )
 }
 
-// ─── Main modal ───────────────────────────────────────────────────────────────
 
 export default function FileShareModal({ file, onClose }) {
   const [emails,      setEmails]      = useState([])
@@ -177,14 +173,12 @@ export default function FileShareModal({ file, onClose }) {
   const [fileError,   setFileError]   = useState(null)   // special case for file-field errors
   const [successMsg,  setSuccessMsg]  = useState(null)
 
-  // ── Clear all error states ──────────────────────────────────────────────────
   const clearErrors = useCallback(() => {
     setEmailError(null)
     setGeneralError(null)
     setFileError(null)
   }, [])
 
-  // ── Email change handler ────────────────────────────────────────────────────
   const handleEmailChange = useCallback(
     (v) => {
       setEmails(v)
@@ -193,7 +187,6 @@ export default function FileShareModal({ file, onClose }) {
     [clearErrors],
   )
 
-  // ── Submit ──────────────────────────────────────────────────────────────────
   const handleShare = async () => {
     clearErrors()
 
@@ -255,40 +248,37 @@ export default function FileShareModal({ file, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="modal-overlay"
       onClick={(e) => { if (e.target === e.currentTarget && !sharing) onClose() }}
     >
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden max-h-[95vh]">
+      <div className="modal-panel w-full max-w-md flex flex-col overflow-hidden max-h-[95vh]">
 
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 bg-indigo-50 rounded-xl flex items-center justify-center flex-shrink-0">
+            <div className="w-9 h-9 bg-brand-50 rounded-xl flex items-center justify-center flex-shrink-0">
               <i className={`fas ${getFileIcon(file?.mime_type)} text-base`} />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-bold text-slate-900 truncate max-w-[200px] sm:max-w-xs">
+              <p className="text-sm font-bold text-gray-900 truncate max-w-[200px] sm:max-w-xs">
                 {file?.original_name ?? 'Unknown file'}
               </p>
-              <p className="text-[11px] text-slate-400">{file?.file_size_display}</p>
+              <p className="text-[11px] text-gray-400">{file?.file_size_display}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={sharing}
-            className="ml-3 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all flex-shrink-0 disabled:opacity-50"
+            className="ml-3 p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all flex-shrink-0 disabled:opacity-50"
             aria-label="Close"
           >
             <i className="fas fa-xmark" />
           </button>
         </div>
 
-        {/* ── Body ── */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="flex-1 overflow-y-auto p-6 space-y-4">
 
-          {/* Success banner */}
-          {successMsg && (
+                    {successMsg && (
             <div className="flex items-start gap-2.5 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-700">
               <i className="fas fa-circle-check mt-0.5 flex-shrink-0 text-emerald-500" />
               <div className="flex-1 min-w-0">
@@ -307,7 +297,6 @@ export default function FileShareModal({ file, onClose }) {
             </div>
           )}
 
-          {/* File-field / server error */}
           {fileError && (
             <div className="flex items-start gap-2.5 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
               <i className="fas fa-circle-exclamation mt-0.5 flex-shrink-0" />
@@ -315,16 +304,14 @@ export default function FileShareModal({ file, onClose }) {
             </div>
           )}
 
-          {/* General API error */}
-          {generalError && (
+                    {generalError && (
             <div className="flex items-start gap-2.5 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
               <i className="fas fa-circle-exclamation mt-0.5 flex-shrink-0" />
               <span>{generalError}</span>
             </div>
           )}
 
-          {/* Info banner — hidden after success */}
-          {!successMsg && (
+                    {!successMsg && (
             <div className="flex items-start gap-2.5 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700">
               <i className="fas fa-info-circle mt-0.5 flex-shrink-0" />
               <span>
@@ -334,14 +321,13 @@ export default function FileShareModal({ file, onClose }) {
             </div>
           )}
 
-          {/* Recipients */}
-          {!successMsg && (
+                    {!successMsg && (
             <div>
-              <label className="flex items-center gap-1 text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+              <label className="flex items-center gap-1 text-[11px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
                 Recipients
                 <span className="text-red-500">*</span>
                 {emails.length > 0 && (
-                  <span className="ml-auto text-[10px] font-normal normal-case text-indigo-500">
+                  <span className="ml-auto text-[10px] font-normal normal-case text-brand-500">
                     {emails.length} added — each gets a unique link
                   </span>
                 )}
@@ -361,19 +347,18 @@ export default function FileShareModal({ file, onClose }) {
             </div>
           )}
 
-          {/* Expiry + message */}
-          {!successMsg && (
+                    {!successMsg && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                <label className="block text-[11px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
                   Expires After
                 </label>
                 <select
                   value={expiry}
                   onChange={(e) => { setExpiry(Number(e.target.value)); clearErrors() }}
                   disabled={sharing}
-                  className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-sm
-                             focus:ring-2 focus:ring-indigo-200 focus:outline-none
+                  className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200 text-sm
+                             focus:ring-2 focus:ring-brand-200 focus:outline-none
                              disabled:opacity-60 cursor-pointer"
                 >
                   {EXPIRY_OPTIONS.map((o) => (
@@ -382,7 +367,7 @@ export default function FileShareModal({ file, onClose }) {
                 </select>
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                <label className="block text-[11px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
                   Message
                 </label>
                 <input
@@ -392,17 +377,16 @@ export default function FileShareModal({ file, onClose }) {
                   disabled={sharing}
                   placeholder="Optional note…"
                   maxLength={200}
-                  className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-sm
-                             focus:ring-2 focus:ring-indigo-200 focus:outline-none
+                  className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200 text-sm
+                             focus:ring-2 focus:ring-brand-200 focus:outline-none
                              disabled:opacity-60"
                 />
               </div>
             </div>
           )}
 
-          {/* Live send summary */}
-          {emails.length > 0 && !successMsg && (
-            <div className="flex items-start gap-2.5 px-4 py-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-700">
+                    {emails.length > 0 && !successMsg && (
+            <div className="flex items-start gap-2.5 px-4 py-3 bg-brand-50 border border-brand-100 rounded-xl text-xs text-brand-700">
               <i className="fas fa-paper-plane mt-0.5 flex-shrink-0" />
               <span>
                 <strong>{emails.length} unique private link{emails.length !== 1 ? 's' : ''}</strong>
@@ -412,14 +396,13 @@ export default function FileShareModal({ file, onClose }) {
           )}
         </div>
 
-        {/* ── Footer ── */}
-        <div className="px-6 pb-6 pt-2 flex gap-3 flex-shrink-0 border-t border-slate-50">
+                <div className="px-6 pb-6 pt-2 flex gap-3 flex-shrink-0 border-t border-slate-50">
           <button
             type="button"
             onClick={onClose}
             disabled={sharing}
-            className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold
-                       hover:bg-slate-200 transition-all disabled:opacity-60"
+            className="px-4 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-bold
+                       hover:bg-gray-200 transition-all disabled:opacity-60"
           >
             {successMsg ? 'Done' : 'Close'}
           </button>
@@ -429,8 +412,8 @@ export default function FileShareModal({ file, onClose }) {
               type="button"
               onClick={handleShare}
               disabled={sharing || emails.length === 0}
-              className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold
-                         hover:bg-indigo-700 active:bg-indigo-800 transition-all
+              className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-bold
+                         hover:bg-brand-700 active:bg-brand-800 transition-all
                          disabled:opacity-50 disabled:cursor-not-allowed
                          flex items-center justify-center gap-2"
             >

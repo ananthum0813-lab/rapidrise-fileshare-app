@@ -26,7 +26,6 @@ export default function Register() {
 
   useEffect(() => { dispatch(clearError()) }, [dispatch])
 
-  // If already logged in, skip registration
   useEffect(() => {
     if (isAuthenticated) navigate('/dashboard', { replace: true })
   }, [isAuthenticated, navigate])
@@ -35,7 +34,6 @@ export default function Register() {
     const result = await dispatch(register(formData))
 
     if (register.rejected.match(result)) {
-      // Map backend field errors onto the form
       const fieldErrors = result.payload?.errors
       if (fieldErrors && typeof fieldErrors === 'object') {
         Object.entries(fieldErrors).forEach(([key, msgs]) => {
@@ -50,7 +48,6 @@ export default function Register() {
       return
     }
 
-    // SUCCESS — go to login with a success message
     navigate('/login', {
       replace: true,
       state: { successMessage: 'Account created! Please sign in.' },

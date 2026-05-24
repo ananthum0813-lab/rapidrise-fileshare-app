@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SetExpiryModal.jsx
  *
  * Modal for setting / clearing auto-delete expiry on a single file.
@@ -13,7 +13,6 @@
 import { useState } from 'react'
 import { setFileExpiry } from '@/api/filesApi'
 
-// ── Constants ─────────────────────────────────────────────────────────────────
 
 export const EXPIRY_OPTIONS = [
   { value: 'never',   label: 'Never',   sublabel: 'File is permanent' },
@@ -24,7 +23,6 @@ export const EXPIRY_OPTIONS = [
   { value: '30_days', label: '30 Days', sublabel: 'Deletes in one month' },
 ]
 
-// ── Expiry display helper (exported so Files.jsx can reuse it) ────────────────
 
 export function getExpiryInfo(expiresAt) {
   if (!expiresAt) return null
@@ -45,19 +43,18 @@ const variantClasses = {
   expired:  'text-red-500',
   critical: 'text-orange-500',
   warning:  'text-amber-500',
-  normal:   'text-slate-400',
+  normal:   'text-gray-400',
 }
 
 const variantBg = {
   expired:  'bg-red-50 border-red-100 text-red-700',
   critical: 'bg-orange-50 border-orange-100 text-orange-700',
   warning:  'bg-amber-50 border-amber-100 text-amber-700',
-  normal:   'bg-slate-50 border-slate-200 text-slate-600',
+  normal:   'bg-gray-50 border-gray-200 text-gray-600',
 }
 
-// ── File icon helper (mirrors Files.jsx) ──────────────────────────────────────
 function getFileIcon(mime) {
-  if (!mime) return 'fa-file text-slate-400'
+  if (!mime) return 'fa-file text-gray-400'
   if (mime.includes('pdf'))    return 'fa-file-pdf text-red-400'
   if (mime.includes('image'))  return 'fa-image text-blue-400'
   if (mime.includes('video'))  return 'fa-video text-purple-400'
@@ -66,10 +63,9 @@ function getFileIcon(mime) {
   if (mime.includes('zip') || mime.includes('archive')) return 'fa-file-zipper text-orange-400'
   if (mime.includes('audio')) return 'fa-file-audio text-pink-400'
   if (mime.includes('text'))  return 'fa-file-lines text-gray-400'
-  return 'fa-file text-slate-400'
+  return 'fa-file text-gray-400'
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function SetExpiryModal({ file, onClose, onUpdated }) {
   // Pre-select 'never' (safest default — user must opt in to deletion)
@@ -100,45 +96,41 @@ export default function SetExpiryModal({ file, onClose, onUpdated }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col">
+    <div className="modal-overlay">
+      <div className="modal-panel w-full max-w-sm overflow-hidden flex flex-col">
 
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-brand-50 flex items-center justify-center flex-shrink-0">
               <i className={`fas ${getFileIcon(file.mime_type)} text-sm`} />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-bold text-slate-900 truncate max-w-[200px]">{file.original_name}</p>
-              <p className="text-[11px] text-slate-400">{file.file_size_display}</p>
+              <p className="text-sm font-bold text-gray-900 truncate max-w-[200px]">{file.original_name}</p>
+              <p className="text-[11px] text-gray-400">{file.file_size_display}</p>
             </div>
           </div>
-          <button onClick={onClose} className="ml-2 flex-shrink-0 p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all">
+          <button onClick={onClose} className="ml-2 flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-all">
             <i className="fas fa-xmark" />
           </button>
         </div>
 
         <div className="flex-1 p-5 space-y-4">
 
-          {/* Success flash */}
-          {success && (
+                    {success && (
             <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border border-emerald-100 rounded-xl text-sm text-emerald-700">
               <i className="fas fa-circle-check flex-shrink-0" />
               <span>Expiry updated!</span>
             </div>
           )}
 
-          {/* Error */}
-          {error && !success && (
+                    {error && !success && (
             <div className="flex items-center gap-2 px-3 py-2.5 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700">
               <i className="fas fa-circle-exclamation flex-shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
-          {/* Current status */}
-          {hasExpiry && !success && (
+                    {hasExpiry && !success && (
             <div className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold border ${variantBg[expiryInfo?.variant ?? 'normal']}`}>
               <i className="fas fa-clock flex-shrink-0" />
               <span>
@@ -156,9 +148,8 @@ export default function SetExpiryModal({ file, onClose, onUpdated }) {
             </div>
           )}
 
-          {/* Expiry picker */}
-          <div>
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    <div>
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">
               {hasExpiry ? 'Change expiry' : 'Set auto-delete'}
             </p>
             <div className="space-y-1.5">
@@ -169,8 +160,8 @@ export default function SetExpiryModal({ file, onClose, onUpdated }) {
                     key={value}
                     className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border cursor-pointer transition-all select-none ${
                       active
-                        ? 'bg-indigo-50 border-indigo-200'
-                        : 'bg-slate-50 border-slate-200 hover:border-indigo-200 hover:bg-indigo-50/40'
+                        ? 'bg-brand-50 border-brand-200'
+                        : 'bg-gray-50 border-gray-200 hover:border-brand-200 hover:bg-brand-50/40'
                     }`}
                   >
                     <input
@@ -179,14 +170,14 @@ export default function SetExpiryModal({ file, onClose, onUpdated }) {
                       value={value}
                       checked={active}
                       onChange={() => setSelected(value)}
-                      className="accent-indigo-600 w-4 h-4 flex-shrink-0"
+                      className="accent-brand-600 w-4 h-4 flex-shrink-0"
                     />
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-bold ${active ? 'text-indigo-700' : 'text-slate-700'}`}>{label}</p>
-                      <p className="text-[10px] text-slate-400">{sublabel}</p>
+                      <p className={`text-sm font-bold ${active ? 'text-brand-700' : 'text-gray-700'}`}>{label}</p>
+                      <p className="text-[10px] text-gray-400">{sublabel}</p>
                     </div>
                     {value === 'never' && (
-                      <span className="text-[10px] bg-slate-200 text-slate-500 font-bold px-1.5 py-0.5 rounded-full flex-shrink-0">
+                      <span className="text-[10px] bg-slate-200 text-gray-500 font-bold px-1.5 py-0.5 rounded-full flex-shrink-0">
                         Default
                       </span>
                     )}
@@ -196,7 +187,6 @@ export default function SetExpiryModal({ file, onClose, onUpdated }) {
             </div>
           </div>
 
-          {/* Warning callout when destructive option selected */}
           {selected !== 'never' && (
             <div className="flex items-start gap-2.5 px-3 py-2.5 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
               <i className="fas fa-triangle-exclamation mt-0.5 flex-shrink-0" />
@@ -209,18 +199,17 @@ export default function SetExpiryModal({ file, onClose, onUpdated }) {
           )}
         </div>
 
-        {/* ── Footer ── */}
-        <div className="px-5 py-4 border-t border-slate-100 flex gap-3">
+                <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all"
+            className="px-4 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-200 transition-all"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving || success}
-            className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-bold hover:bg-brand-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {success ? (
               <><i className="fas fa-check text-xs" />Saved!</>
@@ -236,5 +225,4 @@ export default function SetExpiryModal({ file, onClose, onUpdated }) {
   )
 }
 
-// ── Re-export badge helper so Files.jsx can import from here ──────────────────
 export { variantClasses }

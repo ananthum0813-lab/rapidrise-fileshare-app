@@ -15,7 +15,6 @@ import {
   shareFolderFiles as apiShare,
 } from '@/api/foldersApi'
 
-// ── Thunks ─────────────────────────────────────────────────────────────────────
 
 export const fetchFolders = createAsyncThunk(
   'folders/fetchFolders',
@@ -113,7 +112,6 @@ export const shareFolderFiles = createAsyncThunk(
   }
 )
 
-// ── Slice ──────────────────────────────────────────────────────────────────────
 
 const initialState = {
   folders:       [],          // summary list
@@ -135,7 +133,6 @@ const foldersSlice = createSlice({
   },
   extraReducers: (builder) => {
 
-    // fetchFolders
     builder
       .addCase(fetchFolders.pending, (s) => { s.loading = true; s.error = null })
       .addCase(fetchFolders.fulfilled, (s, { payload }) => {
@@ -144,7 +141,6 @@ const foldersSlice = createSlice({
       })
       .addCase(fetchFolders.rejected, (s, { payload }) => { s.loading = false; s.error = payload })
 
-    // fetchFolderDetail
     builder
       .addCase(fetchFolderDetail.pending, (s) => { s.detailLoading = true; s.error = null })
       .addCase(fetchFolderDetail.fulfilled, (s, { payload }) => {
@@ -153,7 +149,6 @@ const foldersSlice = createSlice({
       })
       .addCase(fetchFolderDetail.rejected, (s, { payload }) => { s.detailLoading = false; s.error = payload })
 
-    // createFolder
     builder
       .addCase(createFolder.pending,   (s) => { s.loading = true;  s.error = null })
       .addCase(createFolder.fulfilled, (s, { payload }) => {
@@ -162,7 +157,6 @@ const foldersSlice = createSlice({
       })
       .addCase(createFolder.rejected, (s, { payload }) => { s.loading = false; s.error = payload })
 
-    // updateFolder
     builder
       .addCase(updateFolder.pending,   (s) => { s.loading = true;  s.error = null })
       .addCase(updateFolder.fulfilled, (s, { payload }) => {
@@ -173,22 +167,18 @@ const foldersSlice = createSlice({
       })
       .addCase(updateFolder.rejected, (s, { payload }) => { s.loading = false; s.error = payload })
 
-    // deleteFolder
     builder
       .addCase(deleteFolder.fulfilled, (s, { payload: id }) => {
         s.folders = s.folders.filter((f) => f.id !== id)
         if (s.openFolder?.id === id) s.openFolder = null
       })
 
-    // addFilesToFolder — re-fetch detail to get updated file list
     builder
       .addCase(addFilesToFolder.fulfilled, (s, { payload }) => {
-        // bump file_count optimistically
         const idx = s.folders.findIndex((f) => f.id === payload.folderId)
         if (idx !== -1) s.folders[idx] = { ...s.folders[idx], file_count: (s.folders[idx].file_count || 0) + (payload.added || 0) }
       })
 
-    // removeFilesFromFolder — remove from openFolder.files optimistically
     builder
       .addCase(removeFilesFromFolder.fulfilled, (s, { payload }) => {
         if (s.openFolder?.id === payload.folderId) {
@@ -203,7 +193,6 @@ const foldersSlice = createSlice({
         }
       })
 
-    // shareFolderFiles
     builder
       .addCase(shareFolderFiles.pending,   (s) => { s.sharing = true;  s.error = null; s.shareResult = null })
       .addCase(shareFolderFiles.fulfilled, (s, { payload }) => { s.sharing = false; s.shareResult = payload })

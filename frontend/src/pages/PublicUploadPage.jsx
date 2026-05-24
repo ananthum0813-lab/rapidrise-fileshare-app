@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PublicUploadPage.jsx
  *
  * Route: /request/upload/:token
@@ -27,9 +27,7 @@ import {
   resendRecipientOTP,
 } from '@/api/sharingApi'
 
-// ─── API helpers (inline — add to sharingApi.js if preferred) ─────────────────
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
 
 const fmtBytes = (b) => {
   if (!b) return '0 B'
@@ -42,12 +40,11 @@ const fmtDate = (d) =>
 
 const TERMINAL_STATUSES = new Set(['safe', 'infected', 'scan_failed'])
 
-// ─── scan status badge ────────────────────────────────────────────────────────
 
 const ScanBadge = ({ status }) => {
   const cfg = {
     scanning:    { cls: 'bg-blue-50 text-blue-600 border-blue-200',          icon: 'fa-spinner fa-spin',      text: 'Scanning…'           },
-    pending:     { cls: 'bg-slate-50 text-slate-500 border-slate-200',       icon: 'fa-clock',                text: 'Scan pending'        },
+    pending:     { cls: 'bg-gray-50 text-gray-500 border-gray-200',       icon: 'fa-clock',                text: 'Scan pending'        },
     safe:        { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: 'fa-shield-halved',        text: 'No threats detected' },
     infected:    { cls: 'bg-red-50 text-red-700 border-red-200',             icon: 'fa-bug',                  text: 'Threat detected'     },
     scan_failed: { cls: 'bg-orange-50 text-orange-600 border-orange-200',    icon: 'fa-triangle-exclamation', text: 'Scan failed'         },
@@ -60,7 +57,6 @@ const ScanBadge = ({ status }) => {
   )
 }
 
-// ─── file row (staged) ────────────────────────────────────────────────────────
 
 function FileRow({ file, onRemove }) {
   const ext     = file.name.split('.').pop().toLowerCase()
@@ -69,19 +65,19 @@ function FileRow({ file, onRemove }) {
     xls: 'fa-file-excel text-green-500', xlsx: 'fa-file-excel text-green-500',
     png: 'fa-file-image text-purple-500', jpg: 'fa-file-image text-purple-500',
     jpeg: 'fa-file-image text-purple-500', gif: 'fa-file-image text-purple-500',
-    zip: 'fa-file-zipper text-amber-500', mp4: 'fa-file-video text-indigo-500',
-    txt: 'fa-file-lines text-slate-500', csv: 'fa-file-csv text-green-600',
+    zip: 'fa-file-zipper text-amber-500', mp4: 'fa-file-video text-brand-500',
+    txt: 'fa-file-lines text-gray-500', csv: 'fa-file-csv text-green-600',
   }
-  const icon = iconMap[ext] || 'fa-file text-slate-400'
+  const icon = iconMap[ext] || 'fa-file text-gray-400'
   return (
-    <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl group">
+    <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl group">
       <i className={`fas ${icon} text-lg flex-shrink-0`}></i>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-slate-800 truncate">{file.name}</p>
-        <p className="text-xs text-slate-400">{fmtBytes(file.size)}</p>
+        <p className="text-sm font-semibold text-gray-800 truncate">{file.name}</p>
+        <p className="text-xs text-gray-400">{fmtBytes(file.size)}</p>
       </div>
       {onRemove && (
-        <button onClick={onRemove} className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 p-1 rounded-lg hover:bg-red-50">
+        <button onClick={onRemove} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 p-1 rounded-lg hover:bg-red-50">
           <i className="fas fa-xmark text-sm"></i>
         </button>
       )}
@@ -89,16 +85,15 @@ function FileRow({ file, onRemove }) {
   )
 }
 
-// ─── uploaded file row (scan badge) ──────────────────────────────────────────
 
 function UploadedRow({ result }) {
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white border border-slate-100 rounded-xl">
+    <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white border border-gray-100 rounded-xl">
       <div className="flex items-center gap-3 min-w-0">
         <i className="fas fa-file-circle-check text-emerald-500 text-lg flex-shrink-0"></i>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-800 truncate">{result.filename}</p>
-          <p className="text-xs text-slate-400">{fmtBytes(result.size)}</p>
+          <p className="text-sm font-semibold text-gray-800 truncate">{result.filename}</p>
+          <p className="text-xs text-gray-400">{fmtBytes(result.size)}</p>
         </div>
       </div>
       <ScanBadge status={result.scan_status || 'scanning'} />
@@ -106,7 +101,6 @@ function UploadedRow({ result }) {
   )
 }
 
-// ─── OTP digit input ──────────────────────────────────────────────────────────
 
 function OtpInput({ value, onChange, disabled }) {
   const digits    = 6
@@ -161,9 +155,9 @@ function OtpInput({ value, onChange, disabled }) {
           onChange={() => {}}
           onKeyDown={(e) => handleKey(i, e)}
           onFocus={(e) => e.target.select()}
-          className={`w-11 h-13 text-center text-xl font-bold rounded-xl border-2 transition-all focus:outline-none
-            ${ch ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-slate-50 text-slate-700'}
-            ${disabled ? 'opacity-50 cursor-not-allowed' : 'focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'}
+          className={`w-11 h-13 text-center text-xl font-bold rounded-xl border transition-all focus:outline-none
+            ${ch ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 bg-gray-50 text-gray-700'}
+            ${disabled ? 'opacity-50 cursor-not-allowed' : 'focus:border-brand-500 focus:ring-2 focus:ring-brand-100'}
           `}
           style={{ height: '3.25rem' }}
         />
@@ -172,7 +166,6 @@ function OtpInput({ value, onChange, disabled }) {
   )
 }
 
-// ─── OTP verification card ────────────────────────────────────────────────────
 
 function OtpVerificationCard({ recipientEmail, onVerified, token, initialWaitSeconds = 0 }) {
   const [otp,            setOtp]           = useState('')
@@ -183,7 +176,6 @@ function OtpVerificationCard({ recipientEmail, onVerified, token, initialWaitSec
   const [resendMsg,      setResendMsg]     = useState('')
   const cooldownRef = useRef(null)
 
-  // Start countdown
   const startCooldown = useCallback((seconds) => {
     setCooldown(seconds)
     if (cooldownRef.current) clearInterval(cooldownRef.current)
@@ -244,22 +236,20 @@ function OtpVerificationCard({ recipientEmail, onVerified, token, initialWaitSec
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-indigo-100 overflow-hidden">
-      {/* Header */}
-      <div className="px-6 pt-6 pb-4 border-b border-slate-100 text-center">
-        <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
-          <i className="fas fa-shield-halved text-2xl text-indigo-500"></i>
+    <div className="bg-white rounded-lg shadow-sm border border-brand-100 overflow-hidden">
+            <div className="px-6 pt-6 pb-4 border-b border-gray-100 text-center">
+        <div className="w-14 h-14 bg-brand-50 rounded-lg flex items-center justify-center mx-auto mb-3">
+          <i className="fas fa-shield-halved text-2xl text-brand-500"></i>
         </div>
-        <h2 className="text-base font-bold text-slate-900">Verify your email</h2>
-        <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+        <p className="text-sm text-gray-500 mt-1 leading-relaxed">
           A 6-digit code was sent to{' '}
-          <span className="font-semibold text-slate-700">{recipientEmail}</span>.
+          <span className="font-semibold text-gray-700">{recipientEmail}</span>.
           <br />Enter it below to access the upload form.
         </p>
       </div>
 
-      {/* Body */}
-      <div className="p-6 space-y-5">
+            <div className="p-6 space-y-5">
+
         <OtpInput value={otp} onChange={setOtp} disabled={verifying} />
 
         {otpError && (
@@ -279,7 +269,7 @@ function OtpVerificationCard({ recipientEmail, onVerified, token, initialWaitSec
         <button
           onClick={handleVerify}
           disabled={otp.length < 6 || verifying}
-          className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
+          className="w-full py-3.5 bg-brand-600 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
         >
           {verifying
             ? <><i className="fas fa-spinner fa-spin text-sm"></i>Verifying…</>
@@ -287,16 +277,16 @@ function OtpVerificationCard({ recipientEmail, onVerified, token, initialWaitSec
         </button>
 
         <div className="flex items-center justify-center gap-2 text-sm">
-          <span className="text-slate-400">Didn't receive it?</span>
+          <span className="text-gray-400">Didn't receive it?</span>
           {cooldown > 0 ? (
-            <span className="text-slate-400 font-medium tabular-nums">
-              Resend in <span className="text-indigo-500">{cooldown}s</span>
+            <span className="text-gray-400 font-medium tabular-nums">
+              Resend in <span className="text-brand-500">{cooldown}s</span>
             </span>
           ) : (
             <button
               onClick={handleResend}
               disabled={resendLoading}
-              className="text-indigo-600 font-semibold hover:text-indigo-700 disabled:opacity-50 flex items-center gap-1"
+              className="text-brand-600 font-semibold hover:text-brand-700 disabled:opacity-50 flex items-center gap-1"
             >
               {resendLoading && <i className="fas fa-spinner fa-spin text-xs"></i>}
               Resend code
@@ -304,7 +294,7 @@ function OtpVerificationCard({ recipientEmail, onVerified, token, initialWaitSec
           )}
         </div>
 
-        <p className="text-center text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+        <p className="text-center text-[11px] text-gray-400 flex items-center justify-center gap-1.5">
           <i className="fas fa-lock text-slate-300"></i>
           Do not share this code. FileVault staff will never ask for it.
         </p>
@@ -313,21 +303,17 @@ function OtpVerificationCard({ recipientEmail, onVerified, token, initialWaitSec
   )
 }
 
-// ─── main component ───────────────────────────────────────────────────────────
 
 export default function PublicUploadPage() {
   const { token } = useParams()
 
-  // Request info
   const [info,    setInfo]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [infoErr, setInfoErr] = useState('')
 
-  // OTP state: 'sending' | 'pending' | 'verified' | 'error'
   const [otpPhase,       setOtpPhase]       = useState('sending')
   const [otpInitialWait, setOtpInitialWait] = useState(0)   // cooldown when page loads
 
-  // Upload state
   const [files,              setFiles]              = useState([])
   const [progress,           setProgress]           = useState(0)
   const [uploading,          setUploading]          = useState(false)
@@ -340,7 +326,6 @@ export default function PublicUploadPage() {
   const dropRef   = useRef(null)
   const pollRef   = useRef(null)
 
-  // ── polling ───────────────────────────────────────────────────────────────
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -362,7 +347,6 @@ export default function PublicUploadPage() {
     }, 3000)
   }, [token, stopPolling])
 
-  // ── step 1: fetch info ────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!token) return
@@ -371,7 +355,6 @@ export default function PublicUploadPage() {
       .then(({ data }) => {
         setInfo(data.data || data)
         setLoading(false)
-        // Step 2: auto-send OTP immediately after info loads
         triggerOtpSend()
       })
       .catch((err) => {
@@ -384,7 +367,6 @@ export default function PublicUploadPage() {
       })
   }, [token]) // eslint-disable-line
 
-  // ── step 2: auto-send OTP ─────────────────────────────────────────────────
 
   const triggerOtpSend = async () => {
     try {
@@ -398,7 +380,6 @@ export default function PublicUploadPage() {
       const payload = err.response?.data?.data || {}
 
       if (status === 429) {
-        // Cooldown or hourly limit
         setOtpInitialWait(payload.wait_seconds || 60)
         setOtpPhase('pending')   // still show input — previous OTP may be valid
       } else {
@@ -407,7 +388,6 @@ export default function PublicUploadPage() {
     }
   }
 
-  // ── file picking ──────────────────────────────────────────────────────────
 
   const addFiles = useCallback((incoming) => {
     setUploadErr('')
@@ -430,7 +410,6 @@ export default function PublicUploadPage() {
   const onDragLeave = ()     => setDragOver(false)
   const onDrop      = (e)    => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files) }
 
-  // ── upload ────────────────────────────────────────────────────────────────
 
   const handleUpload = async () => {
     if (!files.length || uploading) return
@@ -468,7 +447,6 @@ export default function PublicUploadPage() {
         err.response?.data?.files ||
         'Upload failed. Please try again.'
 
-      // OTP session expired mid-session — require re-verification
       if (err.response?.status === 400 && (err.response?.data?.otp || String(msg).toLowerCase().includes('otp'))) {
         setOtpPhase('expired')
         setUploadErr('')
@@ -482,35 +460,32 @@ export default function PublicUploadPage() {
     }
   }
 
-  // ── derived state ─────────────────────────────────────────────────────────
 
   const allScansSettled = uploaded.length > 0 && uploaded.every((f) => TERMINAL_STATUSES.has(f.scan_status))
   const allSafe         = allScansSettled && uploaded.every((f) => f.scan_status === 'safe')
 
-  // ── loading / error screens ───────────────────────────────────────────────
 
   if (loading) return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="text-center">
-        <i className="fas fa-spinner fa-spin text-3xl text-indigo-500 mb-4 block"></i>
-        <p className="text-slate-500 font-medium">Loading upload page…</p>
+        <i className="fas fa-spinner fa-spin text-3xl text-brand-500 mb-4 block"></i>
+        <p className="text-gray-500 font-medium">Loading upload page…</p>
       </div>
     </div>
   )
 
   if (infoErr) return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-red-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center border border-red-100">
-        <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center border border-red-100">
+        <div className="w-16 h-16 bg-red-50 rounded-lg flex items-center justify-center mx-auto mb-4">
           <i className="fas fa-link-slash text-2xl text-red-500"></i>
         </div>
-        <h2 className="text-lg font-bold text-slate-900 mb-2">Link Unavailable</h2>
-        <p className="text-sm text-slate-500">{infoErr}</p>
+        <h2 className="text-lg font-bold text-gray-900 mb-2">Link Unavailable</h2>
+        <p className="text-sm text-gray-500">{infoErr}</p>
       </div>
     </div>
   )
 
-  // ── slot derivations ──────────────────────────────────────────────────────
 
   const serverSlotsAtLoad   = info.remaining_slots ?? (info.max_files - info.submission_count)
   const isExpired           = !!(info.expires_at && new Date(info.expires_at) < new Date())
@@ -519,27 +494,26 @@ export default function PublicUploadPage() {
   const displayUploadCount  = (info.recipient_upload_count || 0) + sessionUploadCount
   const isBlocked           = isExpired || (serverSlotsAtLoad <= 0 && sessionUploadCount === 0)
 
-  // ── fully-complete final screen ───────────────────────────────────────────
 
   if (done && isFull) return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-emerald-50 flex items-start justify-center p-4 pt-10 sm:pt-16">
+    <div className="min-h-screen bg-gray-50 flex items-start justify-center p-4 pt-10 sm:pt-16">
       <div className="max-w-lg w-full space-y-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-8 text-center">
-          <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <div className="bg-white rounded-lg shadow-sm border border-emerald-100 p-8 text-center">
+          <div className="w-16 h-16 bg-emerald-50 rounded-lg flex items-center justify-center mx-auto mb-4">
             <i className="fas fa-circle-check text-3xl text-emerald-500"></i>
           </div>
-          <h2 className="text-xl font-bold text-slate-900 mb-1">All Files Sent Successfully!</h2>
-          <p className="text-sm text-slate-500">
+          <h2 className="text-xl font-bold text-gray-900 mb-1">All Files Sent Successfully!</h2>
+          <p className="text-sm text-gray-500">
             This request is now complete — no upload slots remain.<br />
-            <span className="text-slate-400">The requester will review your files shortly.</span>
+            <span className="text-gray-400">The requester will review your files shortly.</span>
           </p>
         </div>
         {uploaded.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
-              <i className="fas fa-shield-halved text-indigo-500 text-sm"></i>
-              <span className="text-sm font-bold text-slate-800">Security Scan Status</span>
-              <span className="ml-auto text-xs text-slate-400">{uploaded.length} file{uploaded.length !== 1 ? 's' : ''}</span>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+              <i className="fas fa-shield-halved text-brand-500 text-sm"></i>
+              <span className="text-sm font-bold text-gray-800">Security Scan Status</span>
+              <span className="ml-auto text-xs text-gray-400">{uploaded.length} file{uploaded.length !== 1 ? 's' : ''}</span>
             </div>
             <div className="p-4 space-y-2">
               {uploaded.map((r, i) => <UploadedRow key={i} result={r} />)}
@@ -557,7 +531,7 @@ export default function PublicUploadPage() {
             <i className="fas fa-triangle-exclamation mr-2"></i>{uploadErr}
           </div>
         )}
-        <div className="rounded-2xl p-4 border bg-amber-50 border-amber-200 text-amber-700 text-sm font-medium flex items-center gap-3">
+        <div className="rounded-lg p-4 border bg-amber-50 border-amber-200 text-amber-700 text-sm font-medium flex items-center gap-3">
           <i className="fas fa-lock text-amber-500 text-lg"></i>
           <span>This request has reached its file limit. No further uploads are accepted.</span>
         </div>
@@ -565,50 +539,48 @@ export default function PublicUploadPage() {
     </div>
   )
 
-  // ── main render ───────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-start justify-center p-4 pt-8 sm:pt-14">
+    <div className="min-h-screen bg-gray-50 flex items-start justify-center p-4 pt-8 sm:pt-14">
       <div className="max-w-xl w-full space-y-4">
 
-        {/* ── Request info card (always visible) ──────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
           <div className="flex items-start gap-4">
-            <div className="w-11 h-11 bg-indigo-50 rounded-xl flex items-center justify-center flex-shrink-0">
-              <i className="fas fa-inbox text-indigo-500 text-lg"></i>
+            <div className="w-11 h-11 bg-brand-50 rounded-xl flex items-center justify-center flex-shrink-0">
+              <i className="fas fa-inbox text-brand-500 text-lg"></i>
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-lg font-bold text-slate-900 leading-tight">{info.title}</h1>
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">{info.title}</h1>
               {info.owner_name && (
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Requested by <span className="font-semibold text-slate-600">{info.owner_name}</span>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Requested by <span className="font-semibold text-gray-600">{info.owner_name}</span>
                 </p>
               )}
               {info.description && (
-                <p className="text-sm text-slate-600 mt-2 leading-relaxed">{info.description}</p>
+                <p className="text-sm text-gray-600 mt-2 leading-relaxed">{info.description}</p>
               )}
             </div>
           </div>
 
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <div className="bg-slate-50 rounded-xl px-3 py-2">
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Slots Left</p>
-              <p className={`text-sm font-bold mt-0.5 ${isFull ? 'text-red-500' : 'text-slate-800'}`}>
+            <div className="bg-gray-50 rounded-xl px-3 py-2">
+              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Slots Left</p>
+              <p className={`text-sm font-bold mt-0.5 ${isFull ? 'text-red-500' : 'text-gray-800'}`}>
                 {isFull ? 'Full' : `${effectiveSlotsLeft} of ${info.max_files}`}
               </p>
             </div>
-            <div className="bg-slate-50 rounded-xl px-3 py-2">
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Expires</p>
-              <p className={`text-sm font-bold mt-0.5 ${isExpired ? 'text-red-500' : 'text-slate-800'}`}>
+            <div className="bg-gray-50 rounded-xl px-3 py-2">
+              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Expires</p>
+              <p className={`text-sm font-bold mt-0.5 ${isExpired ? 'text-red-500' : 'text-gray-800'}`}>
                 {info.expires_at ? fmtDate(info.expires_at) : 'Never'}
               </p>
             </div>
             {info.allowed_extensions?.length > 0 && (
-              <div className="bg-slate-50 rounded-xl px-3 py-2 col-span-2 sm:col-span-1">
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Accepted Types</p>
+              <div className="bg-gray-50 rounded-xl px-3 py-2 col-span-2 sm:col-span-1">
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Accepted Types</p>
                 <div className="flex flex-wrap gap-1">
                   {info.allowed_extensions.map((e) => (
-                    <span key={e} className="px-1.5 py-0.5 bg-white text-slate-600 text-[10px] font-semibold rounded border border-slate-200">.{e}</span>
+                    <span key={e} className="px-1.5 py-0.5 bg-white text-gray-600 text-[10px] font-semibold rounded border border-gray-200">.{e}</span>
                   ))}
                 </div>
               </div>
@@ -616,8 +588,8 @@ export default function PublicUploadPage() {
           </div>
 
           {info.required_files?.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-slate-100">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Required Files</p>
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Required Files</p>
               <div className="flex flex-wrap gap-1.5">
                 {info.required_files.map((f) => (
                   <span key={f} className="px-2.5 py-1 bg-amber-50 text-amber-700 text-xs font-semibold rounded-full border border-amber-100">
@@ -629,9 +601,9 @@ export default function PublicUploadPage() {
           )}
 
           {info.recipient_email && (
-            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2 text-xs text-slate-400">
+            <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2 text-xs text-gray-400">
               <i className="fas fa-envelope text-[11px]"></i>
-              Upload link for <span className="font-semibold text-slate-600">{info.recipient_email}</span>
+              Upload link for <span className="font-semibold text-gray-600">{info.recipient_email}</span>
               {displayUploadCount > 0 && (
                 <span className="ml-auto text-emerald-600 font-semibold">
                   <i className="fas fa-check-circle mr-1"></i>{displayUploadCount} already uploaded
@@ -641,47 +613,43 @@ export default function PublicUploadPage() {
           )}
         </div>
 
-        {/* ── OTP: sending spinner ─────────────────────────────────────────── */}
-        {otpPhase === 'sending' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 text-center">
-            <i className="fas fa-spinner fa-spin text-2xl text-indigo-400 mb-3 block"></i>
-            <p className="text-sm font-semibold text-slate-600">Sending verification code…</p>
-            <p className="text-xs text-slate-400 mt-1">Please check {info.recipient_email}</p>
+                {otpPhase === 'sending' && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8 text-center">
+            <i className="fas fa-spinner fa-spin text-2xl text-brand-500 mb-3 block"></i>
+            <p className="text-sm font-semibold text-gray-600">Sending verification code…</p>
+            <p className="text-xs text-gray-400 mt-1">Please check {info.recipient_email}</p>
           </div>
         )}
 
-        {/* ── OTP: error (send failed completely) ─────────────────────────── */}
-        {otpPhase === 'error' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-6 text-center">
+                {otpPhase === 'error' && (
+          <div className="bg-white rounded-lg shadow-sm border border-red-100 p-6 text-center">
             <i className="fas fa-envelope-circle-check text-3xl text-red-400 mb-3 block"></i>
             <p className="text-sm font-bold text-red-700 mb-2">Could not send verification email</p>
-            <p className="text-xs text-slate-400 mb-4">There was a problem sending the OTP. Please try again.</p>
+            <p className="text-xs text-gray-400 mb-4">There was a problem sending the OTP. Please try again.</p>
             <button
               onClick={triggerOtpSend}
-              className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all"
+              className="px-5 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-bold hover:bg-brand-700 transition-all"
             >
               Retry
             </button>
           </div>
         )}
 
-        {/* ── OTP: session expired (verified then timed out mid-session) ────── */}
-        {otpPhase === 'expired' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-amber-100 p-6 text-center">
+                {otpPhase === 'expired' && (
+          <div className="bg-white rounded-lg shadow-sm border border-amber-100 p-6 text-center">
             <i className="fas fa-clock text-3xl text-amber-400 mb-3 block"></i>
             <p className="text-sm font-bold text-amber-700 mb-2">Verification session expired</p>
-            <p className="text-xs text-slate-400 mb-4">Your 30-minute upload session has ended. Please verify again to continue.</p>
+            <p className="text-xs text-gray-400 mb-4">Your upload session has ended. Please verify again to continue.</p>
             <button
               onClick={() => { setOtpPhase('sending'); triggerOtpSend() }}
-              className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all"
+              className="px-5 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-bold hover:bg-brand-700 transition-all"
             >
               Verify again
             </button>
           </div>
         )}
 
-        {/* ── OTP: input form ──────────────────────────────────────────────── */}
-        {otpPhase === 'pending' && (
+                {otpPhase === 'pending' && (
           <OtpVerificationCard
             recipientEmail={info.recipient_email}
             onVerified={() => setOtpPhase('verified')}
@@ -690,20 +658,19 @@ export default function PublicUploadPage() {
           />
         )}
 
-        {/* ── Scan results (shown while upload form is still active) ────────── */}
-        {otpPhase === 'verified' && done && uploaded.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
-              <i className="fas fa-shield-halved text-indigo-500 text-sm"></i>
-              <span className="text-sm font-bold text-slate-800">Security Scan Status</span>
-              <span className="ml-auto text-xs text-slate-400">{uploaded.length} file{uploaded.length !== 1 ? 's' : ''} uploaded</span>
+                {otpPhase === 'verified' && done && uploaded.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+              <i className="fas fa-shield-halved text-brand-500 text-sm"></i>
+              <span className="text-sm font-bold text-gray-800">Security Scan Status</span>
+              <span className="ml-auto text-xs text-gray-400">{uploaded.length} file{uploaded.length !== 1 ? 's' : ''} uploaded</span>
             </div>
             <div className="p-4 space-y-2">
               {uploaded.map((r, i) => <UploadedRow key={i} result={r} />)}
             </div>
             <div className="px-4 pb-4">
               {!allScansSettled ? (
-                <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                <p className="text-xs text-gray-400 flex items-center gap-1.5">
                   <i className="fas fa-info-circle text-blue-400"></i>
                   Scanning typically completes within a few seconds…
                 </p>
@@ -722,9 +689,8 @@ export default function PublicUploadPage() {
           </div>
         )}
 
-        {/* ── Blocked state ─────────────────────────────────────────────────── */}
-        {otpPhase === 'verified' && isBlocked && (
-          <div className={`rounded-2xl p-5 border text-sm font-medium flex items-center gap-3 ${
+                {otpPhase === 'verified' && isBlocked && (
+          <div className={`rounded-lg p-5 border text-sm font-medium flex items-center gap-3 ${
             isExpired ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700'
           }`}>
             <i className={`fas ${isExpired ? 'fa-clock text-red-500' : 'fa-lock text-amber-500'} text-lg`}></i>
@@ -732,28 +698,26 @@ export default function PublicUploadPage() {
           </div>
         )}
 
-        {/* ── Upload form ──────────────────────────────────────────────────── */}
-        {otpPhase === 'verified' && !isBlocked && !isExpired && effectiveSlotsLeft > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="px-6 pt-5 pb-4 border-b border-slate-100">
-              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <i className="fas fa-cloud-arrow-up text-indigo-500"></i>
+                {otpPhase === 'verified' && !isBlocked && !isExpired && effectiveSlotsLeft > 0 && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 pt-5 pb-4 border-b border-gray-100">
+              <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <i className="fas fa-cloud-arrow-up text-brand-500"></i>
                 {done ? 'Upload More Files' : 'Upload Your Files'}
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-gray-400 mt-0.5">
                 {effectiveSlotsLeft} slot{effectiveSlotsLeft !== 1 ? 's' : ''} remaining &middot; All files are scanned for viruses before delivery.
               </p>
             </div>
 
             <div className="p-5 space-y-4">
-              {/* Drop zone */}
-              <div
+                            <div
                 ref={dropRef}
                 onDragOver={onDragOver}
                 onDragLeave={onDragLeave}
                 onDrop={onDrop}
-                className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
-                  dragOver ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 bg-slate-50 hover:border-indigo-300 hover:bg-indigo-50/40'
+                className={`relative border border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
+                  dragOver ? 'border-brand-500 bg-brand-50' : 'border-gray-200 bg-gray-50 hover:border-brand-300 hover:bg-brand-50/40'
                 }`}
                 onClick={() => document.getElementById('file-input').click()}
               >
@@ -766,11 +730,11 @@ export default function PublicUploadPage() {
                   onChange={(e) => { if (e.target.files.length) addFiles(e.target.files); e.target.value = '' }}
                 />
                 <div className={`transition-transform ${dragOver ? 'scale-110' : ''}`}>
-                  <i className={`fas fa-cloud-arrow-up text-3xl mb-3 block ${dragOver ? 'text-indigo-500' : 'text-slate-300'}`}></i>
-                  <p className="text-sm font-semibold text-slate-600">
+                  <i className={`fas fa-cloud-arrow-up text-3xl mb-3 block ${dragOver ? 'text-brand-500' : 'text-slate-300'}`}></i>
+                  <p className="text-sm font-semibold text-gray-600">
                     {dragOver ? 'Drop files here' : 'Drag & drop files, or click to browse'}
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className="text-xs text-gray-400 mt-1">
                     Up to {effectiveSlotsLeft} file{effectiveSlotsLeft !== 1 ? 's' : ''} &middot; Max 100 MB each
                   </p>
                 </div>
@@ -790,13 +754,13 @@ export default function PublicUploadPage() {
 
               {uploading && progress > 0 && (
                 <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs text-slate-500 font-medium">
+                  <div className="flex justify-between text-xs text-gray-500 font-medium">
                     <span><i className="fas fa-spinner fa-spin mr-1.5"></i>Uploading…</span>
                     <span>{progress}%</span>
                   </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-300"
+                      className="h-full bg-gradient-to-r from-brand-500 to-brand-600 rounded-full transition-all duration-300"
                       style={{ width: `${progress}%` }}
                     />
                   </div>
@@ -806,14 +770,14 @@ export default function PublicUploadPage() {
               <button
                 onClick={handleUpload}
                 disabled={!files.length || uploading}
-                className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
+                className="w-full py-3.5 bg-brand-600 text-white rounded-xl font-bold text-sm hover:bg-brand-700 active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
               >
                 {uploading
                   ? <><i className="fas fa-spinner fa-spin"></i>Uploading {files.length} file{files.length !== 1 ? 's' : ''}…</>
                   : <><i className="fas fa-paper-plane"></i>Submit {files.length > 0 ? `${files.length} file${files.length !== 1 ? 's' : ''}` : 'Files'}</>}
               </button>
 
-              <p className="text-center text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+              <p className="text-center text-[11px] text-gray-400 flex items-center justify-center gap-1.5">
                 <i className="fas fa-shield-halved text-emerald-400"></i>
                 All files are automatically scanned for viruses before delivery.
               </p>

@@ -1,4 +1,4 @@
-import { forwardRef, useState } from 'react'
+﻿import { forwardRef, useState } from 'react'
 
 const EyeOpen = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -27,7 +27,7 @@ const Input = forwardRef(function Input(
   return (
     <div className="w-full">
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+        <label className="label-text block mb-1.5">
           {label}
           {required && <span className="text-red-400 ml-0.5">*</span>}
         </label>
@@ -44,7 +44,7 @@ const Input = forwardRef(function Input(
             type="button"
             tabIndex={-1}
             onClick={() => setShow((s) => !s)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
           >
             {show ? <EyeClosed /> : <EyeOpen />}
           </button>

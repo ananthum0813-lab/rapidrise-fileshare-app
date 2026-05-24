@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useSelector } from 'react-redux'
 import {
   getFavorites,
@@ -21,7 +21,6 @@ export default function Starred() {
   const [actionLoading, setActionLoading]           = useState(null)
   const [currentPage, setCurrentPage]               = useState(1)
 
-  // ── Fetch ────────────────────────────────────────────────────────────────
   const fetchStarred = async (page = 1) => {
     try {
       setLoading(true)
@@ -43,7 +42,6 @@ export default function Starred() {
 
   useEffect(() => { fetchStarred() }, [])
 
-  // ── Blob URL for auth-gated media preview ─────────────────────────────────
   useEffect(() => {
     if (previewBlobUrl) {
       URL.revokeObjectURL(previewBlobUrl)
@@ -82,7 +80,6 @@ export default function Starred() {
     return () => { if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl) }
   }, [previewBlobUrl])
 
-  // ── Download ─────────────────────────────────────────────────────────────
   const handleDownload = async (file) => {
     try {
       const { data } = await downloadFile(file.id)
@@ -105,7 +102,6 @@ export default function Starred() {
     window.open(previewBlobUrl, '_blank')
   }
 
-  // ── Unstar (toggle) ──────────────────────────────────────────────────────
   const handleUnstar = async (fileId) => {
     try {
       setStarLoading((prev) => ({ ...prev, [fileId]: true }))
@@ -118,9 +114,6 @@ export default function Starred() {
     }
   }
 
-  // ── Delete (soft → trash) ────────────────────────────────────────────────
-  // FIX: deleteFile calls DELETE /api/files/:id/ → FileDetailView.delete()
-  // → file_obj.delete_file() → soft_delete() (moves to trash, not permanent)
   const handleDelete = async (fileId) => {
     try {
       setActionLoading('delete')
@@ -134,7 +127,6 @@ export default function Starred() {
     }
   }
 
-  // ── Batch unstar ─────────────────────────────────────────────────────────
   const handleBatchUnstar = async () => {
     try {
       setActionLoading('unstar')
@@ -151,7 +143,6 @@ export default function Starred() {
     }
   }
 
-  // ── Checkbox helpers ─────────────────────────────────────────────────────
   const handleSelectAll = (checked) => {
     setSelectedCheckboxes(
       checked ? new Set(starredFiles.map((f) => f.id)) : new Set()
@@ -164,9 +155,8 @@ export default function Starred() {
     setSelectedCheckboxes(next)
   }
 
-  // ── File-type helpers ────────────────────────────────────────────────────
   const getFileIcon = (mime) => {
-    if (!mime)                                                   return 'fa-file text-slate-400'
+    if (!mime)                                                   return 'fa-file text-gray-400'
     if (mime.includes('pdf'))                                    return 'fa-file-pdf text-red-500'
     if (mime.includes('image'))                                  return 'fa-image text-blue-500'
     if (mime.includes('video'))                                  return 'fa-video text-purple-500'
@@ -179,7 +169,7 @@ export default function Starred() {
   }
 
   const getFileBg = (mime) => {
-    if (!mime)                                                   return 'bg-slate-50'
+    if (!mime)                                                   return 'bg-gray-50'
     if (mime.includes('pdf'))                                    return 'bg-red-50'
     if (mime.includes('image'))                                  return 'bg-blue-50'
     if (mime.includes('video'))                                  return 'bg-purple-50'
@@ -190,17 +180,16 @@ export default function Starred() {
     return 'bg-gray-100'
   }
 
-  // ── Preview renderer ─────────────────────────────────────────────────────
   const renderPreview = (file) => {
     if (!file) return null
     const { mime_type } = file
 
     if (mime_type?.includes('image')) {
       return (
-        <div className="mb-6 rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 flex items-center justify-center min-h-[120px]">
+        <div className="mb-6 rounded-lg overflow-hidden bg-gray-50 border border-gray-100 flex items-center justify-center min-h-[120px]">
           {previewLoading ? (
             <div className="py-12 flex flex-col items-center gap-3 text-gray-400">
-              <i className="fas fa-circle-notch fa-spin text-2xl text-indigo-400"></i>
+              <i className="fas fa-circle-notch fa-spin text-2xl text-brand-500"></i>
               <p className="text-xs">Loading preview…</p>
             </div>
           ) : previewBlobUrl ? (
@@ -216,7 +205,7 @@ export default function Starred() {
     }
     if (mime_type?.includes('video')) {
       return (
-        <div className="mb-6 rounded-2xl overflow-hidden bg-black">
+        <div className="mb-6 rounded-lg overflow-hidden bg-black">
           {previewLoading ? (
             <div className="py-12 flex flex-col items-center gap-3">
               <i className="fas fa-circle-notch fa-spin text-2xl text-white"></i>
@@ -237,9 +226,9 @@ export default function Starred() {
     }
     if (mime_type?.includes('audio')) {
       return (
-        <div className="mb-6 p-4 bg-indigo-50 rounded-2xl">
+        <div className="mb-6 p-4 bg-brand-50 rounded-lg">
           {previewLoading ? (
-            <div className="flex items-center justify-center gap-3 text-indigo-400 py-2">
+            <div className="flex items-center justify-center gap-3 text-brand-500 py-2">
               <i className="fas fa-circle-notch fa-spin"></i>
               <span className="text-sm">Loading audio…</span>
             </div>
@@ -253,10 +242,10 @@ export default function Starred() {
     }
     if (mime_type?.includes('pdf')) {
       return (
-        <div className="mb-6 rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 min-h-[500px] relative" style={{ overflow: 'hidden' }}>
+        <div className="mb-6 rounded-lg overflow-hidden bg-gray-50 border border-gray-100 min-h-[500px] relative" style={{ overflow: 'hidden' }}>
           {previewLoading ? (
             <div className="py-12 flex flex-col items-center gap-3 text-gray-400">
-              <i className="fas fa-circle-notch fa-spin text-2xl text-indigo-400"></i>
+              <i className="fas fa-circle-notch fa-spin text-2xl text-brand-500"></i>
               <p className="text-xs">Loading PDF…</p>
             </div>
           ) : previewBlobUrl ? (
@@ -285,7 +274,7 @@ export default function Starred() {
       )
     }
     return (
-      <div className={`mb-6 ${getFileBg(mime_type)} rounded-2xl p-10 text-center border border-gray-100`}>
+      <div className={`mb-6 ${getFileBg(mime_type)} rounded-lg p-10 text-center border border-gray-100`}>
         <i className={`fas ${getFileIcon(mime_type)} text-6xl mb-3`}></i>
         <p className="text-sm text-gray-600 capitalize mt-2">{mime_type?.split('/')[0] || 'File'} File</p>
         <p className="text-xs text-gray-500 mt-1">Download to view this file</p>
@@ -293,15 +282,13 @@ export default function Starred() {
     )
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#f8fafc] min-h-screen">
+    <div className="w-full">
       <div className="max-w-6xl mx-auto">
 
-        {/* Header */}
-        <header className="mb-6 sm:mb-8">
-          <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-indigo-900 flex items-center gap-3">
-            <span className="w-9 h-9 sm:w-10 sm:h-10 bg-yellow-100 rounded-2xl flex items-center justify-center flex-shrink-0">
+                <header className="mb-6 sm:mb-8">
+          <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <span className="w-9 h-9 sm:w-10 sm:h-10 bg-yellow-100 rounded-lg flex items-center justify-center flex-shrink-0">
               <i className="fas fa-star text-yellow-500 text-sm sm:text-base"></i>
             </span>
             Starred Files
@@ -311,9 +298,8 @@ export default function Starred() {
           </p>
         </header>
 
-        {/* Batch actions bar */}
-        {selectedCheckboxes.size > 0 && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-3 sm:p-4 mb-4 sm:mb-6 flex flex-col xs:flex-row items-start xs:items-center justify-between gap-3">
+                {selectedCheckboxes.size > 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6 flex flex-col xs:flex-row items-start xs:items-center justify-between gap-3">
             <span className="text-sm font-bold text-yellow-700">
               {selectedCheckboxes.size} file{selectedCheckboxes.size !== 1 ? 's' : ''} selected
             </span>
@@ -328,25 +314,23 @@ export default function Starred() {
           </div>
         )}
 
-        {/* Content */}
-        {loading ? (
+                {loading ? (
           <div className="text-center py-20">
             <i className="fas fa-spinner fa-spin text-4xl text-gray-300 mb-4"></i>
             <p className="text-gray-500">Loading starred files…</p>
           </div>
         ) : starredFiles.length === 0 ? (
-          <div className="text-center py-16 sm:py-24 bg-white rounded-3xl border border-gray-100 shadow-sm px-4">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-yellow-50 rounded-3xl flex items-center justify-center mx-auto mb-4">
+          <div className="text-center py-16 sm:py-24 card rounded-lg shadow-sm px-4">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-yellow-50 rounded-lg flex items-center justify-center mx-auto mb-4">
               <i className="fas fa-star text-3xl sm:text-4xl text-yellow-300"></i>
             </div>
             <p className="text-gray-700 font-bold text-base sm:text-lg">No starred files yet</p>
             <p className="text-gray-400 text-sm mt-2">Click the ⭐ on any file in My Storage to star it</p>
           </div>
         ) : (
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="card rounded-lg shadow-sm overflow-hidden">
 
-            {/* Desktop table (md+) */}
-            <div className="hidden md:block overflow-x-auto">
+                        <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-separate border-spacing-y-1 p-4">
                 <thead>
                   <tr className="text-[10px] uppercase tracking-widest text-gray-400">
@@ -355,7 +339,7 @@ export default function Starred() {
                         type="checkbox"
                         checked={selectedCheckboxes.size === starredFiles.length && starredFiles.length > 0}
                         onChange={(e) => handleSelectAll(e.target.checked)}
-                        className="w-4 h-4 rounded accent-indigo-600"
+                        className="w-4 h-4 rounded accent-brand-600"
                       />
                     </th>
                     <th className="px-4 py-3 font-bold">File Name</th>
@@ -376,7 +360,7 @@ export default function Starred() {
                           type="checkbox"
                           checked={selectedCheckboxes.has(file.id)}
                           onChange={() => handleCheckboxChange(file.id)}
-                          className="w-4 h-4 rounded accent-indigo-600"
+                          className="w-4 h-4 rounded accent-brand-600"
                         />
                       </td>
                       <td className="px-4 py-3">
@@ -443,15 +427,14 @@ export default function Starred() {
               </table>
             </div>
 
-            {/* Mobile cards (< md) */}
-            <div className="md:hidden">
+                        <div className="md:hidden">
               <div className="flex items-center justify-between px-4 pt-4 pb-2 border-b border-gray-50">
                 <label className="flex items-center gap-2 text-xs font-bold text-gray-500 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={selectedCheckboxes.size === starredFiles.length && starredFiles.length > 0}
                     onChange={(e) => handleSelectAll(e.target.checked)}
-                    className="w-4 h-4 rounded accent-indigo-600"
+                    className="w-4 h-4 rounded accent-brand-600"
                   />
                   Select All
                 </label>
@@ -462,7 +445,7 @@ export default function Starred() {
                 {starredFiles.map((file) => (
                   <div
                     key={file.id}
-                    className={`rounded-2xl border transition-colors overflow-hidden ${
+                    className={`rounded-lg border transition-colors overflow-hidden ${
                       selectedCheckboxes.has(file.id) ? 'bg-yellow-50 border-yellow-300' : 'bg-white border-gray-100 shadow-sm'
                     }`}
                   >
@@ -471,7 +454,7 @@ export default function Starred() {
                         type="checkbox"
                         checked={selectedCheckboxes.has(file.id)}
                         onChange={() => handleCheckboxChange(file.id)}
-                        className="w-4 h-4 rounded accent-indigo-600 mt-1 flex-shrink-0"
+                        className="w-4 h-4 rounded accent-brand-600 mt-1 flex-shrink-0"
                       />
                       <div className={`w-11 h-11 ${getFileBg(file.mime_type)} rounded-xl flex items-center justify-center flex-shrink-0`}>
                         <i className={`fas ${getFileIcon(file.mime_type)} text-lg`}></i>
@@ -522,27 +505,25 @@ export default function Starred() {
           </div>
         )}
 
-        {/* Pagination */}
-        {pagination.total_pages > 1 && (
+                {pagination.total_pages > 1 && (
           <div className="mt-6 sm:mt-8 flex justify-center items-center gap-3 flex-wrap">
             <button disabled={currentPage === 1} onClick={() => fetchStarred(currentPage - 1)}
-              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 text-gray-600 disabled:opacity-30 hover:border-indigo-300 transition-all">
+              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 text-gray-600 disabled:opacity-30 hover:border-brand-300 transition-all">
               <i className="fas fa-chevron-left text-xs"></i>
             </button>
             <span className="text-sm font-bold text-gray-600">Page {currentPage} of {pagination.total_pages}</span>
             <button disabled={currentPage === pagination.total_pages} onClick={() => fetchStarred(currentPage + 1)}
-              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 text-gray-600 disabled:opacity-30 hover:border-indigo-300 transition-all">
+              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 text-gray-600 disabled:opacity-30 hover:border-brand-300 transition-all">
               <i className="fas fa-chevron-right text-xs"></i>
             </button>
           </div>
         )}
       </div>
 
-      {/* DELETE CONFIRM MODAL */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-6 sm:p-8 max-w-sm w-full shadow-2xl">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center text-xl sm:text-2xl mx-auto mb-5 sm:mb-6">
+            {deleteConfirm && (
+        <div className="modal-overlay items-end sm:items-center">
+          <div className="bg-white rounded-t-lg sm:rounded-lg p-6 sm:p-8 max-w-sm w-full">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-red-50 text-red-600 rounded-lg flex items-center justify-center text-xl sm:text-2xl mx-auto mb-5 sm:mb-6">
               <i className="fas fa-trash-can"></i>
             </div>
             <h3 className="text-base sm:text-lg font-bold text-center text-gray-900 mb-2">Delete File?</h3>
@@ -556,7 +537,7 @@ export default function Starred() {
               <button
                 onClick={() => handleDelete(deleteConfirm)}
                 disabled={actionLoading === 'delete'}
-                className="py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                className="py-3 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
               >
                 {actionLoading === 'delete' && <i className="fas fa-spinner fa-spin"></i>}
                 Delete
@@ -566,10 +547,9 @@ export default function Starred() {
         </div>
       )}
 
-      {/* PREVIEW MODAL */}
-      {previewFile && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 lg:p-8 max-w-lg w-full shadow-2xl max-h-[92vh] sm:max-h-[90vh] overflow-y-auto">
+            {previewFile && (
+        <div className="modal-overlay items-end sm:items-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-lg sm:rounded-lg p-5 sm:p-6 lg:p-8 max-w-lg w-full max-h-[92vh] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start mb-5 sm:mb-6">
               <h3 className="text-base sm:text-lg font-bold text-gray-900">File Preview</h3>
               <button onClick={() => setPreviewFile(null)} className="text-gray-400 hover:text-gray-600 text-xl sm:text-2xl p-1 -mt-1 -mr-1">
@@ -602,18 +582,18 @@ export default function Starred() {
 
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => { handleDownload(previewFile); setPreviewFile(null) }}
-                className="py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 text-sm">
+                className="py-3 bg-brand-600 text-white rounded-lg font-bold hover:bg-brand-700 transition-all flex items-center justify-center gap-2 text-sm">
                 <i className="fas fa-download"></i> Download
               </button>
               {previewFile.mime_type?.includes('pdf') ? (
                 <button onClick={handleOpenPreview}
                   disabled={!previewBlobUrl}
-                  className="py-3 bg-slate-100 text-slate-700 rounded-2xl font-bold hover:bg-slate-200 transition-all flex items-center justify-center gap-2 text-sm">
+                  className="py-3 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200 transition-all flex items-center justify-center gap-2 text-sm">
                   <i className="fas fa-arrow-up-right-from-square"></i> Open
                 </button>
               ) : (
                 <button onClick={() => setPreviewFile(null)}
-                  className="py-3 bg-gray-100 text-gray-700 rounded-2xl font-bold hover:bg-gray-200 transition-all text-sm">
+                  className="py-3 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200 transition-all text-sm">
                   Close
                 </button>
               )}

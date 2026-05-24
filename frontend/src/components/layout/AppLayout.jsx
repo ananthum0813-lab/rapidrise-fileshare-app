@@ -1,45 +1,80 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { logout } from '@/store/authSlice'
+import ThemeToggle from '@/components/ui/ThemeToggle'
 
-const NAV = [
+const NAV_SECTIONS = [
   {
-    to: '/dashboard', label: 'Dashboard',
-    icon: <i className="fas fa-home text-lg w-6"></i>,
+    title: 'General',
+    items: [
+      { to: '/dashboard', label: 'Dashboard', icon: 'fa-table-cells-large', tint: 'indigo', showStatus: true },
+      { to: '/files', label: 'Files', icon: 'fa-folder-open', tint: 'violet' },
+      { to: '/folders', label: 'Folders', icon: 'fa-folder-tree', tint: 'violet', end: true },
+      { to: '/sharing', label: 'Shares', icon: 'fa-share-from-square', tint: 'sky' },
+      { to: '/storage', label: 'Storage', icon: 'fa-hard-drive', tint: 'cyan' },
+      { to: '/starred', label: 'Starred', icon: 'fa-star', tint: 'amber' },
+    ],
   },
   {
-    to: '/files', label: 'Files',
-    icon: <i className="fas fa-folder text-lg w-6"></i>,
-  },
-  {
-    to: '/sharing', label: 'Shares',
-    icon: <i className="fas fa-share-nodes text-lg w-6"></i>,
-  },
-  {
-    to: '/storage', label: 'Storage',
-    icon: <i className="fas fa-database text-lg w-6"></i>,
-  },
-  {
-    to: '/starred', label: 'Starred',
-    icon: <i className="fas fa-star text-lg w-6"></i>,
-  },
-  {
-    to: '/trash', label: 'Trash',
-    icon: <i className="fas fa-trash text-lg w-6"></i>,
-  },
-  {
-    to: '/settings', label: 'Settings',
-    icon: <i className="fas fa-cog text-lg w-6"></i>,
+    title: 'System',
+    items: [
+      { to: '/trash', label: 'Trash', icon: 'fa-trash-can', tint: 'rose' },
+      { to: '/settings', label: 'Settings', icon: 'fa-gear', tint: 'slate' },
+    ],
   },
 ]
+
+const navLinkClass = (isActive, to) =>
+  `flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+    isActive ? `nav-link-active${to === '/dashboard' ? ' nav-link-dashboard' : ''}` : 'nav-link-idle'
+  }`
 
 export default function AppLayout() {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const { user } = useSelector((s) => s.auth)
+  const fileCount = useSelector((s) => s.files.storage?.file_count ?? 0)
   const [signingOut, setSigningOut] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const renderNavItem = (to, label, icon, tint, showStatus, end, onNavigate) => (
+    <NavLink
+      key={to}
+      to={to}
+      end={end}
+      onClick={onNavigate}
+      className={({ isActive }) => navLinkClass(isActive, to)}
+    >
+      {({ isActive }) => (
+        <>
+          <span className={`nav-item-icon icon-tint icon-tint-${tint}`}>
+            <i className={`fas ${icon}`} aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{label}</span>
+            {showStatus && isActive && (
+              <span className="nav-status-meta">
+                Active · {fileCount} file{fileCount !== 1 ? 's' : ''}
+              </span>
+            )}
+          </span>
+        </>
+      )}
+    </NavLink>
+  )
+
+  const renderNavSections = (onNavigate) =>
+    NAV_SECTIONS.map((section) => (
+      <div key={section.title}>
+        <p className="nav-section-header">{section.title}</p>
+        <div className="space-y-0.5">
+          {section.items.map(({ to, label, icon, tint, showStatus, end }) =>
+            renderNavItem(to, label, icon, tint, showStatus, end, onNavigate)
+          )}
+        </div>
+      </div>
+    ))
 
   const handleLogout = async () => {
     setSigningOut(true)
@@ -48,121 +83,108 @@ export default function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[#f8fafc] font-sans">
-      {/* Mobile Header */}
-      <div className="md:hidden bg-white border-b-2 border-slate-200 px-4 sm:px-6 py-4 flex items-center justify-between sticky top-0 z-40">
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <div className="bg-indigo-600 p-2 rounded-lg text-white">
-            <i className="fas fa-cloud text-lg"></i>
+    <div className="app-shell dark:dark-page-bg">
+      <div className="mobile-chrome md:hidden">
+        <div className="flex min-w-0 flex-shrink-0 items-center gap-2.5">
+          <div className="brand-chip flex h-8 w-8">
+            <i className="fas fa-cloud text-sm" aria-hidden />
           </div>
-          <h1 className="text-lg sm:text-xl font-bold text-slate-800 truncate">FileShare</h1>
+          <h1 className="chrome-title truncate font-display text-base font-semibold tracking-tight">
+            FileShare
+          </h1>
         </div>
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-2 text-slate-500 ml-2"
-        >
-          <i className={`fas ${mobileMenuOpen ? 'fa-times' : 'fa-bars'} text-xl`}></i>
-        </button>
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-expanded={mobileMenuOpen}
+            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            className="chrome-icon-btn"
+          >
+            <i className={`fas ${mobileMenuOpen ? 'fa-times' : 'fa-bars'} text-lg`} aria-hidden />
+          </button>
+        </div>
       </div>
 
-      {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-b-2 border-slate-200 px-4 sm:px-6 py-4 space-y-2 overflow-y-auto max-h-[calc(100vh-80px)]">
-          {NAV.map(({ to, label, icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              onClick={() => setMobileMenuOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 p-3 rounded-xl font-medium transition-all
-                ${isActive ? 'bg-[#eef2ff] text-[#4f46e5] shadow-sm ring-1 ring-indigo-100' : 'text-slate-600 hover:text-indigo-600'}`
-              }
-            >
-              {icon} {label}
-            </NavLink>
-          ))}
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="fixed inset-0 top-14 z-20 bg-gray-900/25 backdrop-blur-[2px] md:hidden dark:bg-black/60"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {mobileMenuOpen && (
+        <div className="mobile-menu-panel">
+          {renderNavSections(() => setMobileMenuOpen(false))}
           <button
+            type="button"
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 p-3 text-slate-600 font-medium border-t border-slate-100 mt-2 hover:text-slate-900 transition-colors"
+            className="mt-2 flex w-full items-center gap-2.5 rounded-xl border-t border-gray-100 px-3 py-3 text-sm font-medium text-gray-600 transition-colors duration-200 hover:bg-gray-100 hover:text-gray-900 dark:border-midnight-500 dark:text-gray-400 dark:hover:bg-midnight-700 dark:hover:text-red-400"
           >
-            <i className="fas fa-arrow-right-from-bracket w-6"></i> Logout
+            <i className="fas fa-arrow-right-from-bracket w-5 flex-shrink-0 text-base" aria-hidden />
+            Logout
           </button>
         </div>
       )}
 
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex w-64 bg-white border-r-2 border-slate-200 flex-col p-6 h-screen sticky top-0 overflow-y-auto">
-        {/* Brand */}
-        <div className="flex items-center gap-3 mb-10 flex-shrink-0">
-          <div className="bg-indigo-600 p-2 rounded-lg text-white shadow-sm">
-            <i className="fas fa-cloud text-xl"></i>
+      <aside className="app-sidebar">
+        <div className="mb-5 flex flex-shrink-0 items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="brand-chip flex h-8 w-8 shrink-0">
+              <i className="fas fa-cloud text-sm" aria-hidden />
+            </div>
+            <h1 className="chrome-title truncate font-display text-base font-semibold tracking-tight">
+              FileShare
+            </h1>
           </div>
-          <h1 className="text-xl font-black text-slate-800 tracking-tight">FileShare</h1>
+          <ThemeToggle />
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 space-y-2 overflow-y-auto">
-          {NAV.map(({ to, label, icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `group relative flex items-center gap-3 p-3 transition-all font-bold rounded-xl
-                ${isActive 
-                  ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-100' 
-                  : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-50'}`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive && (
-                    <div className="absolute left-[-24px] w-1.5 h-6 bg-indigo-600 rounded-r-full" />
-                  )}
-                  <span className={`${isActive ? 'text-indigo-600' : 'text-slate-500'}`}>
-                    {icon}
-                  </span> 
-                  <span className="truncate">{label}</span>
-                </>
-              )}
-            </NavLink>
-          ))}
+        <nav className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="space-y-0.5 overflow-y-auto">{renderNavSections()}</div>
         </nav>
 
-        {/* User Profile Card */}
-        <div className="mt-auto bg-white border-2 border-slate-200 rounded-2xl p-4 shadow-sm flex-shrink-0">
-          <div className="flex items-center gap-3 mb-4">
+        <div className="widget-card mt-5 flex-shrink-0 rounded-xl border border-gray-200 bg-white p-3.5 dark:border-midnight-500">
+          <div className="mb-3 flex items-center gap-3">
             <div className="relative flex-shrink-0">
-              <img 
-                src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.first_name || 'User'}&background=6366f1&color=fff`} 
-                className="w-10 h-10 rounded-xl object-cover border border-slate-200" 
-                alt="User" 
+              <img
+                src={
+                  user?.avatar
+                  || `https://ui-avatars.com/api/?name=${user?.first_name || 'User'}&background=6366f1&color=e8ecf4`
+                }
+                className="h-9 w-9 rounded-lg border border-gray-200 object-cover dark:border-indigo-500/25"
+                alt=""
               />
-              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
+              <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500 dark:border-midnight-700" />
             </div>
-            <div className="overflow-hidden flex-1">
-              <p className="text-sm font-black text-slate-800 truncate leading-tight">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <p className="truncate text-sm font-medium leading-tight text-gray-900 dark:text-gray-100">
                 {user?.first_name || 'User'}
               </p>
-              <p className="text-[10px] text-slate-500 font-bold truncate italic">
-                {user?.email}
-              </p>
+              <p className="truncate text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
             </div>
           </div>
-          
-          <button 
+
+          <button
+            type="button"
             onClick={handleLogout}
             disabled={signingOut}
-            className="w-full bg-white border-2 border-slate-200 text-slate-700 py-2.5 rounded-xl text-[11px] font-black hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-sm uppercase tracking-wider disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-700 transition-colors duration-200 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50 dark:border-midnight-500 dark:text-gray-300 dark:hover:border-red-500/30 dark:hover:bg-red-500/10 dark:hover:text-red-400"
           >
-            <i className={`fas ${signingOut ? 'fa-circle-notch fa-spin' : 'fa-arrow-right-from-bracket'}`}></i> 
+            <i
+              className={`fas ${signingOut ? 'fa-circle-notch fa-spin' : 'fa-arrow-right-from-bracket'}`}
+              aria-hidden
+            />
             {signingOut ? 'Wait...' : 'Sign Out'}
           </button>
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-4 sm:p-8">
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <div className="page-container px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
           <Outlet />
         </div>
       </main>

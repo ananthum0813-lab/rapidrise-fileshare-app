@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AddToFolderModal.jsx
  */
 import { useEffect, useState } from 'react'
@@ -80,17 +80,16 @@ export default function AddToFolderModal({ fileIds, onClose, onAdded }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="modal-overlay"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden max-h-[90vh]"
+        className="modal-panel w-full max-w-sm flex flex-col overflow-hidden max-h-[90vh]"
         onClick={stopProp}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
-            <p className="text-sm font-bold text-slate-900">
+            <p className="text-sm font-bold text-gray-900">
               Add {fileIds.length} file{fileIds.length !== 1 ? 's' : ''} to folder
             </p>
             {doneCount > 0 && (
@@ -101,17 +100,16 @@ export default function AddToFolderModal({ fileIds, onClose, onAdded }) {
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all"
+            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all"
           >
             <i className="fas fa-xmark" />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {showCreate ? (
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3 mb-2">
-              <p className="text-xs font-bold text-slate-600">New Folder</p>
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 space-y-3 mb-2">
+              <p className="text-xs font-bold text-gray-600">New Folder</p>
               <input
                 autoFocus
                 type="text"
@@ -119,7 +117,7 @@ export default function AddToFolderModal({ fileIds, onClose, onAdded }) {
                 onChange={(e) => { setNewName(e.target.value); setCreateErr('') }}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(e) }}
                 placeholder="Folder name…"
-                className={`w-full px-3 py-2 bg-white rounded-xl border text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none ${createErr ? 'border-red-300' : 'border-slate-200'}`}
+                className={`w-full px-3 py-2 bg-white rounded-xl border text-sm focus:ring-2 focus:ring-brand-200 focus:outline-none ${createErr ? 'border-red-300' : 'border-gray-200'}`}
               />
               {createErr && <p className="text-xs text-red-500">{createErr}</p>}
 
@@ -139,7 +137,7 @@ export default function AddToFolderModal({ fileIds, onClose, onAdded }) {
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setShowCreate(false); setNewName(''); setCreateErr('') }}
-                  className="flex-1 py-1.5 text-xs text-slate-500 hover:text-slate-700 font-semibold bg-white border border-slate-200 rounded-xl transition-all"
+                  className="flex-1 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-semibold bg-white border border-gray-200 rounded-xl transition-all"
                 >
                   Cancel
                 </button>
@@ -147,7 +145,7 @@ export default function AddToFolderModal({ fileIds, onClose, onAdded }) {
                   type="button"
                   onClick={handleCreate}
                   disabled={creating || !newName.trim()}
-                  className="flex-1 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  className="flex-1 py-1.5 bg-brand-600 text-white rounded-xl text-xs font-bold hover:bg-brand-700 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
                   {creating
                     ? <><i className="fas fa-spinner fa-spin text-[10px]" />Creating…</>
@@ -159,7 +157,7 @@ export default function AddToFolderModal({ fileIds, onClose, onAdded }) {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setShowCreate(true) }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40 text-slate-400 hover:text-indigo-500 transition-all text-sm font-semibold mb-1"
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-dashed border-gray-200 hover:border-brand-300 hover:bg-brand-50/40 text-gray-400 hover:text-brand-500 transition-all text-sm font-semibold mb-1"
             >
               <i className="fas fa-folder-plus text-sm" />
               Create new folder
@@ -167,12 +165,12 @@ export default function AddToFolderModal({ fileIds, onClose, onAdded }) {
           )}
 
           {loading && !folders.length ? (
-            <div className="flex items-center justify-center py-8 text-slate-400">
+            <div className="flex items-center justify-center py-8 text-gray-400">
               <i className="fas fa-spinner fa-spin mr-2" />
               <span className="text-sm">Loading folders…</span>
             </div>
           ) : folders.length === 0 && !showCreate ? (
-            <p className="text-sm text-slate-400 text-center py-6">
+            <p className="text-sm text-gray-400 text-center py-6">
               No folders yet — create one above.
             </p>
           ) : (
@@ -180,7 +178,7 @@ export default function AddToFolderModal({ fileIds, onClose, onAdded }) {
               const state = states[f.id] || { status: 'idle' }
               return (
                 <div key={f.id} className="space-y-1">
-                  <div className="flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div
                         className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -192,8 +190,8 @@ export default function AddToFolderModal({ fileIds, onClose, onAdded }) {
                         />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-700 truncate">{f.name}</p>
-                        <p className="text-[10px] text-slate-400">
+                        <p className="text-sm font-semibold text-gray-700 truncate">{f.name}</p>
+                        <p className="text-[10px] text-gray-400">
                           {fmt(f.file_count)} file{f.file_count !== 1 ? 's' : ''}
                         </p>
                       </div>
@@ -209,8 +207,8 @@ export default function AddToFolderModal({ fileIds, onClose, onAdded }) {
                           : state.status === 'error'
                           ? 'bg-red-50 text-red-600 hover:bg-red-100'
                           : state.status === 'saving'
-                          ? 'bg-slate-100 text-slate-400 cursor-wait'
-                          : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                          ? 'bg-gray-100 text-gray-400 cursor-wait'
+                          : 'bg-brand-50 text-brand-700 hover:bg-brand-100'
                       }`}
                     >
                       {state.status === 'saving' && <><i className="fas fa-spinner fa-spin text-[10px]" />Adding…</>}
@@ -232,12 +230,11 @@ export default function AddToFolderModal({ fileIds, onClose, onAdded }) {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0">
+                <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0">
           <button
             type="button"
             onClick={handleDone}
-            className="w-full py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all"
+            className="w-full py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-200 transition-all"
           >
             {doneCount > 0 ? 'Done' : 'Close'}
           </button>

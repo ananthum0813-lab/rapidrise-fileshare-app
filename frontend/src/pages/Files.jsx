@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Files.jsx 
  *
  */
@@ -35,17 +35,15 @@ import SetExpiryModal, {  // ← NEW
   EXPIRY_OPTIONS,
 } from '@/components/modals/SetExpiryModal'
 
-// ─── Poll interval: matches Celery beat (60s) — catches purge within one extra cycle ──
 const POLL_INTERVAL_MS = 30_000   // 30 s
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const getExt   = (name) => { const p = name.split('.'); return p.length > 1 ? '.' + p[p.length - 1] : '' }
 const stripExt = (name) => { const e = getExt(name); return e ? name.slice(0, -e.length) : name }
 const fmt      = (n)    => (n ?? 0).toLocaleString()
 
 const getFileIcon = (mime) => {
-  if (!mime)                                                  return 'fa-file text-slate-400'
+  if (!mime)                                                  return 'fa-file text-gray-400'
   if (mime.includes('pdf'))                                   return 'fa-file-pdf text-red-400'
   if (mime.includes('image'))                                 return 'fa-image text-blue-400'
   if (mime.includes('video'))                                 return 'fa-video text-purple-400'
@@ -54,7 +52,7 @@ const getFileIcon = (mime) => {
   if (mime.includes('zip') || mime.includes('archive'))       return 'fa-file-zipper text-orange-400'
   if (mime.includes('audio'))                                 return 'fa-file-audio text-pink-400'
   if (mime.includes('text'))                                  return 'fa-file-lines text-gray-400'
-  return 'fa-file text-slate-400'
+  return 'fa-file text-gray-400'
 }
 
 const FOLDER_COLORS = [
@@ -63,7 +61,6 @@ const FOLDER_COLORS = [
   '#3b82f6','#64748b',
 ]
 
-// ─── Email chip input (used inside FolderShareModal) ──────────────────────────
 
 function EmailChipInput({ value, onChange }) {
   const [raw, setRaw] = useState('')
@@ -83,10 +80,10 @@ function EmailChipInput({ value, onChange }) {
           onKeyDown={onKeyDown}
           onBlur={() => { if (raw) { parse(raw); setRaw('') } }}
           placeholder="name@example.com (Enter or comma)"
-          className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none"
+          className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-brand-200 focus:outline-none"
         />
         {value.length > 0 && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-0.5 rounded-full">
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-brand-100 text-brand-700 text-xs font-bold px-2 py-0.5 rounded-full">
             {value.length}
           </span>
         )}
@@ -94,7 +91,7 @@ function EmailChipInput({ value, onChange }) {
       {value.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1">
           {value.map((e) => (
-            <span key={e} className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full">
+            <span key={e} className="inline-flex items-center gap-1 px-2 py-0.5 bg-brand-50 text-brand-700 text-xs font-semibold rounded-full">
               {e}
               <button type="button" onClick={() => onChange(value.filter((x) => x !== e))}>
                 <i className="fas fa-xmark text-[10px] hover:text-red-500" />
@@ -107,7 +104,6 @@ function EmailChipInput({ value, onChange }) {
   )
 }
 
-// ─── Folder Share Modal ───────────────────────────────────────────────────────
 
 function FolderShareModal({ folder, preselectedFileIds, onClose }) {
   const dispatch = useDispatch()
@@ -157,19 +153,19 @@ function FolderShareModal({ folder, preselectedFileIds, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+    <div className="modal-overlay">
+      <div className="modal-panel w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: folder.color + '20' }}>
               <i className={`fas ${folder.icon || 'fa-folder'} text-sm`} style={{ color: folder.color }} />
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-900">Share from "{folder.name}"</p>
-              <p className="text-[11px] text-slate-400">{folderFiles.length} file{folderFiles.length !== 1 ? 's' : ''} in folder</p>
+              <p className="text-sm font-bold text-gray-900">Share from "{folder.name}"</p>
+              <p className="text-[11px] text-gray-400">{folderFiles.length} file{folderFiles.length !== 1 ? 's' : ''} in folder</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all">
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-all">
             <i className="fas fa-xmark" />
           </button>
         </div>
@@ -188,28 +184,28 @@ function FolderShareModal({ folder, preselectedFileIds, onClose }) {
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                Files to share <span className="text-slate-400 normal-case font-normal">(leave unchecked = all)</span>
+              <label className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+                Files to share <span className="text-gray-400 normal-case font-normal">(leave unchecked = all)</span>
               </label>
               {folderFiles.length > 0 && (
-                <button onClick={toggleAll} className="text-[11px] text-indigo-600 font-semibold hover:underline">
+                <button onClick={toggleAll} className="text-[11px] text-brand-600 font-semibold hover:underline">
                   {fileIds.length === folderFiles.length ? 'Deselect all' : 'Select all'}
                 </button>
               )}
             </div>
-            <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 bg-white">
+            <div className="max-h-40 overflow-y-auto rounded-xl border border-gray-200 divide-y divide-gray-100 bg-white">
               {folderFiles.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-6">No files in this folder.</p>
+                <p className="text-xs text-gray-400 text-center py-6">No files in this folder.</p>
               ) : folderFiles.map((f) => (
-                <label key={f.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50 ${fileIds.includes(f.id) ? 'bg-indigo-50' : ''}`}>
-                  <input type="checkbox" checked={fileIds.includes(f.id)} onChange={() => toggleFile(f.id)} className="w-4 h-4 rounded accent-indigo-600 flex-shrink-0" />
+                <label key={f.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50 ${fileIds.includes(f.id) ? 'bg-brand-50' : ''}`}>
+                  <input type="checkbox" checked={fileIds.includes(f.id)} onChange={() => toggleFile(f.id)} className="w-4 h-4 rounded accent-brand-600 flex-shrink-0" />
                   <i className={`fas ${getFileIcon(f.mime_type)} text-xs flex-shrink-0`} />
-                  <span className="text-sm text-slate-700 truncate flex-1">{f.original_name}</span>
-                  <span className="text-xs text-slate-400 flex-shrink-0">{f.file_size_display}</span>
+                  <span className="text-sm text-gray-700 truncate flex-1">{f.original_name}</span>
+                  <span className="text-xs text-gray-400 flex-shrink-0">{f.file_size_display}</span>
                 </label>
               ))}
             </div>
-            <p className="text-[11px] text-indigo-600 font-semibold mt-1">
+            <p className="text-[11px] text-brand-600 font-semibold mt-1">
               {fileIds.length === 0 ? 'All files will be shared' : `${fileIds.length} file${fileIds.length !== 1 ? 's' : ''} selected`}
             </p>
           </div>
@@ -218,7 +214,7 @@ function FolderShareModal({ folder, preselectedFileIds, onClose }) {
             <div className="flex gap-2">
               {[{ v: 'single', icon: 'fa-link', label: 'Per-file links' }, { v: 'zip', icon: 'fa-file-zipper', label: 'ZIP bundle' }].map(({ v, icon, label }) => (
                 <button key={v} onClick={() => setShareType(v)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold border transition-all ${shareType === v ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold border transition-all ${shareType === v ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200 hover:border-brand-300'}`}>
                   <i className={`fas ${icon}`} /> {label}
                 </button>
               ))}
@@ -227,17 +223,17 @@ function FolderShareModal({ folder, preselectedFileIds, onClose }) {
 
           {effectiveShareType === 'zip' && (
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">ZIP Name</label>
+              <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">ZIP Name</label>
               <div className="flex">
                 <input type="text" value={zipName} onChange={(e) => setZipName(e.target.value)} placeholder={folder.name}
-                  className="flex-1 px-3 py-2 bg-slate-50 rounded-l-xl border border-r-0 border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none" />
-                <span className="px-3 py-2 bg-slate-100 rounded-r-xl text-sm text-slate-500 border border-l-0 border-slate-200">.zip</span>
+                  className="flex-1 px-3 py-2 bg-gray-50 rounded-l-xl border border-r-0 border-gray-200 text-sm focus:ring-2 focus:ring-brand-200 focus:outline-none" />
+                <span className="px-3 py-2 bg-gray-100 rounded-r-xl text-sm text-gray-500 border border-l-0 border-gray-200">.zip</span>
               </div>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">
+            <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
               Recipients <span className="text-red-500">*</span>
             </label>
             <EmailChipInput value={emails} onChange={setEmails} />
@@ -245,8 +241,8 @@ function FolderShareModal({ folder, preselectedFileIds, onClose }) {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Expires After</label>
-              <select value={expiry} onChange={(e) => setExpiry(e.target.value)} className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none">
+              <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Expires After</label>
+              <select value={expiry} onChange={(e) => setExpiry(e.target.value)} className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-brand-200 focus:outline-none">
                 <option value="1">1 hour</option>
                 <option value="24">1 day</option>
                 <option value="72">3 days</option>
@@ -255,14 +251,14 @@ function FolderShareModal({ folder, preselectedFileIds, onClose }) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Message</label>
+              <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Message</label>
               <input type="text" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Optional note…"
-                className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none" />
+                className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-brand-200 focus:outline-none" />
             </div>
           </div>
 
           {emails.length > 0 && (
-            <div className="flex items-start gap-2 px-3 py-2.5 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-700">
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-brand-50 border border-brand-100 rounded-xl text-xs text-brand-700">
               <i className="fas fa-info-circle mt-0.5 flex-shrink-0" />
               <span>
                 {effectiveShareType === 'zip'
@@ -274,10 +270,10 @@ function FolderShareModal({ folder, preselectedFileIds, onClose }) {
           )}
         </div>
 
-        <div className="px-5 py-4 border-t border-slate-100 flex gap-3">
-          <button onClick={onClose} className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all">Close</button>
+        <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
+          <button onClick={onClose} className="px-4 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-200 transition-all">Close</button>
           <button onClick={handleShare} disabled={sharing || emails.length === 0}
-            className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+            className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-bold hover:bg-brand-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
             {sharing ? <><i className="fas fa-spinner fa-spin text-xs" />Sharing…</> : <><i className="fas fa-paper-plane text-xs" />Share</>}
           </button>
         </div>
@@ -286,7 +282,6 @@ function FolderShareModal({ folder, preselectedFileIds, onClose }) {
   )
 }
 
-// ─── Folder Detail Panel ──────────────────────────────────────────────────────
 
 function FolderDetailPanel({ folder, onBack, onShare }) {
   const dispatch = useDispatch()
@@ -319,7 +314,7 @@ function FolderDetailPanel({ folder, onBack, onShare }) {
   }
 
   if (detailLoading) return (
-    <div className="flex items-center justify-center py-16 text-slate-400">
+    <div className="flex items-center justify-center py-16 text-gray-400">
       <i className="fas fa-spinner fa-spin text-xl mr-2" />Loading folder…
     </div>
   )
@@ -327,18 +322,18 @@ function FolderDetailPanel({ folder, onBack, onShare }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-indigo-600 font-semibold transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-600 font-semibold transition-colors">
           <i className="fas fa-chevron-left text-xs" /> Folders
         </button>
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: folder.color + '20' }}>
             <i className={`fas ${folder.icon || 'fa-folder'} text-sm`} style={{ color: folder.color }} />
           </div>
-          <p className="text-sm font-bold text-slate-900 truncate">{folder.name}</p>
-          <span className="text-xs text-slate-400 flex-shrink-0">{files.length} file{files.length !== 1 ? 's' : ''}</span>
+          <p className="text-sm font-bold text-gray-900 truncate">{folder.name}</p>
+          <span className="text-xs text-gray-400 flex-shrink-0">{files.length} file{files.length !== 1 ? 's' : ''}</span>
         </div>
         <button onClick={() => onShare(openFolder || folder, selectedIds)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all">
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-bold hover:bg-brand-700 transition-all">
           <i className="fas fa-share-nodes text-[11px]" />
           Share{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
         </button>
@@ -351,10 +346,10 @@ function FolderDetailPanel({ folder, onBack, onShare }) {
       )}
 
       {selectedIds.length > 0 && (
-        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-indigo-50 rounded-xl border border-indigo-100">
-          <span className="text-xs font-bold text-indigo-700">{selectedIds.length} selected</span>
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-brand-50 rounded-xl border border-brand-100">
+          <span className="text-xs font-bold text-brand-700">{selectedIds.length} selected</span>
           <div className="flex gap-2">
-            <button onClick={() => setSelectedIds([])} className="text-xs text-indigo-500 hover:text-indigo-700 font-semibold">Clear</button>
+            <button onClick={() => setSelectedIds([])} className="text-xs text-brand-500 hover:text-brand-700 font-semibold">Clear</button>
             <button onClick={handleRemove} disabled={removing}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-all disabled:opacity-50">
               <i className="fas fa-folder-minus text-[10px]" />
@@ -365,35 +360,35 @@ function FolderDetailPanel({ folder, onBack, onShare }) {
       )}
 
       {files.length === 0 ? (
-        <div className="py-12 text-center text-slate-400">
+        <div className="py-12 text-center text-gray-400">
           <i className="fas fa-folder-open text-3xl mb-3 opacity-30" />
           <p className="text-sm">This folder is empty.</p>
           <p className="text-xs mt-1">Add files using the folder+ button on any file row.</p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-slate-100 overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 border-b border-slate-100">
+        <div className="rounded-lg border border-gray-100 overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-100">
             <input type="checkbox"
               checked={selectedIds.length === files.length && files.length > 0}
               onChange={toggleAll}
-              className="w-4 h-4 rounded accent-indigo-600 flex-shrink-0"
+              className="w-4 h-4 rounded accent-brand-600 flex-shrink-0"
             />
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
               {selectedIds.length === files.length && files.length > 0 ? 'Deselect all' : 'Select all'}
             </span>
           </div>
           <div className="divide-y divide-slate-50 bg-white">
             {files.map((f) => (
               <div key={f.id} onClick={() => toggleFile(f.id)}
-                className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors ${selectedIds.includes(f.id) ? 'bg-indigo-50' : ''}`}>
+                className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${selectedIds.includes(f.id) ? 'bg-brand-50' : ''}`}>
                 <input type="checkbox" checked={selectedIds.includes(f.id)} onChange={() => toggleFile(f.id)}
-                  onClick={(e) => e.stopPropagation()} className="w-4 h-4 rounded accent-indigo-600 flex-shrink-0" />
-                <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                  onClick={(e) => e.stopPropagation()} className="w-4 h-4 rounded accent-brand-600 flex-shrink-0" />
+                <div className="w-8 h-8 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0">
                   <i className={`fas ${getFileIcon(f.mime_type)} text-sm`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800 truncate">{f.original_name}</p>
-                  <p className="text-[11px] text-slate-400">{f.file_size_display}</p>
+                  <p className="text-sm font-semibold text-gray-800 truncate">{f.original_name}</p>
+                  <p className="text-[11px] text-gray-400">{f.file_size_display}</p>
                 </div>
               </div>
             ))}
@@ -404,7 +399,6 @@ function FolderDetailPanel({ folder, onBack, onShare }) {
   )
 }
 
-// ─── Folder Sidebar ───────────────────────────────────────────────────────────
 
 function FolderSidebar({ selectedFolderView, onSelectFolder, onBack, onShare }) {
   const dispatch = useDispatch()
@@ -448,9 +442,9 @@ function FolderSidebar({ selectedFolderView, onSelectFolder, onBack, onShare }) 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Folders</h3>
+        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Folders</h3>
         <button onClick={() => setShowCreate((v) => !v)}
-          className="w-6 h-6 flex items-center justify-center bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 transition-all" title="New folder">
+          className="w-6 h-6 flex items-center justify-center bg-brand-100 text-brand-600 rounded-lg hover:bg-brand-200 transition-all" title="New folder">
           <i className="fas fa-plus text-[11px]" />
         </button>
       </div>
@@ -458,25 +452,25 @@ function FolderSidebar({ selectedFolderView, onSelectFolder, onBack, onShare }) 
       {error && <p className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded-lg">{error}</p>}
 
       {showCreate && (
-        <div className="bg-slate-50 rounded-xl p-3 space-y-2 border border-slate-200">
+        <div className="bg-gray-50 rounded-xl p-3 space-y-2 border border-gray-200">
           <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             placeholder="Folder name…" autoFocus
-            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none" />
+            className="w-full px-3 py-2 bg-white rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-brand-200 focus:outline-none" />
           <input type="text" value={newDesc} onChange={(e) => setNewDesc(e.target.value)}
             placeholder="Description (optional)…"
-            className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-200 focus:outline-none" />
+            className="w-full px-3 py-2 bg-white rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-brand-200 focus:outline-none" />
           <div className="flex flex-wrap gap-1.5">
             {FOLDER_COLORS.map((c) => (
               <button key={c} onClick={() => setNewColor(c)}
-                className={`w-5 h-5 rounded-full transition-all ${newColor === c ? 'ring-2 ring-offset-1 ring-indigo-500 scale-110' : ''}`}
+                className={`w-5 h-5 rounded-full transition-all ${newColor === c ? 'ring-2 ring-offset-1 ring-brand-500 scale-110' : ''}`}
                 style={{ background: c }} />
             ))}
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setShowCreate(false)} className="flex-1 py-1.5 text-xs text-slate-500 hover:text-slate-700 font-semibold">Cancel</button>
+            <button onClick={() => setShowCreate(false)} className="flex-1 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-semibold">Cancel</button>
             <button onClick={handleCreate} disabled={creating || !newName.trim()}
-              className="flex-1 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all disabled:opacity-50">
+              className="flex-1 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-bold hover:bg-brand-700 transition-all disabled:opacity-50">
               {creating ? 'Creating…' : 'Create'}
             </button>
           </div>
@@ -484,14 +478,14 @@ function FolderSidebar({ selectedFolderView, onSelectFolder, onBack, onShare }) 
       )}
 
       {loading && !folders.length ? (
-        <div className="flex items-center justify-center py-8 text-slate-400">
+        <div className="flex items-center justify-center py-8 text-gray-400">
           <i className="fas fa-spinner fa-spin mr-2 text-sm" /><span className="text-xs">Loading…</span>
         </div>
       ) : folders.length === 0 ? (
         <div className="py-8 text-center">
           <i className="fas fa-folder text-2xl text-slate-200 mb-2" />
-          <p className="text-xs text-slate-400">No folders yet</p>
-          <button onClick={() => setShowCreate(true)} className="text-xs text-indigo-500 hover:underline mt-1">Create one</button>
+          <p className="text-xs text-gray-400">No folders yet</p>
+          <button onClick={() => setShowCreate(true)} className="text-xs text-brand-500 hover:underline mt-1">Create one</button>
         </div>
       ) : (
         <div className="space-y-1">
@@ -501,31 +495,31 @@ function FolderSidebar({ selectedFolderView, onSelectFolder, onBack, onShare }) 
                 <div className="flex gap-1.5 items-center">
                   <input autoFocus type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setEditFolder(null) }}
-                    className="flex-1 px-2 py-1.5 text-xs bg-white rounded-lg border border-indigo-300 focus:ring-2 focus:ring-indigo-200 focus:outline-none" />
-                  <button onClick={handleRename} className="p-1.5 bg-indigo-600 text-white rounded-lg text-xs hover:bg-indigo-700">
+                    className="flex-1 px-2 py-1.5 text-xs bg-white rounded-lg border border-brand-300 focus:ring-2 focus:ring-brand-200 focus:outline-none" />
+                  <button onClick={handleRename} className="p-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700">
                     <i className="fas fa-check text-[10px]" />
                   </button>
-                  <button onClick={() => setEditFolder(null)} className="p-1.5 bg-slate-100 text-slate-600 rounded-lg text-xs hover:bg-slate-200">
+                  <button onClick={() => setEditFolder(null)} className="p-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs hover:bg-gray-200">
                     <i className="fas fa-xmark text-[10px]" />
                   </button>
                 </div>
               ) : (
                 <button onClick={() => onSelectFolder(f)}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-slate-100 transition-colors text-left group">
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-100 transition-colors text-left group">
                   <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: f.color + '20' }}>
                     <i className={`fas ${f.icon || 'fa-folder'} text-sm`} style={{ color: f.color }} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-slate-700 truncate">{f.name}</p>
-                    <p className="text-[10px] text-slate-400">{fmt(f.file_count)} file{f.file_count !== 1 ? 's' : ''}</p>
+                    <p className="text-xs font-bold text-gray-700 truncate">{f.name}</p>
+                    <p className="text-[10px] text-gray-400">{fmt(f.file_count)} file{f.file_count !== 1 ? 's' : ''}</p>
                   </div>
                   <div className="hidden group-hover:flex items-center gap-1 flex-shrink-0">
                     <button onClick={(e) => { e.stopPropagation(); setEditFolder(f); setEditName(f.name) }}
-                      className="p-1 text-slate-400 hover:text-indigo-500 rounded transition-colors" title="Rename">
+                      className="p-1 text-gray-400 hover:text-brand-500 rounded transition-colors" title="Rename">
                       <i className="fas fa-pen text-[10px]" />
                     </button>
                     <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm(f) }}
-                      className="p-1 text-slate-400 hover:text-red-500 rounded transition-colors" title="Delete">
+                      className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors" title="Delete">
                       <i className="fas fa-trash text-[10px]" />
                     </button>
                   </div>
@@ -537,12 +531,12 @@ function FolderSidebar({ selectedFolderView, onSelectFolder, onBack, onShare }) 
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900 mb-2">Delete "{deleteConfirm.name}"?</h3>
-            <p className="text-sm text-slate-500 mb-5">Folder removed — <strong>files are not deleted</strong>.</p>
+        <div className="modal-overlay">
+          <div className="modal-panel p-6 max-w-sm">
+            <h3 className="text-base font-bold text-gray-900 mb-2">Delete "{deleteConfirm.name}"?</h3>
+            <p className="text-sm text-gray-500 mb-5">Folder removed — <strong>files are not deleted</strong>.</p>
             <div className="flex gap-3">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all">Cancel</button>
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-200 transition-all">Cancel</button>
               <button onClick={handleDelete} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 transition-all">Delete</button>
             </div>
           </div>
@@ -552,7 +546,6 @@ function FolderSidebar({ selectedFolderView, onSelectFolder, onBack, onShare }) 
   )
 }
 
-// ─── Main Files component ─────────────────────────────────────────────────────
 
 export default function Files() {
   const dispatch = useDispatch()
@@ -589,7 +582,6 @@ export default function Files() {
   const [shareModal,         setShareModal]          = useState(null)
   const [shareFile,          setShareFile]           = useState(null)
 
-  // ── Auto-expiry states  ───────────────────────────────────────────────
   const [expiryOption, setExpiryOption] = useState('never')  // for the upload batch
   const [expiryFile,   setExpiryFile]   = useState(null)     // per-file expiry modal target
 
@@ -597,22 +589,17 @@ export default function Files() {
   const filesRef     = useRef(files)
   useEffect(() => { filesRef.current = files }, [files])
 
-  // keep search/ordering in refs so the polling closure always sees latest values
   const searchRef   = useRef(search)
   const orderingRef = useRef(ordering)
   useEffect(() => { searchRef.current = search },     [search])
   useEffect(() => { orderingRef.current = ordering }, [ordering])
 
-  // ── Initial load ──────────────────────────────────────────────────────
   useEffect(() => {
     dispatch(fetchFiles())
     dispatch(fetchStorage())
     dispatch(fetchFolders())
   }, [dispatch])
 
-  // ── Background polling ────────────────────────────────────────────────
-  // Silently re-fetches every POLL_INTERVAL_MS so that when the Celery task
-  // purges expired files the list updates automatically without the user
   // needing to refresh the page.
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -705,11 +692,9 @@ export default function Files() {
   const handleDrop = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); runDuplicateChecks(Array.from(e.dataTransfer.files)) }
   const handleFileSelect = (e) => { runDuplicateChecks(Array.from(e.target.files || [])); e.target.value = '' }
 
-  // ── Upload — now includes expiryOption ──────────────────────────────
   const handleUpload = async () => {
     if (!selectedFiles.length) return
     const count  = selectedFiles.length
-    // Pass { files, expiryOption } to the updated thunk
     const result = await dispatch(upload({ files: selectedFiles, expiryOption }))
     if (!result.error) {
       setUploadSuccess(count === 1 ? `"${selectedFiles[0].name}" uploaded!` : `${count} files uploaded!`)
@@ -717,7 +702,6 @@ export default function Files() {
       dispatch(fetchStorage())
     }
     setSelectedFiles([]); setRenamedCount(0)
-    // NOTE: expiryOption is intentionally NOT reset so the next batch inherits the same setting
   }
 
   const handleDownload = async (file) => {
@@ -783,7 +767,6 @@ export default function Files() {
     else setRenameError(result.payload || 'Rename failed.')
   }
 
-  // ── Expiry updated callback: refresh the file list  ─────────────────
   const handleExpiryUpdated = () => {
     dispatch(fetchFiles({ page: currentPage, search, ordering }))
   }
@@ -791,37 +774,36 @@ export default function Files() {
   const usedPercentage = storage ? Math.round((storage.used_bytes / storage.total_bytes) * 100) : 0
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#f8fafc] min-h-screen">
+    <div className="w-full">
       <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" aria-hidden="true" />
 
-      <div className="max-w-7xl mx-auto">
+      <div>
 
-        {/* Header */}
-        <header className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6">
+                <header className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6">
           <div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-indigo-900">My Storage</h2>
+            <h2 className="page-title">My Storage</h2>
             <p className="text-gray-500 mt-1 flex items-center gap-2 text-sm">
-              <i className="fas fa-folder-open text-indigo-400" />
+              <i className="fas fa-folder-open text-brand-500" />
               {storage?.file_count ?? 0} files stored
             </p>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <button type="button" onClick={() => setShowFolderPanel((v) => !v)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-sm transition-all border ${showFolderPanel ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border ${showFolderPanel ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}>
               <i className="fas fa-folder text-base" />
               <span className="hidden sm:inline">Folders</span>
             </button>
             <button onClick={openFilePicker}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-2xl font-bold text-sm shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all">
+              className="btn-primary flex-1 sm:flex-none sm:w-auto">
               <i className="fas fa-plus" /> New Upload
             </button>
           </div>
         </header>
 
-        {error && <Alert type="error" message={error} className="mb-5 rounded-2xl" />}
+        {error && <Alert type="error" message={error} className="mb-5 rounded-lg" />}
 
         {duplicateChecking && (
-          <div className="mb-5 flex items-center gap-3 px-5 py-4 bg-blue-50 border border-blue-200 rounded-2xl shadow-sm">
+          <div className="mb-5 flex items-center gap-3 px-5 py-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
             <i className="fas fa-spinner fa-spin text-blue-500" />
             <div>
               <p className="text-sm font-bold text-blue-800">Checking for duplicates…</p>
@@ -831,7 +813,7 @@ export default function Files() {
         )}
 
         {uploadSuccess && (
-          <div className="mb-5 flex items-center gap-3 px-5 py-4 bg-green-50 border border-green-200 rounded-2xl shadow-sm">
+          <div className="mb-5 flex items-center gap-3 px-5 py-4 bg-green-50 border border-green-200 rounded-lg shadow-sm">
             <div className="w-8 h-8 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
               <i className="fas fa-circle-check text-green-600" />
             </div>
@@ -842,9 +824,8 @@ export default function Files() {
           </div>
         )}
 
-        {/* Storage bar + Drop zone */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 flex flex-col justify-between">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-50 flex flex-col justify-between">
             <div>
               <div className="flex justify-between items-center mb-4">
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Storage</span>
@@ -855,15 +836,15 @@ export default function Files() {
             </div>
             <div className="mt-5">
               <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-600 rounded-full transition-all duration-1000" style={{ width: `${usedPercentage}%` }} />
+                <div className="h-full bg-brand-600 rounded-full transition-all duration-1000" style={{ width: `${usedPercentage}%` }} />
               </div>
             </div>
           </div>
           <div role="button" tabIndex={0}
             onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
             onClick={openFilePicker} onKeyDown={(e) => e.key === 'Enter' && openFilePicker()}
-            className={`lg:col-span-2 rounded-3xl p-6 border-2 border-dashed transition-all cursor-pointer flex items-center justify-center gap-6 select-none ${dragActive ? 'border-indigo-400 bg-indigo-50/50' : 'border-gray-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/20'}`}>
-            <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center text-2xl pointer-events-none">
+            className={`lg:col-span-2 rounded-lg p-6 border border-dashed transition-all cursor-pointer flex items-center justify-center gap-6 select-none ${dragActive ? 'border-brand-500 bg-brand-50/50' : 'border-gray-200 bg-white hover:border-brand-300 hover:bg-brand-50/20'}`}>
+            <div className="w-16 h-16 rounded-lg bg-brand-50 text-brand-500 flex items-center justify-center text-2xl pointer-events-none">
               <i className={`fas ${duplicateChecking || uploading ? 'fa-spinner fa-spin' : 'fa-cloud-arrow-up'}`} />
             </div>
             <div className="pointer-events-none">
@@ -873,18 +854,16 @@ export default function Files() {
           </div>
         </div>
 
-        {/* ── Upload staging banner (expiry selector added) ── */}
-        {selectedFiles.length > 0 && (
-          <div className="bg-indigo-900 rounded-3xl p-5 mb-6 text-white shadow-xl shadow-indigo-200">
+                {selectedFiles.length > 0 && (
+          <div className="bg-gray-900 rounded-lg p-5 mb-6 text-white ">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              {/* File info */}
-              <div className="flex items-center gap-4 min-w-0">
-                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center flex-shrink-0">
+                            <div className="flex items-center gap-4 min-w-0">
+                <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
                   <i className="fas fa-file-circle-plus text-xl" />
                 </div>
                 <div className="min-w-0">
                   <p className="font-bold">{selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} ready</p>
-                  <p className="text-xs text-indigo-200 truncate">{selectedFiles.map((f) => f.name).join(', ').slice(0, 60)}…</p>
+                  <p className="text-xs text-brand-200 truncate">{selectedFiles.map((f) => f.name).join(', ').slice(0, 60)}…</p>
                   {renamedCount > 0 && (
                     <p className="text-xs text-amber-300 font-semibold mt-0.5 flex items-center gap-1">
                       <i className="fas fa-triangle-exclamation" />{renamedCount} renamed to avoid conflicts
@@ -893,21 +872,19 @@ export default function Files() {
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex gap-2 w-full sm:w-auto flex-shrink-0">
-                <button onClick={() => { setSelectedFiles([]); setRenamedCount(0) }} className="px-4 py-2 text-sm font-bold text-indigo-200 hover:text-white">Cancel</button>
+                            <div className="flex gap-2 w-full sm:w-auto flex-shrink-0">
+                <button onClick={() => { setSelectedFiles([]); setRenamedCount(0) }} className="px-4 py-2 text-sm font-bold text-brand-200 hover:text-white">Cancel</button>
                 <button onClick={handleUpload} disabled={uploading}
-                  className="px-6 py-2 bg-white text-indigo-900 rounded-xl font-bold text-sm hover:bg-indigo-50 transition-all flex items-center gap-2 disabled:opacity-60">
+                  className="px-6 py-2 bg-white text-gray-900 rounded-xl font-bold text-sm hover:bg-brand-50 transition-all flex items-center gap-2 disabled:opacity-60">
                   {uploading ? <><i className="fas fa-spinner fa-spin" />Uploading…</> : <><i className="fas fa-upload" />Upload</>}
                 </button>
               </div>
             </div>
 
-            {/* ── Expiry selector row  ── */}
-            <div className="mt-4 pt-4 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        <div className="mt-4 pt-4 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <div className="flex items-center gap-2 flex-shrink-0">
-                <i className="fas fa-clock text-indigo-300 text-sm" />
-                <span className="text-xs font-bold text-indigo-200 uppercase tracking-wider">Auto-delete</span>
+                <i className="fas fa-clock text-brand-300 text-sm" />
+                <span className="text-xs font-bold text-brand-200 uppercase tracking-wider">Auto-delete</span>
               </div>
               <div className="flex flex-wrap gap-2">
                 {EXPIRY_OPTIONS.map(({ value, label }) => (
@@ -917,8 +894,8 @@ export default function Files() {
                     onClick={() => setExpiryOption(value)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                       expiryOption === value
-                        ? 'bg-white text-indigo-900 border-white'
-                        : 'bg-white/10 text-indigo-200 border-white/20 hover:bg-white/20'
+                        ? 'bg-white text-gray-900 border-white'
+                        : 'bg-white/10 text-brand-200 border-white/20 hover:bg-white/20'
                     }`}
                   >
                     {label}
@@ -935,17 +912,14 @@ export default function Files() {
           </div>
         )}
 
-        {/* Main grid */}
-        <div className={`grid gap-5 ${showFolderPanel ? 'lg:grid-cols-[1fr_280px]' : 'grid-cols-1'}`}>
+                <div className={`grid gap-5 ${showFolderPanel ? 'lg:grid-cols-[1fr_280px]' : 'grid-cols-1'}`}>
 
-          {/* File list */}
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-50 overflow-hidden">
-            {/* Toolbar */}
-            <div className="p-5 border-b border-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <h4 className="font-bold text-gray-800 flex items-center gap-2">
-                <i className="fas fa-list text-indigo-500" /> All Files
+                    <div className="table-shell overflow-hidden">
+                        <div className="flex flex-col gap-3 border-b border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                <i className="fas fa-list text-brand-500" /> All Files
                 {batchSelected.length > 0 && (
-                  <span className="ml-2 px-2.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">
+                  <span className="ml-2 px-2.5 py-0.5 bg-brand-100 text-brand-700 text-xs font-bold rounded-full">
                     {batchSelected.length} selected
                   </span>
                 )}
@@ -955,19 +929,19 @@ export default function Files() {
                   <>
                     <button type="button"
                       onClick={(e) => { e.stopPropagation(); setAddToFolderFiles([...batchSelected]) }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all">
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 text-brand-700 rounded-xl text-xs font-bold hover:bg-brand-100 transition-all">
                       <i className="fas fa-folder-plus text-[11px]" /> Add to folder
                     </button>
                     <button onClick={() => setBatchDeleteConfirm(true)}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded-xl text-xs font-bold hover:bg-red-100 transition-all">
                       <i className="fas fa-trash text-[11px]" /> Delete ({batchSelected.length})
                     </button>
-                    <button onClick={() => setBatchSelected([])} className="text-xs text-slate-400 hover:text-slate-600 px-2">Clear</button>
+                    <button onClick={() => setBatchSelected([])} className="text-xs text-gray-400 hover:text-gray-600 px-2">Clear</button>
                   </>
                 )}
                 <select value={ordering}
                   onChange={(e) => { setOrdering(e.target.value); dispatch(fetchFiles({ page: 1, search, ordering: e.target.value })) }}
-                  className="px-3 py-2 bg-gray-50 border-none rounded-xl text-xs font-bold text-gray-500 focus:ring-2 focus:ring-indigo-100 cursor-pointer">
+                  className="px-3 py-2 bg-gray-50 border-none rounded-xl text-xs font-bold text-gray-500 focus:ring-2 focus:ring-brand-100 cursor-pointer">
                   <option value="-uploaded_at">Newest</option>
                   <option value="uploaded_at">Oldest</option>
                   <option value="original_name">A–Z</option>
@@ -979,67 +953,65 @@ export default function Files() {
                   <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs" />
                   <input type="text" placeholder="Search…" value={search}
                     onChange={(e) => { setSearch(e.target.value); dispatch(fetchFiles({ page: 1, search: e.target.value, ordering })); setBatchSelected([]) }}
-                    className="w-48 pl-9 pr-3 py-2 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-100" />
+                    className="field w-full sm:w-48 pl-9 py-2" />
                 </div>
               </div>
             </div>
 
             <div className="p-2">
               {loading && !files.length ? (
-                <div className="py-20 text-center text-gray-400">
-                  <i className="fas fa-circle-notch fa-spin text-3xl mb-4" />
-                  <p className="text-sm">Fetching your files…</p>
+                <div className="empty-state">
+                  <div className="empty-state-icon"><i className="fas fa-circle-notch fa-spin" /></div>
+                  <p className="text-sm text-gray-500">Fetching your files…</p>
                 </div>
               ) : files.length === 0 ? (
-                <div className="py-20 text-center text-gray-400">
-                  <i className="fas fa-folder-open text-4xl mb-4 opacity-20" />
-                  <p className="text-sm">No files found</p>
-                  <button onClick={openFilePicker} className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700">Upload first file</button>
+                <div className="empty-state">
+                  <div className="empty-state-icon"><i className="fas fa-folder-open" /></div>
+                  <p className="text-sm font-medium text-gray-900">No files found</p>
+                  <p className="mt-1 text-sm text-gray-500">Upload a file or adjust your search.</p>
+                  <button type="button" onClick={openFilePicker} className="btn-primary mt-4">Upload first file</button>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-separate border-spacing-y-1">
-                    <thead>
-                      <tr className="text-[10px] uppercase tracking-widest text-gray-400">
-                        <th className="px-3 py-2 w-10">
+                  <table className="w-full text-left">
+                    <thead className="table-head border-b border-gray-200">
+                      <tr>
+                        <th className="table-th w-10">
                           <input type="checkbox" checked={isAllSelected} onChange={toggleAllBatch}
-                            className="w-4 h-4 rounded accent-indigo-600" title="Select all" />
+                            className="h-4 w-4 rounded border-gray-300 accent-brand-600" title="Select all" />
                         </th>
-                        <th className="px-4 py-2 font-bold">File Name</th>
-                        <th className="px-4 py-2 font-bold hidden md:table-cell">Size</th>
-                        <th className="px-4 py-2 font-bold hidden lg:table-cell">Expiry</th>{/* ← NEW column */}
-                        <th className="px-4 py-2 font-bold hidden sm:table-cell">Uploaded</th>
-                        <th className="px-4 py-2 font-bold text-right">Actions</th>
+                        <th className="table-th">File Name</th>
+                        <th className="table-th hidden md:table-cell">Size</th>
+                        <th className="table-th hidden lg:table-cell">Expiry</th><th className="table-th hidden sm:table-cell">Uploaded</th>
+                        <th className="table-th text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {files.map((file) => {
                         const isFav      = localFavs[file.id] ?? file.is_favorite
                         const isBatched  = batchSelected.includes(file.id)
-                        // compute expiry info for this file
                         const expiryInfo = getExpiryInfo(file.expires_at)
 
                         return (
                           <tr key={file.id}
-                            className={`transition-colors ${isBatched ? 'bg-indigo-50/60' : 'hover:bg-indigo-50/40'}`}>
+                            className={`table-row ${isBatched ? 'bg-brand-50/80' : ''}`}>
 
-                            <td className="px-3 py-3 rounded-l-2xl">
+                            <td className="table-td w-10">
                               <input type="checkbox" checked={isBatched}
                                 onChange={() => toggleBatch(file.id)}
                                 onClick={(e) => e.stopPropagation()}
-                                className="w-4 h-4 rounded accent-indigo-600" />
+                                className="w-4 h-4 rounded accent-brand-600" />
                             </td>
 
-                            <td className="px-4 py-3">
+                            <td className="table-td">
                               <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                                <div className="w-10 h-10 bg-brand-50 rounded-xl flex items-center justify-center flex-shrink-0">
                                   <i className={`fas ${getFileIcon(file.mime_type)} text-base`} />
                                 </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5">
                                     <p className="text-sm font-bold text-gray-800 truncate max-w-[120px] sm:max-w-xs">{file.original_name}</p>
                                     {isFav && <i className="fas fa-star text-yellow-400 text-[10px] flex-shrink-0" />}
-                                    {/* expired badge inline with filename (mobile-visible) */}
                                     {expiryInfo?.variant === 'expired' && (
                                       <span className="lg:hidden inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-600 text-[9px] font-bold rounded-full flex-shrink-0">
                                         <i className="fas fa-clock text-[8px]" /> Expired
@@ -1047,7 +1019,6 @@ export default function Files() {
                                     )}
                                   </div>
                                   <p className="text-[10px] text-gray-400 uppercase md:hidden">{file.file_size_display}</p>
-                                  {/*  expiry hint on small screens (below filename) */}
                                   {expiryInfo && expiryInfo.variant !== 'expired' && (
                                     <p className={`lg:hidden text-[10px] font-semibold flex items-center gap-1 ${variantClasses[expiryInfo.variant]}`}>
                                       <i className="fas fa-clock text-[9px]" />{expiryInfo.label}
@@ -1057,12 +1028,11 @@ export default function Files() {
                               </div>
                             </td>
 
-                            <td className="px-4 py-3 hidden md:table-cell">
+                            <td className="table-td hidden md:table-cell">
                               <span className="text-sm text-gray-500">{file.file_size_display}</span>
                             </td>
 
-                            {/*  dedicated Expiry column (desktop) */}
-                            <td className="px-4 py-3 hidden lg:table-cell">
+                            <td className="table-td hidden lg:table-cell">
                               {expiryInfo ? (
                                 <span
                                   className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-lg ${
@@ -1072,7 +1042,7 @@ export default function Files() {
                                       ? 'bg-orange-50 text-orange-600'
                                       : expiryInfo.variant === 'warning'
                                       ? 'bg-amber-50 text-amber-600'
-                                      : 'bg-slate-50 text-slate-500'
+                                      : 'bg-gray-50 text-gray-500'
                                   }`}
                                 >
                                   <i className={`fas fa-clock text-[9px] ${expiryInfo.variant === 'expired' ? 'text-red-400' : ''}`} />
@@ -1083,42 +1053,36 @@ export default function Files() {
                               )}
                             </td>
 
-                            <td className="px-4 py-3 hidden sm:table-cell">
+                            <td className="table-td hidden sm:table-cell">
                               <span className="text-sm text-gray-500">{new Date(file.uploaded_at).toLocaleDateString()}</span>
                             </td>
 
-                            {/* ── Action buttons ── */}
-                            <td className="px-4 py-3 rounded-r-2xl text-right">
+                                                        <td className="table-td text-right">
                               <div className="flex justify-end items-center gap-0.5">
 
-                                {/* Preview */}
-                                <button onClick={(e) => { e.stopPropagation(); setPreviewFile(file) }}
-                                  className="p-2 text-gray-400 hover:text-indigo-600 transition-colors" title="Preview">
+                                                                <button onClick={(e) => { e.stopPropagation(); setPreviewFile(file) }}
+                                  className="p-2 text-gray-400 hover:text-brand-600 transition-colors" title="Preview">
                                   <i className="fas fa-eye text-sm" />
                                 </button>
 
-                                {/* Download */}
-                                <button onClick={(e) => { e.stopPropagation(); handleDownload(file) }}
-                                  className="p-2 text-gray-400 hover:text-indigo-600 transition-colors" title="Download">
+                                                                <button onClick={(e) => { e.stopPropagation(); handleDownload(file) }}
+                                  className="p-2 text-gray-400 hover:text-brand-600 transition-colors" title="Download">
                                   <i className="fas fa-download text-sm" />
                                 </button>
 
-                                {/* Star */}
-                                <button onClick={(e) => { e.stopPropagation(); handleToggleFavorite(file) }}
+                                                                <button onClick={(e) => { e.stopPropagation(); handleToggleFavorite(file) }}
                                   disabled={!!starLoading[file.id]}
                                   className={`p-2 transition-colors disabled:opacity-50 ${isFav ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-400 hover:text-yellow-400'}`}
                                   title={isFav ? 'Unstar' : 'Star'}>
                                   <i className={`fas ${starLoading[file.id] ? 'fa-spinner fa-spin' : 'fa-star'} text-sm`} />
                                 </button>
 
-                                {/* Rename */}
-                                <button onClick={(e) => { e.stopPropagation(); setRenameFile(file); setNewFileName(stripExt(file.original_name)); setRenameError(null) }}
+                                                                <button onClick={(e) => { e.stopPropagation(); setRenameFile(file); setNewFileName(stripExt(file.original_name)); setRenameError(null) }}
                                   className="p-2 text-gray-400 hover:text-amber-500 transition-colors" title="Rename">
                                   <i className="fas fa-pen-to-square text-sm" />
                                 </button>
 
-                                {/* Share via email */}
-                                <button
+                                                                <button
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); setShareFile(file) }}
                                   className="p-2 text-gray-400 hover:text-sky-500 transition-colors"
@@ -1127,7 +1091,6 @@ export default function Files() {
                                   <i className="fas fa-share-nodes text-sm" />
                                 </button>
 
-                                {/* Set / edit expiry */}
                                 <button
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); setExpiryFile(file) }}
@@ -1137,23 +1100,21 @@ export default function Files() {
                                         ? 'text-red-400 hover:text-red-500'
                                         : expiryInfo.variant === 'critical' || expiryInfo.variant === 'warning'
                                         ? 'text-amber-400 hover:text-amber-500'
-                                        : 'text-slate-400 hover:text-indigo-500'
-                                      : 'text-gray-400 hover:text-indigo-500'
+                                        : 'text-gray-400 hover:text-brand-500'
+                                      : 'text-gray-400 hover:text-brand-500'
                                   }`}
                                   title={expiryInfo ? 'Edit expiry' : 'Set auto-delete'}
                                 >
                                   <i className="fas fa-clock text-sm" />
                                 </button>
 
-                                {/* Add to folder */}
-                                <button type="button"
+                                                                <button type="button"
                                   onClick={(e) => { e.stopPropagation(); setAddToFolderFiles([file.id]) }}
-                                  className="p-2 text-gray-400 hover:text-indigo-500 transition-colors" title="Add to folder">
+                                  className="p-2 text-gray-400 hover:text-brand-500 transition-colors" title="Add to folder">
                                   <i className="fas fa-folder-plus text-sm" />
                                 </button>
 
-                                {/* Delete */}
-                                <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm(file.id) }}
+                                                                <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm(file.id) }}
                                   className="p-2 text-gray-400 hover:text-red-500 transition-colors" title="Move to trash">
                                   <i className="fas fa-trash-can text-sm" />
                                 </button>
@@ -1170,9 +1131,8 @@ export default function Files() {
             </div>
           </div>
 
-          {/* Folder panel */}
-          {showFolderPanel && (
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-50 p-4 h-fit">
+                    {showFolderPanel && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-50 p-4 h-fit">
               <FolderSidebar
                 selectedFolderView={selectedFolderView}
                 onSelectFolder={(f) => setSelectedFolderView(f)}
@@ -1183,8 +1143,7 @@ export default function Files() {
           )}
         </div>
 
-        {/* Pagination */}
-        {(pagination.total_pages ?? 1) > 1 && (() => {
+                {(pagination.total_pages ?? 1) > 1 && (() => {
           const totalPages = pagination.total_pages
           const canPrev = currentPage > 1, canNext = currentPage < totalPages
           const nums = []; for (let i = 1; i <= totalPages; i++) { if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) nums.push(i) }
@@ -1192,19 +1151,19 @@ export default function Files() {
           return (
             <div className="mt-6 flex justify-center items-center gap-2 flex-wrap">
               <button disabled={!canPrev} onClick={() => goToPage(currentPage - 1)}
-                className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-100 text-gray-500 disabled:opacity-30 hover:border-indigo-300 transition-all">
+                className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-100 text-gray-500 disabled:opacity-30 hover:border-brand-300 transition-all">
                 <i className="fas fa-chevron-left text-xs" />
               </button>
               {items.map((item) => typeof item === 'string' ? (
                 <span key={item} className="w-10 h-10 flex items-center justify-center text-gray-400 text-sm">…</span>
               ) : (
                 <button key={item} onClick={() => goToPage(item)}
-                  className={`w-10 h-10 flex items-center justify-center rounded-xl text-sm font-bold border transition-all ${item === currentPage ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-gray-600 border-gray-100 hover:border-indigo-300'}`}>
+                  className={`w-10 h-10 flex items-center justify-center rounded-xl text-sm font-bold border transition-all ${item === currentPage ? 'bg-brand-600 text-white border-brand-600 shadow-md' : 'bg-white text-gray-600 border-gray-100 hover:border-brand-300'}`}>
                   {item}
                 </button>
               ))}
               <button disabled={!canNext} onClick={() => goToPage(currentPage + 1)}
-                className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-100 text-gray-500 disabled:opacity-30 hover:border-indigo-300 transition-all">
+                className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-100 text-gray-500 disabled:opacity-30 hover:border-brand-300 transition-all">
                 <i className="fas fa-chevron-right text-xs" />
               </button>
               <span className="w-full text-center text-xs text-gray-400 mt-1">Page {currentPage} of {totalPages}</span>
@@ -1212,8 +1171,6 @@ export default function Files() {
           )
         })()}
       </div>
-
-      {/* ══════════════════════════ MODALS ════════════════════════════════ */}
 
       {duplicateModal && (
         <DuplicateModal
@@ -1226,9 +1183,9 @@ export default function Files() {
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-indigo-900/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl">
-            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-6">
+        <div className="modal-overlay">
+          <div className="bg-white rounded-lg p-8 max-w-sm w-full">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-lg flex items-center justify-center text-2xl mx-auto mb-6">
               <i className="fas fa-trash-can" />
             </div>
             <h3 className="text-xl font-bold text-center text-gray-900 mb-2">Move to Trash?</h3>
@@ -1236,7 +1193,7 @@ export default function Files() {
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => setDeleteConfirm(null)} className="py-3 font-bold text-gray-400 hover:text-gray-600">Cancel</button>
               <button onClick={() => handleDelete(deleteConfirm)}
-                className="py-3 bg-red-500 text-white rounded-2xl font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-100">
+                className="py-3 bg-red-500 text-white rounded-lg font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-100">
                 Move to Trash
               </button>
             </div>
@@ -1245,9 +1202,9 @@ export default function Files() {
       )}
 
       {batchDeleteConfirm && (
-        <div className="fixed inset-0 bg-indigo-900/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl">
-            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-6">
+        <div className="modal-overlay">
+          <div className="bg-white rounded-lg p-8 max-w-sm w-full">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-lg flex items-center justify-center text-2xl mx-auto mb-6">
               <i className="fas fa-trash-can" />
             </div>
             <h3 className="text-xl font-bold text-center text-gray-900 mb-2">Move {batchSelected.length} files to Trash?</h3>
@@ -1255,7 +1212,7 @@ export default function Files() {
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => setBatchDeleteConfirm(false)} className="py-3 font-bold text-gray-400 hover:text-gray-600">Cancel</button>
               <button onClick={handleBatchDelete} disabled={batchDeleting}
-                className="py-3 bg-red-500 text-white rounded-2xl font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-100 disabled:opacity-60 flex items-center justify-center gap-2">
+                className="py-3 bg-red-500 text-white rounded-lg font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-100 disabled:opacity-60 flex items-center justify-center gap-2">
                 {batchDeleting ? <><i className="fas fa-spinner fa-spin text-sm" />Deleting…</> : 'Move to Trash'}
               </button>
             </div>
@@ -1264,15 +1221,15 @@ export default function Files() {
       )}
 
       {renameFile && (
-        <div className="fixed inset-0 bg-indigo-900/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl">
+        <div className="modal-overlay">
+          <div className="bg-white rounded-lg p-8 max-w-md w-full">
             <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-              <i className="fas fa-pen-to-square text-indigo-500" /> Rename File
+              <i className="fas fa-pen-to-square text-brand-500" /> Rename File
             </h3>
             <div className="space-y-4">
-              <div className="p-4 bg-indigo-50 rounded-2xl">
-                <p className="text-[10px] font-bold text-indigo-400 uppercase mb-1">Current Name</p>
-                <p className="text-sm font-medium text-indigo-900 truncate">{renameFile.original_name}</p>
+              <div className="p-4 bg-brand-50 rounded-lg">
+                <p className="text-[10px] font-bold text-brand-500 uppercase mb-1">Current Name</p>
+                <p className="text-sm font-medium text-gray-900 truncate">{renameFile.original_name}</p>
               </div>
               {renameError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
@@ -1284,7 +1241,7 @@ export default function Files() {
                 <input type="text" value={newFileName}
                   onChange={(e) => { setNewFileName(e.target.value); setRenameError(null) }}
                   onKeyDown={(e) => e.key === 'Enter' && handleRename()}
-                  className="w-full px-5 py-4 bg-gray-50 border-none rounded-2xl font-bold text-gray-800 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full px-5 py-4 bg-gray-50 border-none rounded-lg font-bold text-gray-800 focus:ring-2 focus:ring-brand-100"
                   placeholder="New filename…" autoFocus />
                 <span className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">{getExt(renameFile.original_name)}</span>
               </div>
@@ -1293,7 +1250,7 @@ export default function Files() {
             <div className="grid grid-cols-2 gap-3 mt-8">
               <button onClick={() => { setRenameFile(null); setRenameError(null) }} className="py-3 font-bold text-gray-400 hover:text-gray-600">Cancel</button>
               <button onClick={handleRename} disabled={!newFileName.trim()}
-                className="py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all disabled:opacity-50">
+                className="py-3 bg-brand-600 text-white rounded-lg font-bold hover:bg-brand-700 transition-all disabled:opacity-50">
                 Save Changes
               </button>
             </div>
@@ -1302,38 +1259,38 @@ export default function Files() {
       )}
 
       {previewFile && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[2.5rem] p-8 w-full shadow-2xl max-h-[90vh] overflow-y-auto max-w-lg">
+        <div className="modal-overlay">
+          <div className="bg-white rounded-lg p-8 w-full max-h-[90vh] overflow-y-auto max-w-lg">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-bold text-gray-900 text-lg">Preview</h3>
               <button onClick={() => setPreviewFile(null)} className="text-gray-400 hover:text-gray-600 text-xl"><i className="fas fa-times" /></button>
             </div>
             {previewFile.mime_type?.includes('image') ? (
-              <div className="mb-6 rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 flex items-center justify-center min-h-[120px]">
+              <div className="mb-6 rounded-lg overflow-hidden bg-gray-50 border border-gray-100 flex items-center justify-center min-h-[120px]">
                 {previewLoading
-                  ? <div className="py-12 flex flex-col items-center gap-3 text-gray-400"><i className="fas fa-circle-notch fa-spin text-2xl text-indigo-400" /><p className="text-xs">Loading…</p></div>
+                  ? <div className="py-12 flex flex-col items-center gap-3 text-gray-400"><i className="fas fa-circle-notch fa-spin text-2xl text-brand-500" /><p className="text-xs">Loading…</p></div>
                   : previewBlobUrl
                     ? <img src={previewBlobUrl} alt={previewFile.original_name} className="w-full max-h-72 object-contain" />
                     : <div className="py-12 flex flex-col items-center gap-2 text-gray-400"><i className="fas fa-image text-4xl text-blue-300" /><p className="text-sm">Preview unavailable</p></div>}
               </div>
             ) : previewFile.mime_type?.includes('video') ? (
-              <div className="mb-6 rounded-2xl overflow-hidden bg-black">
+              <div className="mb-6 rounded-lg overflow-hidden bg-black">
                 {previewLoading
                   ? <div className="py-12 flex items-center justify-center"><i className="fas fa-circle-notch fa-spin text-2xl text-white" /></div>
                   : previewBlobUrl ? <video controls className="w-full max-h-64" src={previewBlobUrl} /> : null}
               </div>
             ) : previewFile.mime_type?.includes('audio') ? (
-              <div className="mb-6 p-6 bg-indigo-50 rounded-2xl">
+              <div className="mb-6 p-6 bg-brand-50 rounded-lg">
                 {previewLoading
-                  ? <div className="flex items-center justify-center gap-3 text-indigo-400 py-2"><i className="fas fa-circle-notch fa-spin" /></div>
+                  ? <div className="flex items-center justify-center gap-3 text-brand-500 py-2"><i className="fas fa-circle-notch fa-spin" /></div>
                   : previewBlobUrl ? <audio controls className="w-full" src={previewBlobUrl} /> : null}
               </div>
             ) : previewFile.mime_type?.includes('pdf') ? (
-              <div className="mb-6 rounded-2xl overflow-hidden bg-gray-50 border border-gray-100"
+              <div className="mb-6 rounded-lg overflow-hidden bg-gray-50 border border-gray-100"
                 style={{ height: '520px', overflow: 'hidden', position: 'relative' }}>
                 {previewLoading ? (
                   <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-400">
-                    <i className="fas fa-circle-notch fa-spin text-2xl text-indigo-400" />
+                    <i className="fas fa-circle-notch fa-spin text-2xl text-brand-500" />
                     <p className="text-xs">Loading PDF…</p>
                   </div>
                 ) : previewBlobUrl ? (
@@ -1358,7 +1315,7 @@ export default function Files() {
                 )}
               </div>
             ) : (
-              <div className="mb-6 bg-gray-50 rounded-2xl p-12 text-center border border-gray-100">
+              <div className="mb-6 bg-gray-50 rounded-lg p-12 text-center border border-gray-100">
                 <i className={`fas ${getFileIcon(previewFile.mime_type)} text-6xl mb-3`} />
                 <p className="text-xs text-gray-400 mt-1">Download to open this file</p>
               </div>
@@ -1369,8 +1326,7 @@ export default function Files() {
                 <div><p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Size</p><p className="text-sm font-bold text-gray-800">{previewFile.file_size_display}</p></div>
                 <div><p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Type</p><p className="text-sm font-bold text-gray-800 break-all">{previewFile.mime_type || 'Unknown'}</p></div>
               </div>
-              {/* show expiry in preview modal */}
-              {previewFile.expires_at && (() => {
+                            {previewFile.expires_at && (() => {
                 const info = getExpiryInfo(previewFile.expires_at)
                 return (
                   <div>
@@ -1379,7 +1335,7 @@ export default function Files() {
                       info?.variant === 'expired'  ? 'bg-red-50 text-red-600' :
                       info?.variant === 'critical' ? 'bg-orange-50 text-orange-600' :
                       info?.variant === 'warning'  ? 'bg-amber-50 text-amber-600' :
-                                                     'bg-slate-50 text-slate-500'}`}>
+                                                     'bg-gray-50 text-gray-500'}`}>
                       <i className="fas fa-clock text-[9px]" />
                       {info?.label}
                       {' · '}
@@ -1391,19 +1347,19 @@ export default function Files() {
             </div>
             <div className={`grid gap-3 ${previewFile.mime_type?.includes('pdf') ? 'grid-cols-3' : 'grid-cols-2'}`}>
               <button onClick={() => { handleDownload(previewFile); setPreviewFile(null) }}
-                className="py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 flex items-center justify-center gap-2">
+                className="py-3 bg-brand-600 text-white rounded-lg font-bold hover:bg-brand-700 flex items-center justify-center gap-2">
                 <i className="fas fa-download" /> Download
               </button>
               {previewFile.mime_type?.includes('pdf') && (
                 <button onClick={handleOpenPreview}
                   disabled={!previewBlobUrl}
-                  className="py-3 bg-slate-100 text-slate-700 rounded-2xl font-bold hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
+                  className="py-3 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200 transition-all flex items-center justify-center gap-2">
                   <i className="fas fa-arrow-up-right-from-square" /> Open
                 </button>
               )}
               <button onClick={() => { handleToggleFavorite(previewFile); setPreviewFile(null) }}
                 disabled={!!starLoading[previewFile.id]}
-                className={`py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${(localFavs[previewFile.id] ?? previewFile.is_favorite) ? 'bg-yellow-50 text-yellow-600 hover:bg-yellow-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                className={`py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-2 ${(localFavs[previewFile.id] ?? previewFile.is_favorite) ? 'bg-yellow-50 text-yellow-600 hover:bg-yellow-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                 <i className="fas fa-star" />
                 {(localFavs[previewFile.id] ?? previewFile.is_favorite) ? 'Unstar' : 'Star'}
               </button>
@@ -1412,8 +1368,7 @@ export default function Files() {
         </div>
       )}
 
-      {/* AddToFolderModal */}
-      {addToFolderFiles && (
+            {addToFolderFiles && (
         <AddToFolderModal
           fileIds={addToFolderFiles}
           onClose={() => setAddToFolderFiles(null)}
@@ -1421,8 +1376,7 @@ export default function Files() {
         />
       )}
 
-      {/* FolderShareModal */}
-      {shareModal && (
+            {shareModal && (
         <FolderShareModal
           folder={shareModal.folder}
           preselectedFileIds={shareModal.fileIds}
@@ -1430,16 +1384,14 @@ export default function Files() {
         />
       )}
 
-      {/* Per-file share modal */}
-      {shareFile && (
+            {shareFile && (
         <FileShareModal
           file={shareFile}
           onClose={() => setShareFile(null)}
         />
       )}
 
-      {/* Per-file auto-expiry modal */}
-      {expiryFile && (
+            {expiryFile && (
         <SetExpiryModal
           file={expiryFile}
           onClose={() => setExpiryFile(null)}

@@ -20,7 +20,6 @@ import {
   removeInboxItem as apiRemoveInboxItem,
 } from '@/api/sharingApi'
 
-// ── All-files thunk ───────────────────────────────────────────────────────────
 export const fetchAllFiles = createAsyncThunk(
   'sharing/fetchAllFiles',
   async (search = '', { rejectWithValue }) => {
@@ -33,7 +32,6 @@ export const fetchAllFiles = createAsyncThunk(
   },
 )
 
-// ── Single-file share thunks ──────────────────────────────────────────────────
 export const fetchShares = createAsyncThunk(
   'sharing/fetchShares',
   async ({ page = 1, status = '', file_id = '' } = {}, { rejectWithValue }) => {
@@ -82,7 +80,6 @@ export const deleteShare = createAsyncThunk(
   },
 )
 
-// ── ZIP share thunks ──────────────────────────────────────────────────────────
 export const createZipShare = createAsyncThunk(
   'sharing/createZipShare',
   async (formData, { rejectWithValue }) => {
@@ -131,7 +128,6 @@ export const deleteZipShare = createAsyncThunk(
   },
 )
 
-// ── Analytics ─────────────────────────────────────────────────────────────────
 export const fetchGlobalAnalytics = createAsyncThunk(
   'sharing/fetchGlobalAnalytics',
   async (_, { rejectWithValue }) => {
@@ -156,7 +152,6 @@ export const fetchShareAnalytics = createAsyncThunk(
   },
 )
 
-// ── Request thunks ────────────────────────────────────────────────────────────
 export const fetchRequests = createAsyncThunk(
   'sharing/fetchRequests',
   async ({ page = 1, status = '' } = {}, { rejectWithValue }) => {
@@ -193,7 +188,6 @@ export const closeRequest = createAsyncThunk(
   },
 )
 
-// ── Inbox thunks ──────────────────────────────────────────────────────────────
 export const fetchInbox = createAsyncThunk(
   'sharing/fetchInbox',
   async ({ page = 1, status = '', source_type = '', scan_status = '' } = {}, { rejectWithValue }) => {
@@ -242,7 +236,6 @@ export const removeInboxItem = createAsyncThunk(
   },
 )
 
-// ── Slice ─────────────────────────────────────────────────────────────────────
 const sharingSlice = createSlice({
   name: 'sharing',
   initialState: {
@@ -278,7 +271,6 @@ const sharingSlice = createSlice({
   reducers: {},
   extraReducers: (builder) => {
 
-    // ── All files ─────────────────────────────────────────────────────────────
     builder
       .addCase(fetchAllFiles.pending,   (s) => { s.allFilesLoading = true })
       .addCase(fetchAllFiles.fulfilled, (s, { payload }) => {
@@ -288,7 +280,6 @@ const sharingSlice = createSlice({
       })
       .addCase(fetchAllFiles.rejected,  (s) => { s.allFilesLoading = false })
 
-    // ── Single-file shares ────────────────────────────────────────────────────
     builder
       .addCase(fetchShares.fulfilled, (s, { payload }) => {
         s.shares     = payload.results || []
@@ -311,7 +302,6 @@ const sharingSlice = createSlice({
         s.shares = s.shares.filter((x) => x.id !== id)
       })
 
-    // ── ZIP shares ────────────────────────────────────────────────────────────
     builder
       .addCase(createZipShare.pending,   (s) => { s.zipSharing = true; s.error = null })
       .addCase(createZipShare.fulfilled, (s, { payload }) => {
@@ -345,7 +335,6 @@ const sharingSlice = createSlice({
         s.zipShares = s.zipShares.filter((x) => x.id !== id)
       })
 
-    // ── Analytics ─────────────────────────────────────────────────────────────
     builder
       .addCase(fetchGlobalAnalytics.pending,   (s) => { s.analyticsLoading = true })
       .addCase(fetchGlobalAnalytics.fulfilled, (s, { payload }) => {
@@ -360,7 +349,6 @@ const sharingSlice = createSlice({
       })
       .addCase(fetchShareAnalytics.rejected,   (s) => { s.analyticsLoading = false })
 
-    // ── Requests ──────────────────────────────────────────────────────────────
     builder
       .addCase(fetchRequests.pending,   (s) => { s.requestLoading = true })
       .addCase(fetchRequests.fulfilled, (s, { payload }) => {
@@ -373,10 +361,6 @@ const sharingSlice = createSlice({
         s.requestLoading = false
       })
       .addCase(fetchRequests.rejected,  (s) => { s.requestLoading = false })
-      // FIX: createRequest now manages requestLoading and error so the
-      // panel never gets stuck in a loading state after form submission.
-      // The fulfilled case no longer does an optimistic unshift — the panel
-      // calls fetchRequests({ page: 1 }) immediately after, which populates
       // the list correctly without any race condition.
       .addCase(createRequest.pending,   (s) => { s.requestLoading = true; s.error = null })
       .addCase(createRequest.fulfilled, (s) => { s.requestLoading = false })
@@ -385,7 +369,6 @@ const sharingSlice = createSlice({
         s.requests = s.requests.filter((r) => r.id !== id)
       })
 
-    // ── Inbox ─────────────────────────────────────────────────────────────────
     builder
       .addCase(fetchInbox.pending,   (s) => { s.inboxLoading = true })
       .addCase(fetchInbox.fulfilled, (s, { payload }) => {

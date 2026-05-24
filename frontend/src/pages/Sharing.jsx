@@ -23,11 +23,9 @@ import {
 } from '@/store/sharingSlice'
 import Alert from '@/components/ui/Alert'
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (n) => (n ?? 0).toLocaleString()
 
-// ─── UI primitives ────────────────────────────────────────────────────────────
 
 const StatusBadge = ({ status }) => {
   const map = {
@@ -67,38 +65,32 @@ const ScanBadge = ({ status }) => {
 }
 
 const Card = ({ children, className = '' }) => (
-  <div className={`bg-white rounded-2xl border border-slate-100 shadow-sm ${className}`}>{children}</div>
+  <div className={`card rounded-2xl shadow-sm ${className}`}>{children}</div>
 )
 
-const StatTile = ({ icon, label, value, color = 'indigo' }) => (
-  <div className="relative overflow-hidden rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-    <div className={`absolute -right-4 -top-4 h-20 w-20 rounded-full bg-${color}-500 opacity-10 blur-2xl`} />
-    <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-${color}-500 to-${color}-600 text-white shadow-md mb-3`}>
-      <i className={`fas ${icon} text-base`}></i>
+const StatTile = ({ icon, label, value, tint = 'indigo' }) => (
+  <div className="widget-card relative overflow-hidden rounded-2xl p-5">
+    <div className={`nav-item-icon icon-tint icon-tint-${tint} mb-3 h-10 w-10`}>
+      <i className={`fas ${icon} text-base`} aria-hidden />
     </div>
-    <p className="text-2xl font-bold text-slate-900">{value}</p>
-    <p className="text-xs font-medium text-slate-500 mt-0.5">{label}</p>
+    <p className="dashboard-metric text-2xl font-bold">{value}</p>
+    <p className="dashboard-label text-xs mt-0.5">{label}</p>
   </div>
 )
 
 function TabBar({ tabs, active, onChange }) {
   return (
-    <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-full sm:w-auto flex-wrap">
+    <div className="tab-track">
       {tabs.map((t) => (
         <button
           key={t.id}
+          type="button"
           onClick={() => onChange(t.id)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-            active === t.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-          }`}
+          className={`tab-btn ${active === t.id ? 'tab-btn-active' : ''}`}
         >
-          <i className={`fas ${t.icon} text-[11px]`}></i>
+          <i className={`fas ${t.icon} text-[11px]`} aria-hidden />
           {t.label}
-          {t.count != null && (
-            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-              active === t.id ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'
-            }`}>{t.count}</span>
-          )}
+          {t.count != null && <span className="tab-count">{t.count}</span>}
         </button>
       ))}
     </div>
@@ -107,12 +99,12 @@ function TabBar({ tabs, active, onChange }) {
 
 function ConfirmModal({ title, body, confirmLabel, confirmClass, onCancel, onConfirm, loading }) {
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
-        <h3 className="text-base font-bold text-slate-900 mb-2">{title}</h3>
-        <p className="text-sm text-slate-500 mb-6">{body}</p>
+    <div className="modal-overlay">
+      <div className="modal-panel p-6 max-w-sm w-full">
+        <h3 className="section-title text-base mb-2">{title}</h3>
+        <p className="page-subtitle mb-6">{body}</p>
         <div className="flex gap-3">
-          <button onClick={onCancel} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all">
+          <button type="button" onClick={onCancel} className="btn-secondary flex-1 py-3 rounded-xl font-bold text-sm">
             Cancel
           </button>
           <button
@@ -187,7 +179,6 @@ function EmailChipInput({ label, helper, value, onChange, required }) {
   )
 }
 
-// ─── File selector ────────────────────────────────────────────────────────────
 
 function FileSelector({ files, loading, selectedFiles, onToggle }) {
   const [search, setSearch] = useState('')
@@ -258,7 +249,6 @@ function FileSelector({ files, loading, selectedFiles, onToggle }) {
   )
 }
 
-// ─── Pagination control ───────────────────────────────────────────────────────
 
 function Pagination({ currentPage, totalPages, count, onPageChange, loading, label }) {
   if (!totalPages || totalPages <= 1) return null
@@ -287,7 +277,6 @@ function Pagination({ currentPage, totalPages, count, onPageChange, loading, lab
   )
 }
 
-// ─── File viewer modal ────────────────────────────────────────────────────────
 
 function FileViewerModal({ file, onClose }) {
   const isImage = file.mime_type?.startsWith('image/')
@@ -297,12 +286,12 @@ function FileViewerModal({ file, onClose }) {
   const isAudio = file.mime_type?.startsWith('audio/')
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="modal-overlay" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden"
+        className="modal-panel w-full max-w-4xl max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <div className="modal-header">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
               <i className="fas fa-eye text-emerald-600 text-sm"></i>
@@ -313,12 +302,12 @@ function FileViewerModal({ file, onClose }) {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all">
-              <i className="fas fa-xmark"></i>
+            <button type="button" onClick={onClose} className="chrome-icon-btn">
+              <i className="fas fa-xmark" aria-hidden />
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-auto bg-slate-50 p-4">
+        <div className="modal-body bg-slate-50 dark:bg-transparent">
           {isImage && (
             <div className="flex items-center justify-center h-full min-h-64">
               <img src={file.file_url} alt={file.original_filename} className="max-w-full max-h-[70vh] object-contain rounded-xl shadow-md" />
@@ -340,7 +329,7 @@ function FileViewerModal({ file, onClose }) {
             </div>
           )}
           {isText && (
-            <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <div className="card rounded-xl p-4">
               <p className="text-xs text-slate-500 mb-3 flex items-center gap-2">
                 <i className="fas fa-file-lines text-slate-400"></i>
                 Text preview — <a href={file.file_url} className="text-indigo-600 hover:underline">open full file</a>
@@ -361,7 +350,6 @@ function FileViewerModal({ file, onClose }) {
   )
 }
 
-// ─── 1. Shares panel ──────────────────────────────────────────────────────────
 
 function SharesPanel() {
   const dispatch = useDispatch()
@@ -736,7 +724,6 @@ function SharesPanel() {
   )
 }
 
-// ─── 2. Analytics panel ───────────────────────────────────────────────────────
 
 function AnalyticsPanel() {
   const dispatch = useDispatch()
@@ -760,11 +747,11 @@ function AnalyticsPanel() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatTile icon="fa-share-nodes"  label="Total Shares"    value={fmt(totals?.total_shares)}    color="indigo"  />
-        <StatTile icon="fa-download"     label="Total Downloads" value={fmt(totals?.total_downloads)} color="emerald" />
-        <StatTile icon="fa-circle-check" label="Active"          value={fmt(totals?.active_count)}    color="green"   />
-        <StatTile icon="fa-clock"        label="Expired"         value={fmt(totals?.expired_count)}   color="amber"   />
-        <StatTile icon="fa-ban"          label="Revoked"         value={fmt(totals?.revoked_count)}   color="red"     />
+        <StatTile icon="fa-share-nodes"  label="Total Shares"    value={fmt(totals?.total_shares)}    tint="indigo"  />
+        <StatTile icon="fa-download"     label="Total Downloads" value={fmt(totals?.total_downloads)} tint="emerald" />
+        <StatTile icon="fa-circle-check" label="Active"          value={fmt(totals?.active_count)}    tint="emerald" />
+        <StatTile icon="fa-clock"        label="Expired"         value={fmt(totals?.expired_count)}   tint="amber"   />
+        <StatTile icon="fa-ban"          label="Revoked"         value={fmt(totals?.revoked_count)}   tint="rose"    />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -835,7 +822,6 @@ function AnalyticsPanel() {
   )
 }
 
-// ─── 3. File Requests panel ───────────────────────────────────────────────────
 
 function RequestsPanel() {
   const dispatch = useDispatch()
@@ -848,9 +834,6 @@ function RequestsPanel() {
   const [currentPage,     setCurrentPage]     = useState(1)
   const [emailError,      setEmailError]      = useState('')
   const [initialLoaded,   setInitialLoaded]   = useState(false)
-  // ── FIX: formSubmitting tracks the local async operation independently
-  // of the Redux requestLoading flag, so the button animates correctly
-  // even between dispatch and selector update.
   const [formSubmitting,  setFormSubmitting]  = useState(false)
 
   const { register: field, handleSubmit, reset, formState: { errors } } = useForm({
@@ -866,7 +849,6 @@ function RequestsPanel() {
     load()
   }, [dispatch, currentPage])
 
-  // ── Combined submitting state used for button disabled + spinner
   const isSubmitting = formSubmitting || requestLoading
 
   const validateAndSubmit = (data) => {
@@ -879,7 +861,6 @@ function RequestsPanel() {
   }
 
   const onSubmit = async (data) => {
-    // Guard: prevent double-submit
     if (formSubmitting) return
     setFormSubmitting(true)
 
@@ -961,7 +942,6 @@ function RequestsPanel() {
               <i className="fas fa-virus-slash mt-0.5 flex-shrink-0"></i>
               <span>All uploaded files are <strong>automatically scanned for viruses</strong> before they appear in your inbox. Infected files are quarantined and flagged immediately.</span>
             </div>
-            {/* ── OTP security notice ── */}
             <div className="flex items-start gap-2 px-3 py-2.5 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-700">
               <i className="fas fa-key mt-0.5 flex-shrink-0"></i>
               <span>Recipients must <strong>verify their email via a one-time code (OTP)</strong> before they can upload. This ensures only the intended person can use each upload link.</span>
@@ -1061,7 +1041,6 @@ function RequestsPanel() {
                 className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-sm"
               >
                 {isSubmitting ? (
-                  // ── Sending animation (matches SharesPanel pattern)
                   <><i className="fas fa-spinner fa-spin text-sm"></i>Sending…</>
                 ) : (
                   <><i className="fas fa-paper-plane"></i>Create &amp; Send {recipientEmails.length > 0 ? `(${recipientEmails.length} recipient${recipientEmails.length !== 1 ? 's' : ''})` : 'Request'}</>
@@ -1124,7 +1103,6 @@ function RequestsPanel() {
                       {recipients.length > 0 && (
                         <span><i className="fas fa-users mr-1"></i>{recipients.length} recipient{recipients.length !== 1 ? 's' : ''}</span>
                       )}
-                      {/* ── FIX: show per-recipient max as context ── */}
                       {perRecipientMax > 0 && (
                         <span className="flex items-center gap-1">
                           <i className="fas fa-upload text-[10px]"></i>
@@ -1144,8 +1122,6 @@ function RequestsPanel() {
                     )}
                   </div>
                 </div>
-
-                {/* ── Recipients list with per-recipient upload count + max ── */}
                 {recipients.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-slate-100">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
@@ -1158,8 +1134,6 @@ function RequestsPanel() {
                     </p>
                     <div className="space-y-1.5">
                       {recipients.map((r) => {
-                        // ── FIX: prefer files_submitted (accurate inbox-derived
-                        // count) over upload_count (raw POST hit counter)
                         const filesUploaded = r.files_submitted ?? r.upload_count ?? 0
                         const isFull        = perRecipientMax > 0 && filesUploaded >= perRecipientMax
 
@@ -1167,8 +1141,6 @@ function RequestsPanel() {
                           <div key={r.id} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl">
                             <i className="fas fa-user text-slate-300 text-[11px] flex-shrink-0"></i>
                             <span className="text-xs font-medium text-slate-700 truncate flex-1">{r.email}</span>
-
-                            {/* ── Per-recipient upload progress badge ── */}
                             {filesUploaded > 0 ? (
                               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 flex items-center gap-1 ${
                                 isFull
@@ -1228,7 +1200,6 @@ function RequestsPanel() {
   )
 }
 
-// ─── 4. Submission Inbox panel ────────────────────────────────────────────────
 
 const SCAN_POLL_INTERVAL = 5000
 
@@ -1531,19 +1502,19 @@ function InboxPanel() {
       )}
 
       {reviewModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900 mb-1 capitalize">{reviewModal.action.replace(/_/g, ' ')} Submission</h3>
-            <p className="text-sm text-slate-500 mb-4">File: <span className="font-semibold text-slate-700">{reviewModal.submission.original_filename}</span></p>
+        <div className="modal-overlay">
+          <div className="modal-panel p-6 max-w-md w-full">
+            <h3 className="section-title text-base mb-1 capitalize">{reviewModal.action.replace(/_/g, ' ')} Submission</h3>
+            <p className="page-subtitle mb-4">File: <span className="font-semibold text-gray-800 dark:text-gray-200">{reviewModal.submission.original_filename}</span></p>
             <textarea
               value={reviewNote}
               onChange={(e) => setReviewNote(e.target.value)}
               placeholder={reviewModal.action === 'reject' ? 'Rejection reason (recommended)…' : 'Optional note…'}
               rows={3}
-              className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none resize-none mb-4"
+              className="field w-full resize-none mb-4"
             />
             <div className="flex gap-3">
-              <button onClick={() => setReviewModal(null)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200">Cancel</button>
+              <button type="button" onClick={() => setReviewModal(null)} className="btn-secondary flex-1 py-3 rounded-xl font-bold text-sm">Cancel</button>
               <button
                 onClick={handleReview}
                 className={`flex-1 py-3 text-white rounded-xl font-bold text-sm transition-all ${
@@ -1585,7 +1556,6 @@ function InboxPanel() {
   )
 }
 
-// ─── Main Sharing page ────────────────────────────────────────────────────────
 
 export default function Sharing() {
   const dispatch = useDispatch()
@@ -1612,23 +1582,19 @@ export default function Sharing() {
   ]
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10">
-        <div className="max-w-5xl mx-auto space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Sharing Hub</h1>
-              <p className="text-sm text-slate-500 mt-1">Share files · ZIP bundles · File requests · Submission inbox</p>
-            </div>
-            <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
-          </div>
-
-          {activeTab === 'shares'    && <SharesPanel />}
-          {activeTab === 'analytics' && <AnalyticsPanel />}
-          {activeTab === 'requests'  && <RequestsPanel />}
-          {activeTab === 'inbox'     && <InboxPanel />}
+    <div className="w-full max-w-5xl mx-auto space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="page-title text-2xl sm:text-3xl">Sharing Hub</h1>
+          <p className="page-subtitle">Share files · ZIP bundles · File requests · Submission inbox</p>
         </div>
+        <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
       </div>
+
+      {activeTab === 'shares'    && <SharesPanel />}
+      {activeTab === 'analytics' && <AnalyticsPanel />}
+      {activeTab === 'requests'  && <RequestsPanel />}
+      {activeTab === 'inbox'     && <InboxPanel />}
     </div>
   )
 }

@@ -1,9 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { loginUser, registerUser, logoutUser, getProfile, updateProfile } from '@/api/authApi'
 
-// ── Thunks ────────────────────────────────────────────────────────────────────
 
-// LOGIN — stores tokens + user, sets isAuthenticated
 export const login = createAsyncThunk(
   'auth/login',
   async (credentials, { rejectWithValue }) => {
@@ -16,8 +14,6 @@ export const login = createAsyncThunk(
   }
 )
 
-// REGISTER — creates account only, does NOT log the user in
-// After success → navigate to /login (handled in component)
 export const register = createAsyncThunk(
   'auth/register',
   async (formData, { rejectWithValue }) => {
@@ -32,7 +28,6 @@ export const register = createAsyncThunk(
   }
 )
 
-// LOGOUT — blacklist token on backend, clear everything locally
 export const logout = createAsyncThunk(
   'auth/logout',
   async (_, { getState }) => {
@@ -40,13 +35,10 @@ export const logout = createAsyncThunk(
     try {
       await logoutUser(refreshToken)
     } catch (_) {
-      // Always clear locally even if backend call fails
     }
   }
 )
 
-// VERIFY SESSION — called on app load to validate the stored token
-// If token is expired/invalid → 401 → axios interceptor clears tokens
 export const verifySession = createAsyncThunk(
   'auth/verifySession',
   async (_, { rejectWithValue }) => {
@@ -59,7 +51,6 @@ export const verifySession = createAsyncThunk(
   }
 )
 
-// UPDATE PROFILE — update user profile information
 export const editProfile = createAsyncThunk(
   'auth/editProfile',
   async (profileData, { rejectWithValue }) => {
@@ -72,7 +63,6 @@ export const editProfile = createAsyncThunk(
   }
 )
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const saveTokens = (access, refresh) => {
   localStorage.setItem('access_token', access)
@@ -84,18 +74,15 @@ const clearTokens = () => {
   localStorage.removeItem('refresh_token')
 }
 
-// ── Initial state ─────────────────────────────────────────────────────────────
 
 const initialState = {
   user: null,
   accessToken: localStorage.getItem('access_token') || null,
   refreshToken: localStorage.getItem('refresh_token') || null,
 
-  // isAuthenticated starts false — only true after verifySession confirms the token is valid
   // This prevents stale/expired tokens from bypassing ProtectedRoute
   isAuthenticated: false,
 
-  // Tracks whether the app has finished the initial session check
   sessionChecked: false,
 
   loading: false,
@@ -103,7 +90,6 @@ const initialState = {
   fieldErrors: null,
 }
 
-// ── Slice ─────────────────────────────────────────────────────────────────────
 
 const authSlice = createSlice({
   name: 'auth',
@@ -121,7 +107,6 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
 
-    // ── Verify Session (app startup) ─────────────────────────────────────
     builder
       .addCase(verifySession.pending, (state) => {
         state.sessionChecked = false
@@ -132,7 +117,6 @@ const authSlice = createSlice({
         state.sessionChecked = true
       })
       .addCase(verifySession.rejected, (state) => {
-        // Token was invalid — clear everything
         state.user = null
         state.accessToken = null
         state.refreshToken = null
@@ -141,7 +125,6 @@ const authSlice = createSlice({
         clearTokens()
       })
 
-    // ── Login ─────────────────────────────────────────────────────────────
     builder
       .addCase(login.pending, (state) => {
         state.loading = true
@@ -161,9 +144,6 @@ const authSlice = createSlice({
         state.error = payload
       })
 
-    // ── Register ──────────────────────────────────────────────────────────
-    // Registration does NOT log the user in.
-    // Tokens from backend are discarded — user must go through /login.
     builder
       .addCase(register.pending, (state) => {
         state.loading = true
@@ -172,7 +152,6 @@ const authSlice = createSlice({
       })
       .addCase(register.fulfilled, (state) => {
         state.loading = false
-        // Intentionally NOT setting isAuthenticated or tokens
       })
       .addCase(register.rejected, (state, { payload }) => {
         state.loading = false
@@ -180,7 +159,6 @@ const authSlice = createSlice({
         state.fieldErrors = payload?.errors || null
       })
 
-    // ── Logout ────────────────────────────────────────────────────────────
     builder.addCase(logout.fulfilled, (state) => {
       state.user = null
       state.accessToken = null
@@ -191,7 +169,6 @@ const authSlice = createSlice({
       clearTokens()
     })
 
-    // ── Edit Profile ───────────────────────────────────────────────────────
     builder
       .addCase(editProfile.pending, (state) => {
         state.loading = true

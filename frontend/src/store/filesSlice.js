@@ -1,7 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { getFiles, uploadFiles, deleteFile, getStorageInfo, renameFile } from '@/api/filesApi'
 
-// ── Thunks ────────────────────────────────────────────────────────────────────
 
 export const fetchFiles = createAsyncThunk(
   'files/fetchFiles',
@@ -15,10 +14,6 @@ export const fetchFiles = createAsyncThunk(
   }
 )
 
-// FIX: The component dispatches upload({ files, expiryOption }).
-// Previously the thunk received the whole object as `files` and passed it
-// directly to uploadFiles(), breaking both upload and expiry.
-// Now we destructure properly and forward expiryOption to the API helper.
 export const upload = createAsyncThunk(
   'files/upload',
   async ({ files, expiryOption = 'never' }, { rejectWithValue }) => {
@@ -68,7 +63,6 @@ export const rename = createAsyncThunk(
   }
 )
 
-// ── Initial state ─────────────────────────────────────────────────────────────
 
 const initialState = {
   files: [],
@@ -79,7 +73,6 @@ const initialState = {
   error: null,
 }
 
-// ── Slice ─────────────────────────────────────────────────────────────────────
 
 const filesSlice = createSlice({
   name: 'files',
@@ -97,7 +90,6 @@ const filesSlice = createSlice({
   },
   extraReducers: (builder) => {
 
-    // ── Fetch Files ─────────────────────────────────────────────────────
     builder
       .addCase(fetchFiles.pending, (state) => {
         state.loading = true
@@ -119,7 +111,6 @@ const filesSlice = createSlice({
         state.error = payload
       })
 
-    // ── Upload Files ────────────────────────────────────────────────────
     builder
       .addCase(upload.pending, (state) => {
         state.uploading = true
@@ -128,16 +119,12 @@ const filesSlice = createSlice({
       .addCase(upload.fulfilled, (state, { payload }) => {
         state.uploading = false
 
-        // Normalise: accept { uploaded: [...] }, { results: [...] }, or a
-        // plain array — whatever your API returns.
         const uploaded =
           payload?.uploaded ??
           payload?.results ??
           (Array.isArray(payload) ? payload : null)
 
         if (uploaded?.length) {
-          // Optimistic prepend so the UI feels instant even before fetchFiles
-          // completes. Duplicates are removed once fetchFiles resolves.
           state.files = [...uploaded, ...state.files]
           state.pagination.count += uploaded.length
         }
@@ -147,14 +134,12 @@ const filesSlice = createSlice({
         state.error = payload
       })
 
-    // ── Delete File ─────────────────────────────────────────────────────
     builder
       .addCase(remove.fulfilled, (state, { payload: fileId }) => {
         state.files = state.files.filter((f) => f.id !== fileId)
         state.pagination.count = Math.max(0, state.pagination.count - 1)
       })
 
-    // ── Fetch Storage ───────────────────────────────────────────────────
     builder
       .addCase(fetchStorage.pending, (state) => {
         state.loading = true
@@ -168,7 +153,6 @@ const filesSlice = createSlice({
         state.error = payload
       })
 
-    // ── Rename File ─────────────────────────────────────────────────────
     builder
       .addCase(rename.pending, (state) => {
         state.loading = true

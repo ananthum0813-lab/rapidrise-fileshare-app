@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+﻿import { useEffect, useState, useRef, useCallback } from 'react'
 import { useSelector } from 'react-redux'
 import {
   getTrash,
@@ -8,7 +8,6 @@ import {
   batchRestore,
 } from '@/api/filesApi'
 
-// ── Poll interval: match Celery beat schedule (60s) so UI reflects purge quickly ──
 const POLL_INTERVAL_MS = 30_000   // 30 s → catches the purge within one extra cycle
 
 export default function Trash() {
@@ -24,10 +23,8 @@ export default function Trash() {
   const [actionLoading, setActionLoading]           = useState(null)
   const [currentPage, setCurrentPage]               = useState(1)
 
-  // track current page in a ref so the interval closure always sees the latest value
   const currentPageRef = useRef(1)
 
-  // ── Fetch ────────────────────────────────────────────────────────────────
   const fetchTrash = useCallback(async (page = 1, { silent = false } = {}) => {
     try {
       if (!silent) setLoading(true)
@@ -43,7 +40,6 @@ export default function Trash() {
       setCurrentPage(page)
       currentPageRef.current = page
 
-      // If Celery wiped everything on this page and it's not page 1, step back
       if ((data.results || []).length === 0 && page > 1) {
         fetchTrash(page - 1, { silent })
       }
@@ -55,18 +51,12 @@ export default function Trash() {
     }
   }, [])
 
-  // ── Initial load ─────────────────────────────────────────────────────────
   useEffect(() => {
     fetchTrash()
   }, [fetchTrash])
 
-  // ── Background polling ───────────────────────────────────────────────────
-  // Silently re-fetches every POLL_INTERVAL_MS so that when the Celery task
-  // purges expired trash items the list updates automatically without the
-  // user needing to refresh the page.
   useEffect(() => {
     const intervalId = setInterval(() => {
-      // skip poll while a user-triggered action is in flight to avoid flicker
       if (actionLoading) return
       fetchTrash(currentPageRef.current, { silent: true })
     }, POLL_INTERVAL_MS)
@@ -74,14 +64,12 @@ export default function Trash() {
     return () => clearInterval(intervalId)   // clean up on unmount
   }, [fetchTrash, actionLoading])
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
   const getDaysRemaining = (deletedAt) => {
     if (!deletedAt) return 30
     const diffDays = Math.ceil(Math.abs(new Date() - new Date(deletedAt)) / (1000 * 60 * 60 * 24))
     return Math.max(0, 30 - diffDays)
   }
 
-  // ── Restore single ───────────────────────────────────────────────────────
   const handleRestoreFile = async (fileId) => {
     try {
       setRestoreLoading((prev) => ({ ...prev, [fileId]: true }))
@@ -94,7 +82,6 @@ export default function Trash() {
     }
   }
 
-  // ── Permanently delete single ────────────────────────────────────────────
   const handlePermanentlyDelete = async (fileId) => {
     try {
       setActionLoading('delete')
@@ -108,7 +95,6 @@ export default function Trash() {
     }
   }
 
-  // ── Batch restore ────────────────────────────────────────────────────────
   const handleBatchRestore = async () => {
     try {
       setActionLoading('restore')
@@ -123,7 +109,6 @@ export default function Trash() {
     }
   }
 
-  // ── Batch permanent delete ───────────────────────────────────────────────
   const handleBatchDelete = async () => {
     try {
       setActionLoading('batch-delete')
@@ -141,7 +126,6 @@ export default function Trash() {
     }
   }
 
-  // ── Empty trash ──────────────────────────────────────────────────────────
   const handleEmptyTrash = async () => {
     try {
       setActionLoading('empty')
@@ -155,7 +139,6 @@ export default function Trash() {
     }
   }
 
-  // ── Checkbox helpers ─────────────────────────────────────────────────────
   const handleSelectAll = (checked) => {
     setSelectedCheckboxes(
       checked ? new Set(trashedFiles.map((f) => f.id)) : new Set()
@@ -168,9 +151,8 @@ export default function Trash() {
     setSelectedCheckboxes(next)
   }
 
-  // ── File-type helper ─────────────────────────────────────────────────────
   const getFileIcon = (mime) => {
-    if (!mime)                                                   return 'fa-file text-slate-400'
+    if (!mime)                                                   return 'fa-file text-gray-400'
     if (mime.includes('pdf'))                                    return 'fa-file-pdf text-red-400'
     if (mime.includes('image'))                                  return 'fa-image text-blue-400'
     if (mime.includes('video'))                                  return 'fa-video text-purple-400'
@@ -182,17 +164,15 @@ export default function Trash() {
     return 'fa-file text-gray-400'
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-[#f8fafc] min-h-screen">
+    <div className="w-full">
       <div className="max-w-6xl mx-auto">
 
-        {/* Header */}
-        <header className="mb-8">
+                <header className="mb-8">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
             <div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-indigo-900 flex items-center gap-3">
-                <span className="w-10 h-10 bg-red-50 rounded-2xl flex items-center justify-center">
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-3">
+                <span className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
                   <i className="fas fa-trash text-red-400"></i>
                 </span>
                 Trash
@@ -204,7 +184,7 @@ export default function Trash() {
             {trashedFiles.length > 0 && (
               <button
                 onClick={() => setShowEmptyTrash(true)}
-                className="px-5 py-3 bg-red-500 text-white rounded-2xl font-bold text-sm hover:bg-red-600 transition-all flex items-center gap-2 w-full sm:w-auto justify-center"
+                className="px-5 py-3 bg-red-500 text-white rounded-lg font-bold text-sm hover:bg-red-600 transition-all flex items-center gap-2 w-full sm:w-auto justify-center"
               >
                 <i className="fas fa-trash-alt"></i> Empty Trash
               </button>
@@ -212,9 +192,8 @@ export default function Trash() {
           </div>
         </header>
 
-        {/* Batch actions */}
-        {selectedCheckboxes.size > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                {selectedCheckboxes.size > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <span className="text-sm font-bold text-blue-700">
               {selectedCheckboxes.size} file{selectedCheckboxes.size !== 1 ? 's' : ''} selected
             </span>
@@ -239,25 +218,23 @@ export default function Trash() {
           </div>
         )}
 
-        {/* Content */}
-        {loading ? (
+                {loading ? (
           <div className="text-center py-20">
             <i className="fas fa-spinner fa-spin text-4xl text-gray-300 mb-4"></i>
             <p className="text-gray-500">Loading trash…</p>
           </div>
         ) : trashedFiles.length === 0 ? (
-          <div className="text-center py-24 bg-white rounded-3xl border border-gray-100 shadow-sm">
-            <div className="w-20 h-20 bg-gray-50 rounded-3xl flex items-center justify-center mx-auto mb-4">
+          <div className="text-center py-24 card rounded-lg shadow-sm">
+            <div className="w-20 h-20 bg-gray-50 rounded-lg flex items-center justify-center mx-auto mb-4">
               <i className="fas fa-trash-alt text-4xl text-gray-300"></i>
             </div>
             <p className="text-gray-700 font-bold text-lg">Trash is empty</p>
             <p className="text-gray-400 text-sm mt-2">Deleted files will appear here for 30 days</p>
           </div>
         ) : (
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="card rounded-lg shadow-sm overflow-hidden">
 
-            {/* ── Desktop table ── */}
-            <div className="hidden sm:block overflow-x-auto">
+                        <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left border-separate border-spacing-y-1 p-4">
                 <thead>
                   <tr className="text-[10px] uppercase tracking-widest text-gray-400">
@@ -266,7 +243,7 @@ export default function Trash() {
                         type="checkbox"
                         checked={selectedCheckboxes.size === trashedFiles.length && trashedFiles.length > 0}
                         onChange={(e) => handleSelectAll(e.target.checked)}
-                        className="w-4 h-4 rounded accent-indigo-600"
+                        className="w-4 h-4 rounded accent-brand-600"
                       />
                     </th>
                     <th className="px-4 py-3 font-bold">File Name</th>
@@ -291,7 +268,7 @@ export default function Trash() {
                             type="checkbox"
                             checked={selectedCheckboxes.has(file.id)}
                             onChange={() => handleCheckboxChange(file.id)}
-                            className="w-4 h-4 rounded accent-indigo-600"
+                            className="w-4 h-4 rounded accent-brand-600"
                           />
                         </td>
                         <td className="px-4 py-3">
@@ -351,8 +328,7 @@ export default function Trash() {
               </table>
             </div>
 
-            {/* ── Mobile cards ── */}
-            <div className="sm:hidden p-4 space-y-3">
+                        <div className="sm:hidden p-4 space-y-3">
               {trashedFiles.map((file) => {
                 const daysLeft    = getDaysRemaining(file.deleted_at)
                 const urgentColor = daysLeft <= 3 ? 'text-red-600' : daysLeft <= 7 ? 'text-orange-500' : 'text-amber-600'
@@ -360,10 +336,10 @@ export default function Trash() {
                 return (
                   <div
                     key={file.id}
-                    className={`p-4 rounded-2xl border transition-colors ${selectedCheckboxes.has(file.id) ? 'bg-blue-50 border-blue-200' : 'border-gray-200'}`}
+                    className={`p-4 rounded-lg border transition-colors ${selectedCheckboxes.has(file.id) ? 'bg-blue-50 border-blue-200' : 'border-gray-200'}`}
                   >
                     <div className="flex items-start gap-3 mb-3">
-                      <input type="checkbox" checked={selectedCheckboxes.has(file.id)} onChange={() => handleCheckboxChange(file.id)} className="w-4 h-4 rounded accent-indigo-600 mt-1" />
+                      <input type="checkbox" checked={selectedCheckboxes.has(file.id)} onChange={() => handleCheckboxChange(file.id)} className="w-4 h-4 rounded accent-brand-600 mt-1" />
                       <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center flex-shrink-0 opacity-60">
                         <i className={`fas ${getFileIcon(file.mime_type)}`}></i>
                       </div>
@@ -404,25 +380,23 @@ export default function Trash() {
           </div>
         )}
 
-        {/* Pagination */}
-        {pagination.total_pages > 1 && (
+                {pagination.total_pages > 1 && (
           <div className="mt-8 flex justify-center items-center gap-3 flex-wrap">
-            <button disabled={currentPage === 1} onClick={() => fetchTrash(currentPage - 1)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 text-gray-600 disabled:opacity-30 hover:border-indigo-300 transition-all">
+            <button disabled={currentPage === 1} onClick={() => fetchTrash(currentPage - 1)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 text-gray-600 disabled:opacity-30 hover:border-brand-300 transition-all">
               <i className="fas fa-chevron-left text-xs"></i>
             </button>
             <span className="text-sm font-bold text-gray-600">Page {currentPage} of {pagination.total_pages}</span>
-            <button disabled={currentPage === pagination.total_pages} onClick={() => fetchTrash(currentPage + 1)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 text-gray-600 disabled:opacity-30 hover:border-indigo-300 transition-all">
+            <button disabled={currentPage === pagination.total_pages} onClick={() => fetchTrash(currentPage + 1)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 text-gray-600 disabled:opacity-30 hover:border-brand-300 transition-all">
               <i className="fas fa-chevron-right text-xs"></i>
             </button>
           </div>
         )}
       </div>
 
-      {/* ══ PERMANENTLY DELETE MODAL ══ */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-sm w-full shadow-2xl">
-            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-6">
+        <div className="modal-overlay">
+          <div className="bg-white rounded-lg p-6 sm:p-8 max-w-sm w-full">
+            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-lg flex items-center justify-center text-2xl mx-auto mb-6">
               <i className="fas fa-exclamation-triangle"></i>
             </div>
             <h3 className="text-lg font-bold text-center text-gray-900 mb-2">Delete Permanently?</h3>
@@ -432,7 +406,7 @@ export default function Trash() {
               <button
                 onClick={() => handlePermanentlyDelete(deleteConfirm)}
                 disabled={actionLoading === 'delete'}
-                className="py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                className="py-3 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {actionLoading === 'delete' && <i className="fas fa-spinner fa-spin"></i>}
                 Delete
@@ -442,11 +416,10 @@ export default function Trash() {
         </div>
       )}
 
-      {/* ══ BATCH DELETE MODAL ══ */}
       {showBatchDelete && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-sm w-full shadow-2xl">
-            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-6">
+        <div className="modal-overlay">
+          <div className="bg-white rounded-lg p-6 sm:p-8 max-w-sm w-full">
+            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-lg flex items-center justify-center text-2xl mx-auto mb-6">
               <i className="fas fa-trash-can"></i>
             </div>
             <h3 className="text-lg font-bold text-center text-gray-900 mb-2">Delete {selectedCheckboxes.size} File{selectedCheckboxes.size !== 1 ? 's' : ''}?</h3>
@@ -456,7 +429,7 @@ export default function Trash() {
               <button
                 onClick={handleBatchDelete}
                 disabled={actionLoading === 'batch-delete'}
-                className="py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                className="py-3 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {actionLoading === 'batch-delete' && <i className="fas fa-spinner fa-spin"></i>}
                 Delete All
@@ -466,11 +439,10 @@ export default function Trash() {
         </div>
       )}
 
-      {/* ══ EMPTY TRASH MODAL ══ */}
       {showEmptyTrash && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-sm w-full shadow-2xl">
-            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-6">
+        <div className="modal-overlay">
+          <div className="bg-white rounded-lg p-6 sm:p-8 max-w-sm w-full">
+            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-lg flex items-center justify-center text-2xl mx-auto mb-6">
               <i className="fas fa-trash-alt"></i>
             </div>
             <h3 className="text-lg font-bold text-center text-gray-900 mb-2">Empty Trash?</h3>
@@ -482,7 +454,7 @@ export default function Trash() {
               <button
                 onClick={handleEmptyTrash}
                 disabled={actionLoading === 'empty'}
-                className="py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                className="py-3 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {actionLoading === 'empty' && <i className="fas fa-spinner fa-spin"></i>}
                 Empty Trash

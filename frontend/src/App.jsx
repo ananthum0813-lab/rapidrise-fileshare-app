@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+﻿import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { verifySession } from '@/store/authSlice'
@@ -67,7 +67,8 @@ function AppRoutes() {
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/files"     element={<Files />} />
-          <Route path="/folders"   element={<Folders />} />
+          <Route path="/folders" element={<Folders />} />
+          <Route path="/folders/:folderId" element={<Folders />} />
           <Route path="/sharing"   element={<Sharing />} />
           <Route path="/storage"   element={<Storage />} />
           <Route path="/starred"   element={<Starred />} />

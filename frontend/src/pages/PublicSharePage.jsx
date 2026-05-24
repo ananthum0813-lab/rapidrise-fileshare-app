@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PublicSharePage.jsx
  * ─────────────────────────────────────────────────────────────────────────────
  * Route: /share/:token   (no auth required)
@@ -30,7 +30,7 @@ function formatDate(iso) {
 }
 
 function getFileIcon(mime) {
-  if (!mime)                                                  return 'fa-file text-slate-400'
+  if (!mime)                                                  return 'fa-file text-gray-400'
   if (mime.includes('pdf'))                                   return 'fa-file-pdf text-red-500'
   if (mime.includes('image'))                                 return 'fa-image text-blue-500'
   if (mime.includes('video'))                                 return 'fa-video text-purple-500'
@@ -39,7 +39,7 @@ function getFileIcon(mime) {
   if (mime.includes('zip') || mime.includes('archive'))       return 'fa-file-zipper text-orange-500'
   if (mime.includes('audio'))                                 return 'fa-file-audio text-pink-500'
   if (mime.includes('text'))                                  return 'fa-file-lines text-gray-500'
-  return 'fa-file text-slate-400'
+  return 'fa-file text-gray-400'
 }
 
 function ErrorScreen({ type, message }) {
@@ -51,8 +51,8 @@ function ErrorScreen({ type, message }) {
   }[type] || { icon: '⚠️', title: 'Error', color: 'text-red-600' }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-xl p-10 max-w-md w-full text-center">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-dropdown p-10 max-w-md w-full text-center">
         <div className="text-6xl mb-4">{config.icon}</div>
         <h2 className={`text-2xl font-bold mb-3 ${config.color}`}>{config.title}</h2>
         <p className="text-gray-500 text-sm leading-relaxed">{message}</p>
@@ -115,9 +115,9 @@ export default function PublicSharePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <i className="fas fa-circle-notch fa-spin text-3xl text-indigo-400 mb-4"></i>
+          <i className="fas fa-circle-notch fa-spin text-3xl text-brand-500 mb-4"></i>
           <p className="text-sm text-gray-500">Validating share link…</p>
         </div>
       </div>
@@ -127,49 +127,45 @@ export default function PublicSharePage() {
   if (error) return <ErrorScreen type={error.type} message={error.message} />
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-xl p-8 sm:p-10 max-w-md w-full">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-dropdown p-8 sm:p-10 max-w-md w-full">
 
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                <div className="text-center mb-8">
+          <div className="w-20 h-20 bg-brand-50 rounded-lg flex items-center justify-center mx-auto mb-5">
             <i className={`fas ${getFileIcon(shareInfo?.mime_type)} text-4xl`}></i>
           </div>
           <h1 className="text-xl font-bold text-gray-900 break-all">{shareInfo?.file_name}</h1>
           <p className="text-sm text-gray-400 mt-1">{formatBytes(shareInfo?.file_size_display || shareInfo?.file_size)}</p>
         </div>
 
-        {/* Message from sender */}
-        {shareInfo?.message && (
-          <div className="mb-6 px-4 py-3 bg-indigo-50 border-l-4 border-indigo-400 rounded-r-2xl">
-            <p className="text-xs font-bold text-indigo-500 mb-1 uppercase tracking-wider">Message</p>
-            <p className="text-sm text-indigo-900 leading-relaxed">"{shareInfo.message}"</p>
+                {shareInfo?.message && (
+          <div className="mb-6 px-4 py-3 bg-brand-50 border-l-4 border-brand-500 rounded-r-2xl">
+            <p className="text-xs font-bold text-brand-500 mb-1 uppercase tracking-wider">Message</p>
+            <p className="text-sm text-gray-900 leading-relaxed">"{shareInfo.message}"</p>
           </div>
         )}
 
-        {/* File meta */}
-        <div className="grid grid-cols-2 gap-3 mb-8">
-          <div className="bg-slate-50 rounded-2xl p-4">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Type</p>
-            <p className="text-sm font-bold text-slate-800 break-all">
+                <div className="grid grid-cols-2 gap-3 mb-8">
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Type</p>
+            <p className="text-sm font-bold text-gray-800 break-all">
               {shareInfo?.mime_type?.split('/')[1]?.toUpperCase() || 'FILE'}
             </p>
           </div>
-          <div className="bg-slate-50 rounded-2xl p-4">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Shared</p>
-            <p className="text-sm font-bold text-slate-800">{formatDate(shareInfo?.shared_at)}</p>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Shared</p>
+            <p className="text-sm font-bold text-gray-800">{formatDate(shareInfo?.shared_at)}</p>
           </div>
-          <div className="bg-slate-50 rounded-2xl p-4 col-span-2">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Expires</p>
-            <p className="text-sm font-bold text-slate-800">{formatDate(shareInfo?.expires_at)}</p>
+          <div className="bg-gray-50 rounded-lg p-4 col-span-2">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Expires</p>
+            <p className="text-sm font-bold text-gray-800">{formatDate(shareInfo?.expires_at)}</p>
           </div>
         </div>
 
-        {/* Download button */}
-        <button
+                <button
           onClick={handleDownload}
           disabled={downloading}
-          className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-60 flex items-center justify-center gap-2"
+          className="w-full py-4 bg-brand-600 text-white rounded-lg font-bold text-sm hover:bg-brand-700 transition-all  disabled:opacity-60 flex items-center justify-center gap-2"
         >
           {downloading
             ? <><i className="fas fa-spinner fa-spin"></i>Downloading…</>
@@ -179,8 +175,7 @@ export default function PublicSharePage() {
           }
         </button>
 
-        {/* Security notice */}
-        <div className="mt-6 flex items-start gap-3">
+                <div className="mt-6 flex items-start gap-3">
           <i className="fas fa-shield-halved text-green-400 mt-0.5 flex-shrink-0"></i>
           <p className="text-xs text-gray-400 leading-relaxed">
             This file has been scanned for malware and is safe to download.
