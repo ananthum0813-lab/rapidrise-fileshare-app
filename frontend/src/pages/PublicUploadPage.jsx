@@ -11,6 +11,19 @@
  *  3. Show OTP verification screen.
  *  4. After verified, show upload UI.
  *
+ * Session token security
+ * ──────────────────────
+ * On successful OTP verification the server returns a signed `session_token`
+ * (see VerifyOTPView).  We store it in React state (tab-scoped — not
+ * localStorage) and attach it as the `session_token` FormData field on every
+ * upload.  The upload endpoint validates the token server-side:
+ *   • Valid Django signature  →  cannot be forged
+ *   • Not expired             →  OTP_SESSION_MINUTES hard limit
+ *   • Scoped to this recipient UUID  →  not reusable for another link
+ *
+ * This means a second browser that knows the upload URL CANNOT upload even
+ * if someone else has already verified — it has no session token.
+ *
  * Slot logic (per-recipient, not shared pool):
  *   effectiveSlotsLeft = serverSlotsAtLoad - sessionUploadCount
  *   Slots are per-recipient — max_files applies to each recipient independently.
@@ -167,6 +180,17 @@ function OtpInput({ value, onChange, disabled }) {
 }
 
 
+/**
+ * OtpVerificationCard
+ *
+ * Props
+ * ─────
+ * recipientEmail     — shown to the user so they know where the code was sent
+ * onVerified(token)  — called with the signed session_token on success;
+ *                      the parent stores it and attaches it to every upload
+ * token              — the upload URL token (used for API calls)
+ * initialWaitSeconds — cooldown already in progress when the page loads
+ */
 function OtpVerificationCard({ recipientEmail, onVerified, token, initialWaitSeconds = 0 }) {
   const [otp,            setOtp]           = useState('')
   const [verifying,      setVerifying]     = useState(false)
@@ -197,8 +221,23 @@ function OtpVerificationCard({ recipientEmail, onVerified, token, initialWaitSec
     setVerifying(true)
     setOtpError('')
     try {
-      await verifyRecipientOTP(token, otp)
-      onVerified()
+      const { data } = await verifyRecipientOTP(token, otp)
+      const payload  = data.data || data
+
+      // The server issues a signed session_token on successful OTP verification.
+      // We pass it up to the parent (PublicUploadPage) which stores it in state
+      // and attaches it as X-Upload-Session on every upload request.
+      // Without this token the upload endpoint rejects the request — even if
+      // the DB still shows otp_verified=True from a different browser's session.
+      const sessionToken = payload.session_token || ''
+      if (!sessionToken) {
+        // Defensive: if the server somehow omitted the token, treat as failure.
+        setOtpError('Verification failed. Please try again.')
+        setOtp('')
+        return
+      }
+
+      onVerified(sessionToken)
     } catch (err) {
       const msg =
         err.response?.data?.otp?.[0] ||
@@ -314,6 +353,11 @@ export default function PublicUploadPage() {
   const [otpPhase,       setOtpPhase]       = useState('sending')
   const [otpInitialWait, setOtpInitialWait] = useState(0)   // cooldown when page loads
 
+  // Signed session token issued by the server on successful OTP verification.
+  // Stored in React state (tab-scoped) — intentionally NOT in localStorage.
+  // Appended as the `session_token` FormData field on every upload request.
+  const [sessionToken, setSessionToken] = useState('')
+
   const [files,              setFiles]              = useState([])
   const [progress,           setProgress]           = useState(0)
   const [uploading,          setUploading]          = useState(false)
@@ -389,6 +433,17 @@ export default function PublicUploadPage() {
   }
 
 
+  /**
+   * Called by OtpVerificationCard when the server confirms the OTP.
+   * Receives the signed session_token and stores it in state.
+   * All subsequent upload requests will append it as the session_token FormData field.
+   */
+  const handleOtpVerified = useCallback((token) => {
+    setSessionToken(token)
+    setOtpPhase('verified')
+  }, [])
+
+
   const addFiles = useCallback((incoming) => {
     setUploadErr('')
     const arr = Array.from(incoming)
@@ -422,6 +477,10 @@ export default function PublicUploadPage() {
     if (info?.recipient_email) fd.append('submitter_email', info.recipient_email)
 
     try {
+      // Send the signed session token as a form field (not a custom header)
+      // so it passes through CORS without requiring a preflight whitelist.
+      fd.append('session_token', sessionToken)
+
       const { data }  = await submitRecipientUpload(token, fd, {
         onUploadProgress: (e) => { if (e.total) setProgress(Math.round((e.loaded / e.total) * 100)) },
       })
@@ -447,7 +506,10 @@ export default function PublicUploadPage() {
         err.response?.data?.files ||
         'Upload failed. Please try again.'
 
+      // Session token expired (server returned OTP-gate rejection).
+      // Clear the stored token and send the user back to re-verify.
       if (err.response?.status === 400 && (err.response?.data?.otp || String(msg).toLowerCase().includes('otp'))) {
+        setSessionToken('')
         setOtpPhase('expired')
         setUploadErr('')
         return
@@ -652,7 +714,7 @@ export default function PublicUploadPage() {
                 {otpPhase === 'pending' && (
           <OtpVerificationCard
             recipientEmail={info.recipient_email}
-            onVerified={() => setOtpPhase('verified')}
+            onVerified={handleOtpVerified}
             token={token}
             initialWaitSeconds={otpInitialWait}
           />

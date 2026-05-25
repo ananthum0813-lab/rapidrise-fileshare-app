@@ -10,6 +10,7 @@ import logging
 import unicodedata
 import re
 
+from django.core import signing
 from django.core.mail import EmailMultiAlternatives
 from django.http import FileResponse, Http404, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
@@ -162,6 +163,7 @@ def _send_zip_share_email(zip_share, shared_by, file_names):
     )
 
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com')
+    from django.core.mail import send_mail
     send_mail(
         subject=subject,
         message=body_plain,
@@ -220,6 +222,53 @@ def _recipient_submission_count(recipient: RequestRecipient) -> int:
         recipient=recipient,
         status__in=_ACTIVE_STATUSES,
     ).count()
+
+
+# ─── OTP session token helpers ────────────────────────────────────────────────
+#
+# After a recipient successfully verifies their OTP, the server issues a
+# short-lived, cryptographically signed session token that binds the verified
+# identity to a specific browser session.  The token is:
+#   • Signed with Django's SECRET_KEY via django.core.signing
+#   • Scoped to the recipient's UUID so it cannot be reused for a different link
+#   • Valid for exactly OTP_SESSION_MINUTES (same window as the DB session)
+#
+# Every upload request MUST present this token in the X-Upload-Session header.
+# Checking only the DB flag (otp_verified / verified_until) is NOT sufficient —
+# that flag is shared across all browsers/devices, so a second browser that
+# knows the upload URL could otherwise upload freely once anyone has verified.
+
+_SESSION_SIGNING_SALT = 'fileshare-upload-session-v1'
+
+
+def _issue_session_token(recipient_id: str) -> str:
+    """
+    Create a signed, time-stamped session token encoding the recipient UUID.
+    The timestamp is embedded automatically by signing.dumps().
+    """
+    return signing.dumps(str(recipient_id), salt=_SESSION_SIGNING_SALT)
+
+
+def _validate_session_token(token: str, recipient_id: str) -> bool:
+    """
+    Return True only when:
+      1. The token was signed by this server (valid signature).
+      2. It has not expired (within OTP_SESSION_MINUTES).
+      3. The embedded recipient UUID matches the one for this upload link.
+
+    Any mismatch, tampering, or expiry returns False.
+    """
+    if not token:
+        return False
+    try:
+        rid = signing.loads(
+            token,
+            salt=_SESSION_SIGNING_SALT,
+            max_age=OTP_SESSION_MINUTES * 60,
+        )
+        return str(rid) == str(recipient_id)
+    except (signing.BadSignature, signing.SignatureExpired, Exception):
+        return False
 
 
 # ─── All-files endpoint ───────────────────────────────────────────────────────
@@ -725,7 +774,31 @@ class VerifyOTPView(APIView):
     Body: { "otp": "483291" }
 
     Verifies the submitted OTP.
-    On success: opens a 30-minute verified session and destroys the hash.
+
+    Security design
+    ───────────────
+    Checking only the DB flag (otp_verified / verified_until) is NOT enough:
+    those fields are shared across all browsers/devices.  A second browser that
+    learns the upload URL could call this endpoint at any time and — if the
+    old short-circuit were in place — receive a verified=True response without
+    knowing the OTP at all.
+
+    Instead, every successful verification now issues a signed, time-stamped
+    session_token (via django.core.signing).  The token encodes:
+      • The recipient's UUID  → scope to this specific upload link
+      • A server timestamp    → enforces the OTP_SESSION_MINUTES expiry
+
+    The token is returned to the client, stored in React state (never in
+    localStorage so it lives only for the current tab), and sent back as the
+    X-Upload-Session header on every subsequent upload request.  The upload
+    endpoint validates the token server-side before accepting any files.
+
+    Because the token is signed with Django's SECRET_KEY and scoped to one
+    recipient, a different browser cannot forge or reuse it — even if it knows
+    the upload URL and that someone else already verified.
+
+    On success: sets otp_verified=True in DB, opens the 30-min window, and
+    destroys the stored hash (single-use OTP).  Returns session_token.
     """
     permission_classes = [AllowAny]
 
@@ -739,15 +812,20 @@ class VerifyOTPView(APIView):
         if not otp_input:
             raise ValidationError({'otp': 'OTP is required.'})
 
-        # Already in an active verified session — no need to re-verify
-        if recipient.is_otp_verified:
-            return success_response(
-                data={
-                    'verified':       True,
-                    'session_minutes': OTP_SESSION_MINUTES,
-                },
-                message='Already verified.',
-            )
+        # ── REMOVED: the is_otp_verified short-circuit that was here ──────────
+        #
+        # The old code did:
+        #
+        #   if recipient.is_otp_verified:
+        #       return success_response(verified=True, ...)
+        #
+        # This was the bug: any browser that hit this endpoint *while* another
+        # browser's session was active would receive verified=True without
+        # submitting — or knowing — the OTP.  The short-circuit is gone.
+        #
+        # Each verification attempt must now go through the full OTP check
+        # and will receive a fresh, browser-scoped session_token on success.
+        # ─────────────────────────────────────────────────────────────────────
 
         success, error_msg = recipient.verify_otp(otp_input)
 
@@ -761,10 +839,17 @@ class VerifyOTPView(APIView):
 
         logger.info('OTP verified for recipient %s (request %s)', recipient.id, recipient.file_request_id)
 
+        # Issue a signed, time-stamped session token scoped to this recipient.
+        # The client must present this token (X-Upload-Session header) on every
+        # upload request.  Without it, uploads are rejected — even if the DB
+        # still shows otp_verified=True from a different browser's session.
+        session_token = _issue_session_token(str(recipient.id))
+
         return success_response(
             data={
                 'verified':        True,
                 'session_minutes': OTP_SESSION_MINUTES,
+                'session_token':   session_token,   # ← new: client must store & re-send
             },
             message='Email verified successfully.',
         )
@@ -834,8 +919,26 @@ class PublicRecipientUploadView(APIView):
 
         req = recipient.file_request
 
-        # ── OTP gate ──────────────────────────────────────────────────────────
-        if not recipient.is_otp_verified:
+        # ── Session token gate (replaces the DB-only otp_verified check) ──────
+        #
+        # The client must present the signed session_token that was issued by
+        # VerifyOTPView upon successful OTP entry.  It arrives as a FormData
+        # field (not a custom header) to avoid CORS preflight issues.
+        # _validate_session_token() checks:
+        #   1. Valid signature  (cannot be forged without Django's SECRET_KEY)
+        #   2. Not expired      (OTP_SESSION_MINUTES hard limit)
+        #   3. Scoped to THIS recipient UUID (not reusable for another link)
+        #
+        # Checking only recipient.is_otp_verified (the old approach) is NOT
+        # sufficient because that DB flag is shared across all browsers/devices.
+        # A second browser that knows the upload URL could otherwise upload
+        # freely the moment anyone else has verified.
+        #
+        # The DB flag is still updated by verify_otp() for audit purposes, but
+        # it is no longer the gate for uploads.
+        # ─────────────────────────────────────────────────────────────────────
+        session_token = request.data.get('session_token', '').strip()
+        if not _validate_session_token(session_token, str(recipient.id)):
             raise ValidationError({
                 'otp': (
                     'Email verification required. '
@@ -843,7 +946,7 @@ class PublicRecipientUploadView(APIView):
                 )
             })
 
-        # ── Per-recipient slot check (FIX: quota is per recipient, not shared) ─
+        # ── Per-recipient slot check (quota is per recipient, not shared) ─────
         current_count = _recipient_submission_count(recipient)
 
         if current_count >= req.max_files:
