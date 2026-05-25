@@ -1560,7 +1560,14 @@ function InboxPanel() {
 export default function Sharing() {
   const dispatch = useDispatch()
   const { shares, zipShares, inbox, inboxStatusCounts } = useSelector((s) => s.sharing)
-  const [activeTab, setActiveTab] = useState('shares')
+  const [activeTab, setActiveTab] = useState(
+  () => localStorage.getItem('sharingActiveTab') || 'shares'
+)
+
+const handleTabChange = (tab) => {
+  setActiveTab(tab)
+  localStorage.setItem('sharingActiveTab', tab)
+}
 
   useEffect(() => {
     dispatch(fetchShares({ page: 1 }))
@@ -1588,7 +1595,7 @@ export default function Sharing() {
           <h1 className="page-title text-2xl sm:text-3xl">Sharing Hub</h1>
           <p className="page-subtitle">Share files · ZIP bundles · File requests · Submission inbox</p>
         </div>
-        <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
+        <TabBar tabs={tabs} active={activeTab} onChange={handleTabChange} />
       </div>
 
       {activeTab === 'shares'    && <SharesPanel />}
