@@ -10,10 +10,6 @@ from django.utils import timezone
 from datetime import timedelta
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# FileShare
-# ──────────────────────────────────────────────────────────────────────────────
-
 class FileShare(models.Model):
     class Status(models.TextChoices):
         ACTIVE  = 'active',  'Active'
@@ -81,10 +77,6 @@ class FileShare(models.Model):
         self.save(update_fields=['status'])
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# ZipShare
-# ──────────────────────────────────────────────────────────────────────────────
-
 class ZipShare(models.Model):
     class Status(models.TextChoices):
         ACTIVE  = 'active',  'Active'
@@ -147,10 +139,6 @@ class ZipShare(models.Model):
         self.save(update_fields=['status'])
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# ShareAnalyticsEvent
-# ──────────────────────────────────────────────────────────────────────────────
-
 class ShareAnalyticsEvent(models.Model):
     class EventType(models.TextChoices):
         VIEW     = 'view',     'View'
@@ -175,10 +163,6 @@ class ShareAnalyticsEvent(models.Model):
     def __str__(self):
         return f'{self.event_type} — {self.share_id} @ {self.occurred_at}'
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# FileRequest
-# ──────────────────────────────────────────────────────────────────────────────
 
 class FileRequest(models.Model):
     class Status(models.TextChoices):
@@ -221,7 +205,6 @@ class FileRequest(models.Model):
 
     @property
     def submission_count(self):
-        """Total non-rejected submissions across ALL recipients (dashboard aggregate)."""
         return self.submissions.filter(
             status__in=[
                 SubmissionInbox.Status.PENDING,
@@ -236,20 +219,12 @@ class FileRequest(models.Model):
         self.save(update_fields=['status'])
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# OTP constants
-# ──────────────────────────────────────────────────────────────────────────────
-
 OTP_EXPIRY_MINUTES   = 10
 OTP_SESSION_MINUTES  = 30
 OTP_MAX_ATTEMPTS     = 5
-OTP_RESEND_COOLDOWN  = 60    # seconds between resends
-OTP_MAX_SENDS_HOUR   = 5     # max OTP emails per hour per recipient
+OTP_RESEND_COOLDOWN  = 60
+OTP_MAX_SENDS_HOUR   = 5
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# RequestRecipient — unique upload token per recipient + OTP verification
-# ──────────────────────────────────────────────────────────────────────────────
 
 class RequestRecipient(models.Model):
     id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -265,8 +240,6 @@ class RequestRecipient(models.Model):
     upload_count      = models.PositiveIntegerField(default=0)
     last_ip           = models.GenericIPAddressField(null=True, blank=True)
 
-    # ── OTP fields ────────────────────────────────────────────────────────────
-    # Stored as SHA-256 hash — never plaintext.
     otp_code_hash    = models.CharField(max_length=64, blank=True)
     otp_expires_at   = models.DateTimeField(null=True, blank=True)
     otp_verified     = models.BooleanField(default=False)
@@ -294,10 +267,6 @@ class RequestRecipient(models.Model):
 
     @property
     def files_submitted_count(self):
-        """
-        Accurate per-recipient inbox count.
-        Used for the per-recipient upload badge in the owner dashboard.
-        """
         return self.submissions.filter(
             status__in=[
                 SubmissionInbox.Status.PENDING,
@@ -307,25 +276,17 @@ class RequestRecipient(models.Model):
             ]
         ).count()
 
-    # ── OTP helpers ───────────────────────────────────────────────────────────
-
     @staticmethod
     def _hash_otp(plaintext: str) -> str:
         return hashlib.sha256(plaintext.encode()).hexdigest()
 
     def generate_otp(self) -> str:
-        """
-        Generate a cryptographically secure 6-digit OTP.
-        Stores the SHA-256 hash, resets attempt counter.
-        Returns plaintext for emailing.
-        """
-        plaintext = str(secrets.randbelow(900000) + 100000)  # 100000-999999
+        plaintext = str(secrets.randbelow(900000) + 100000)
         now = timezone.now()
 
-        # Reset hourly window if expired
         if (not self.otp_hour_window or
                 now >= self.otp_hour_window + timedelta(hours=1)):
-            self.otp_sends_hour = 0
+            self.otp_sends_hour  = 0
             self.otp_hour_window = now
 
         self.otp_code_hash    = self._hash_otp(plaintext)
@@ -334,7 +295,7 @@ class RequestRecipient(models.Model):
         self.otp_attempts     = 0
         self.otp_last_sent_at = now
         self.otp_sends_hour  += 1
-        self.verified_until   = None  # invalidate prior verified session
+        self.verified_until   = None
 
         self.save(update_fields=[
             'otp_code_hash', 'otp_expires_at', 'otp_verified',
@@ -344,12 +305,6 @@ class RequestRecipient(models.Model):
         return plaintext
 
     def verify_otp(self, plaintext: str) -> tuple:
-        """
-        Verify a submitted OTP.
-        Returns (success: bool, error_message: str).
-        On success: sets otp_verified=True, opens a 30-min upload session,
-        destroys the stored hash.
-        """
         now = timezone.now()
 
         if self.otp_attempts >= OTP_MAX_ATTEMPTS:
@@ -366,7 +321,6 @@ class RequestRecipient(models.Model):
                 return False, 'Too many incorrect attempts. Please request a new OTP.'
             return False, 'Invalid or expired OTP.'
 
-        # Correct OTP — open verified session and destroy hash
         self.otp_verified   = True
         self.otp_code_hash  = ''
         self.otp_expires_at = None
@@ -380,7 +334,6 @@ class RequestRecipient(models.Model):
 
     @property
     def is_otp_verified(self) -> bool:
-        """True only if OTP was verified AND the 30-min session is still active."""
         if not self.otp_verified:
             return False
         if not self.verified_until:
@@ -417,10 +370,6 @@ class RequestRecipient(models.Model):
         self.last_ip       = ip
         self.save(update_fields=['first_uploaded_at', 'upload_count', 'last_ip'])
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# SubmissionInbox
-# ──────────────────────────────────────────────────────────────────────────────
 
 class SubmissionInbox(models.Model):
     class Status(models.TextChoices):
@@ -462,8 +411,12 @@ class SubmissionInbox(models.Model):
     review_note      = models.TextField(blank=True, max_length=1000)
     rejection_reason = models.TextField(blank=True, max_length=1000)
     reviewed_at      = models.DateTimeField(null=True, blank=True)
-    submitted_at = models.DateTimeField(default=timezone.now, db_index=True)
-    updated_at   = models.DateTimeField(auto_now=True)
+    submitted_at     = models.DateTimeField(default=timezone.now, db_index=True)
+    updated_at       = models.DateTimeField(auto_now=True)
+
+    # ── Save-to-storage tracking ──────────────────────────────────────────────
+    saved_to_storage = models.BooleanField(default=False)
+    saved_filename   = models.CharField(max_length=500, blank=True, default='')
 
     class Meta:
         db_table = 'submission_inbox'

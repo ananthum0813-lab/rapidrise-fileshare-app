@@ -340,7 +340,7 @@ function FolderFormModal({ existingFolder, onClose, onSaved }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-panel w-full max-w-md">
+      <div className="modal-panel w-full max-w-md flex flex-col max-h-[90vh]">
 
                 <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
           <h3 className="text-base font-bold text-gray-900">
@@ -351,7 +351,7 @@ function FolderFormModal({ existingFolder, onClose, onSaved }) {
           </button>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
           {error && (
             <div className="flex items-start gap-2 px-4 py-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700">
               <i className="fas fa-circle-exclamation mt-0.5 flex-shrink-0" />
@@ -421,7 +421,7 @@ function FolderFormModal({ existingFolder, onClose, onSaved }) {
           </div>
         </div>
 
-        <div className="px-6 pb-6 flex gap-3">
+        <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
           <button onClick={onClose} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-200 transition-all">
             Cancel
           </button>
@@ -477,15 +477,15 @@ function DeleteFolderModal({ folder, onClose, onDeleted }) {
 
 function FolderCard({ folder, onOpen, onEdit, onDelete }) {
   return (
-    <div className="group relative card rounded-lg shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
+    <div className="group relative card rounded-lg shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden flex flex-col">
             <div className="h-1.5 w-full" style={{ background: folder.color }} />
 
-      <div className="p-5">
-                <div className="flex items-start justify-between mb-4">
+      <div className="p-5 flex flex-col flex-1">
+        <div className="flex items-start justify-between mb-4">
           <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: folder.color + '20' }}>
             <i className={`fas ${folder.icon || 'fa-folder'} text-xl`} style={{ color: folder.color }} />
           </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(folder) }}
               className="w-8 h-8 flex items-center justify-center bg-gray-100 text-gray-500 hover:bg-brand-100 hover:text-brand-600 rounded-xl transition-all"
@@ -503,12 +503,14 @@ function FolderCard({ folder, onOpen, onEdit, onDelete }) {
           </div>
         </div>
 
-                <h3 className="text-sm font-bold text-gray-800 truncate mb-1">{folder.name}</h3>
-        {folder.description && (
-          <p className="text-[11px] text-gray-400 truncate mb-3">{folder.description}</p>
-        )}
+        <div className="flex-1">
+          <h3 className="text-sm font-bold text-gray-800 truncate mb-1">{folder.name}</h3>
+          <p className="text-[11px] text-gray-400 truncate" style={{ minHeight: '16px' }}>
+            {folder.description || '\u00A0'}
+          </p>
+        </div>
 
-        <div className="flex items-center justify-between mt-3">
+        <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-50">
           <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
             <i className="fas fa-file text-[10px]" />
             <span>{fmt(folder.file_count)} file{folder.file_count !== 1 ? 's' : ''}</span>

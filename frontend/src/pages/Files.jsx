@@ -994,7 +994,7 @@ export default function Files() {
 
                         return (
                           <tr key={file.id}
-                            className={`table-row ${isBatched ? 'bg-brand-50/80' : ''}`}>
+                            className={`table-row ${isBatched ? 'bg-indigo-900/40 dark:bg-indigo-900/40' : ''}`}>
 
                             <td className="table-td w-10">
                               <input type="checkbox" checked={isBatched}

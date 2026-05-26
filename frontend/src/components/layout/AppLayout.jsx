@@ -144,7 +144,7 @@ export default function AppLayout() {
         </div>
 
         <nav className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="space-y-0.5 overflow-y-auto">{renderNavSections()}</div>
+          <div className="space-y-0.5 overflow-y-auto pr-1">{renderNavSections()}</div>
         </nav>
 
         <div className="widget-card mt-5 flex-shrink-0 rounded-xl border border-gray-200 bg-white p-3.5 dark:border-midnight-500">

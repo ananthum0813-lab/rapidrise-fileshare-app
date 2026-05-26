@@ -350,6 +350,73 @@ function FileViewerModal({ file, onClose }) {
   )
 }
 
+/* ── NEW: Save-to-Storage modal with optional rename ── */
+function SaveToStorageModal({ submission, onCancel, onConfirm, loading }) {
+  const defaultName = submission?.original_filename || ''
+  const [filename, setFilename] = useState(defaultName)
+  const isValid = filename.trim().length > 0
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-panel p-6 max-w-sm w-full">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center flex-shrink-0">
+            <i className="fas fa-floppy-disk text-emerald-600"></i>
+          </div>
+          <div>
+            <h3 className="section-title text-base leading-tight">Save to Storage</h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">Optionally rename before saving permanently</p>
+          </div>
+        </div>
+
+        <div className="mb-5">
+          <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">
+            File Name
+          </label>
+          <input
+            type="text"
+            value={filename}
+            onChange={(e) => setFilename(e.target.value)}
+            className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-200 focus:outline-none"
+            placeholder="Enter file name…"
+            autoFocus
+          />
+          {!isValid && (
+            <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+              <i className="fas fa-circle-exclamation text-[10px]"></i>File name cannot be empty.
+            </p>
+          )}
+        </div>
+
+        <div className="px-3 py-2.5 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-700 mb-5 flex items-start gap-2">
+          <i className="fas fa-info-circle mt-0.5 flex-shrink-0"></i>
+          <span>This file will be moved from the inbox into your permanent storage. This action cannot be undone.</span>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="btn-secondary flex-1 py-3 rounded-xl font-bold text-sm"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm(filename.trim())}
+            disabled={loading || !isValid}
+            className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {loading
+              ? <><i className="fas fa-spinner fa-spin text-xs"></i>Saving…</>
+              : <><i className="fas fa-floppy-disk text-xs"></i>Save to Storage</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 function SharesPanel() {
   const dispatch = useDispatch()
@@ -1032,9 +1099,6 @@ function RequestsPanel() {
             )}
 
             <div className="flex flex-col sm:flex-row gap-3 pt-1">
-              {/* ── FIX: use isSubmitting (formSubmitting || requestLoading) for
-                  both disabled state AND spinner so button always animates
-                  during the full async lifecycle ── */}
               <button
                 type="submit"
                 disabled={isSubmitting}
@@ -1207,14 +1271,18 @@ function InboxPanel() {
   const dispatch = useDispatch()
   const { inbox, inboxLoading, inboxPagination, inboxStatusCounts, scanStatusCounts, deletingFile, removingItem } = useSelector((s) => s.sharing)
 
-  const [activeStatus,  setActiveStatus]  = useState('')
-  const [reviewModal,   setReviewModal]   = useState(null)
-  const [deleteConfirm, setDeleteConfirm] = useState(null)
-  const [viewFile,      setViewFile]      = useState(null)
-  const [reviewNote,    setReviewNote]    = useState('')
-  const [errorMsg,      setErrorMsg]      = useState('')
-  const [currentPage,   setCurrentPage]   = useState(1)
-  const [initialLoaded, setInitialLoaded] = useState(false)
+  const [activeStatus,    setActiveStatus]    = useState('')
+  const [reviewModal,     setReviewModal]     = useState(null)
+  const [deleteConfirm,   setDeleteConfirm]   = useState(null)
+  const [viewFile,        setViewFile]        = useState(null)
+  const [reviewNote,      setReviewNote]      = useState('')
+  const [errorMsg,        setErrorMsg]        = useState('')
+  const [currentPage,     setCurrentPage]     = useState(1)
+  const [initialLoaded,   setInitialLoaded]   = useState(false)
+  // ── NEW state for save-to-storage ──
+  const [saveModal,       setSaveModal]       = useState(null)   // submission object
+  const [saveLoading,     setSaveLoading]     = useState(false)
+  const [saveSuccessMsg,  setSaveSuccessMsg]  = useState('')
 
   const pollRef = useRef(null)
 
@@ -1304,6 +1372,26 @@ function InboxPanel() {
     loadInbox()
   }
 
+  // ── NEW: save completed file to permanent user storage ──
+  const handleSaveToStorage = async (filename) => {
+    if (!saveModal) return
+    setSaveLoading(true)
+    try {
+      await api.post(`/api/sharing/inbox/${saveModal.id}/save-to-storage/`, { filename })
+      setSaveSuccessMsg(`✓ "${filename}" has been saved to your storage.`)
+      setTimeout(() => setSaveSuccessMsg(''), 8000)
+      setSaveModal(null)
+      loadInbox()
+      dispatch(fetchAllFiles())
+    } catch (err) {
+      setErrorMsg(err.response?.data?.detail || err.message || 'Failed to save file to storage.')
+      setTimeout(() => setErrorMsg(''), 6000)
+      setSaveModal(null)
+    } finally {
+      setSaveLoading(false)
+    }
+  }
+
   const sourceIcon = (src) =>
     ({ file_request: 'fa-inbox', direct_share: 'fa-share-alt', anonymous: 'fa-user-secret' }[src] || 'fa-file')
 
@@ -1348,7 +1436,8 @@ function InboxPanel() {
         </div>
       )}
 
-      {errorMsg && <Alert type="error" message={errorMsg} className="rounded-xl" />}
+      {errorMsg      && <Alert type="error"   message={errorMsg}      className="rounded-xl" />}
+      {saveSuccessMsg && <Alert type="success" message={saveSuccessMsg} className="rounded-xl" />}
 
       <div className="flex gap-1.5 flex-wrap">
         {statusTabs.map((t) => (
@@ -1391,6 +1480,9 @@ function InboxPanel() {
             const isScanning   = ['scanning', 'pending'].includes(sub.scan_status)
             const downloadable = isSafe && sub.download_url
             const viewable     = isSafe && sub.file_url
+            // ── NEW: conditions for the two new feature areas ──
+            const isComplete    = sub.status === 'complete'
+            const isNeedsAction = sub.status === 'needs_action'
 
             return (
               <Card key={sub.id} className={`p-4 sm:p-5 ${isInfected ? 'border-red-100 bg-red-50/30' : ''}`}>
@@ -1424,6 +1516,19 @@ function InboxPanel() {
                         <i className="fas fa-circle-exclamation mr-1"></i>{sub.rejection_reason}
                       </p>
                     )}
+                    {/* ── NEW: notice for complete files not yet saved ── */}
+                    {isComplete && !sub.saved_to_storage && (
+                      <div className="mt-2 px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-100 text-xs text-emerald-700 flex items-center gap-1.5">
+                        <i className="fas fa-circle-info flex-shrink-0"></i>
+                        <span>This file is processed and ready to be saved permanently to your storage.</span>
+                      </div>
+                    )}
+                    {isComplete && sub.saved_to_storage && (
+                      <div className="mt-2 px-3 py-2 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700 flex items-center gap-1.5">
+                        <i className="fas fa-circle-check flex-shrink-0"></i>
+                        <span>Saved to storage{sub.saved_filename ? ` as "${sub.saved_filename}"` : ''}.</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap">
@@ -1442,6 +1547,8 @@ function InboxPanel() {
                         <i className="fas fa-spinner fa-spin text-[10px]"></i>Scanning
                       </span>
                     )}
+
+                    {/* ── pending: approve / flag / reject ── */}
                     {sub.status === 'pending' && !isInfected && (
                       <>
                         <button
@@ -1466,6 +1573,31 @@ function InboxPanel() {
                         </button>
                       </>
                     )}
+
+                    {/* ── NEW: needs_action (flagged): approve + reject for re-review ── */}
+                    {isNeedsAction && !isInfected && (
+                      <>
+                        <span className="text-[10px] font-bold text-orange-500 bg-orange-50 border border-orange-100 px-2 py-1 rounded-lg flex items-center gap-1">
+                          <i className="fas fa-flag text-[9px]"></i>Flagged
+                        </span>
+                        <button
+                          onClick={() => { setReviewModal({ submission: sub, action: 'approve' }); setReviewNote('') }}
+                          disabled={!isSafe}
+                          title={!isSafe ? 'Wait for security scan to complete' : undefined}
+                          className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <i className="fas fa-check text-[10px]"></i> Approve
+                        </button>
+                        <button
+                          onClick={() => { setReviewModal({ submission: sub, action: 'reject' }); setReviewNote('') }}
+                          className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-all flex items-center gap-1"
+                        >
+                          <i className="fas fa-xmark text-[10px]"></i> Reject
+                        </button>
+                      </>
+                    )}
+
+                    {/* approved: mark complete */}
                     {sub.status === 'approved' && (
                       <button
                         onClick={() => { setReviewModal({ submission: sub, action: 'complete' }); setReviewNote('') }}
@@ -1474,6 +1606,17 @@ function InboxPanel() {
                         <i className="fas fa-circle-check text-[10px]"></i> Complete
                       </button>
                     )}
+
+                    {/* ── NEW: complete + safe: save to storage ── */}
+                    {isComplete && isSafe && !sub.saved_to_storage && (
+                      <button
+                        onClick={() => setSaveModal(sub)}
+                        className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm"
+                      >
+                        <i className="fas fa-floppy-disk text-[10px]"></i> Save to Storage
+                      </button>
+                    )}
+
                     <button
                       onClick={() => setDeleteConfirm(sub)}
                       disabled={deletingFile || removingItem}
@@ -1501,6 +1644,7 @@ function InboxPanel() {
         </div>
       )}
 
+      {/* review modal — unchanged */}
       {reviewModal && (
         <div className="modal-overlay">
           <div className="modal-panel p-6 max-w-md w-full">
@@ -1531,6 +1675,7 @@ function InboxPanel() {
         </div>
       )}
 
+      {/* delete confirm — unchanged */}
       {deleteConfirm && (
         <ConfirmModal
           title={
@@ -1551,6 +1696,16 @@ function InboxPanel() {
         />
       )}
 
+      {/* ── NEW: save-to-storage modal ── */}
+      {saveModal && (
+        <SaveToStorageModal
+          submission={saveModal}
+          loading={saveLoading}
+          onCancel={() => setSaveModal(null)}
+          onConfirm={handleSaveToStorage}
+        />
+      )}
+
       {viewFile && <FileViewerModal file={viewFile} onClose={() => setViewFile(null)} />}
     </div>
   )
@@ -1561,13 +1716,13 @@ export default function Sharing() {
   const dispatch = useDispatch()
   const { shares, zipShares, inbox, inboxStatusCounts } = useSelector((s) => s.sharing)
   const [activeTab, setActiveTab] = useState(
-  () => localStorage.getItem('sharingActiveTab') || 'shares'
-)
+    () => localStorage.getItem('sharingActiveTab') || 'shares'
+  )
 
-const handleTabChange = (tab) => {
-  setActiveTab(tab)
-  localStorage.setItem('sharingActiveTab', tab)
-}
+  const handleTabChange = (tab) => {
+    setActiveTab(tab)
+    localStorage.setItem('sharingActiveTab', tab)
+  }
 
   useEffect(() => {
     dispatch(fetchShares({ page: 1 }))

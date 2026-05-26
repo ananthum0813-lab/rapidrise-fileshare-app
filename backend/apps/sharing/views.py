@@ -1235,3 +1235,92 @@ class RemoveInboxItemView(APIView):
 
         submission.delete()
         return success_response(message=f'"{filename}" removed from inbox.')
+    
+class SaveToStorageView(APIView):
+    """
+    POST /api/sharing/inbox/<pk>/save-to-storage/
+    Body: { "filename": "optional new name.ext" }
+
+    Copies a complete + safe inbox submission into the owner's permanent
+    file storage — identical to a normal upload but skips re-scanning since
+    the file was already scanned on ingest.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        from django.db.models import Sum
+        from django.core.files.base import ContentFile
+        from apps.files.views import resolve_unique_filename
+        from apps.files.serializers import FileSerializer, sanitize_filename
+
+        submission = get_object_or_404(SubmissionInbox, pk=pk, owner=request.user)
+
+        if submission.status != SubmissionInbox.Status.COMPLETE:
+            raise ValidationError({'detail': 'Only submissions with status "complete" can be saved to storage.'})
+
+        file_obj = submission.file
+        if not file_obj:
+            raise ValidationError({'detail': 'This submission has no associated file.'})
+
+        if file_obj.scan_status != File.ScanStatus.SAFE:
+            raise ValidationError({'detail': 'Only files that have passed security scanning can be saved to storage.'})
+
+        if submission.saved_to_storage:
+            raise ValidationError({'detail': 'This file has already been saved to storage.'})
+
+        # Resolve filename
+        raw_name     = (request.data.get('filename') or '').strip()
+        if not raw_name:
+            raw_name = submission.original_filename or file_obj.original_name or 'file'
+        desired_name = sanitize_filename(raw_name)
+        unique_name  = resolve_unique_filename(desired_name, request.user)
+
+        # Quota check
+        used_bytes = File.objects.filter(
+            owner=request.user, is_deleted=False
+        ).aggregate(total=Sum('file_size'))['total'] or 0
+        available = settings.MAX_STORAGE_BYTES - used_bytes
+        if file_obj.file_size > available:
+            raise ValidationError({
+                'detail': (
+                    f'Not enough storage space. '
+                    f'File is {file_obj.file_size} bytes; '
+                    f'you have {available} bytes available.'
+                )
+            })
+
+        # Read source file and create a new independent File record
+        try:
+            with file_obj.file.open('rb') as fh:
+                content = fh.read()
+        except Exception as exc:
+            logger.exception('SaveToStorageView: could not read file %s', file_obj.pk)
+            raise ValidationError({'detail': f'Could not read source file: {exc}'})
+
+        try:
+            new_file_record = File.objects.create(
+                owner=request.user,
+                original_name=unique_name,
+                file=ContentFile(content, name=unique_name),
+                file_size=file_obj.file_size,
+                mime_type=file_obj.mime_type,
+                sha256=getattr(file_obj, 'sha256', '') or '',
+                scan_status=File.ScanStatus.SAFE,
+            )
+        except Exception as exc:
+            logger.exception('SaveToStorageView: failed to create File record')
+            raise ValidationError({'detail': f'Failed to save file: {exc}'})
+
+        # Mark submission as saved
+        submission.saved_to_storage = True
+        submission.saved_filename   = unique_name
+        submission.save(update_fields=['saved_to_storage', 'saved_filename'])
+
+        return success_response(
+            data={
+                'saved_file': FileSerializer(new_file_record, context={'request': request}).data,
+                'submission': SubmissionInboxSerializer(submission, context={'request': request}).data,
+            },
+            message=f'"{unique_name}" saved to your storage.',
+            status_code=status.HTTP_201_CREATED,
+        )

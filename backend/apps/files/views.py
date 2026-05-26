@@ -365,6 +365,7 @@ class FileDetailView(APIView):
         return success_response(data=FileSerializer(self.get_object(pk)).data)
 
     def delete(self, request, pk):
+        
         file_obj = self.get_object(pk)
         name     = file_obj.original_name
         file_obj.delete_file()
@@ -433,7 +434,7 @@ class StorageInfoView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        result = File.objects.filter(owner=request.user, is_deleted=False).aggregate(
+        result = File.objects.filter(owner=request.user).aggregate(
             used=Sum('file_size'),
             file_count=Count('id'),
         )

@@ -97,7 +97,7 @@ export default function SetExpiryModal({ file, onClose, onUpdated }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-panel w-full max-w-sm overflow-hidden flex flex-col">
+      <div className="modal-panel w-full max-w-sm flex flex-col" style={{ maxHeight: '90vh' }}>
 
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3 min-w-0">
@@ -114,7 +114,7 @@ export default function SetExpiryModal({ file, onClose, onUpdated }) {
           </button>
         </div>
 
-        <div className="flex-1 p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
 
                     {success && (
             <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border border-emerald-100 rounded-xl text-sm text-emerald-700">

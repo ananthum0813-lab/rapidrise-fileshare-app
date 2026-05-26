@@ -30,6 +30,7 @@ from .views import (
     ReviewSubmissionView,
     DeleteInfectedFileView,
     RemoveInboxItemView,
+    SaveToStorageView,
     # OTP endpoints
     SendOTPView,
     VerifyOTPView,
@@ -70,7 +71,6 @@ urlpatterns = [
     path('requests/<uuid:pk>/',  FileRequestDetailView.as_view(), name='request-detail'),
 
     # ── Per-recipient OTP verification (public) ───────────────────────────────
-    # These must come BEFORE the generic upload/<token>/ routes.
     path('requests/upload/<uuid:token>/send-otp/',   SendOTPView.as_view(),   name='recipient-send-otp'),
     path('requests/upload/<uuid:token>/verify-otp/', VerifyOTPView.as_view(), name='recipient-verify-otp'),
     path('requests/upload/<uuid:token>/resend-otp/', ResendOTPView.as_view(), name='recipient-resend-otp'),
@@ -87,8 +87,9 @@ urlpatterns = [
     path('requests/public/<uuid:token>/upload/', PublicFileRequestUploadView.as_view(), name='public-request-upload'),
 
     # ── Inbox ─────────────────────────────────────────────────────────────────
-    path('inbox/',                       SubmissionInboxListView.as_view(), name='inbox-list'),
-    path('inbox/<uuid:pk>/review/',      ReviewSubmissionView.as_view(),    name='inbox-review'),
-    path('inbox/<uuid:pk>/delete-file/', DeleteInfectedFileView.as_view(),  name='inbox-delete-infected'),
-    path('inbox/<uuid:pk>/remove/',      RemoveInboxItemView.as_view(),     name='inbox-remove'),
+    path('inbox/',                              SubmissionInboxListView.as_view(), name='inbox-list'),
+    path('inbox/<uuid:pk>/review/',             ReviewSubmissionView.as_view(),    name='inbox-review'),
+    path('inbox/<uuid:pk>/delete-file/',        DeleteInfectedFileView.as_view(),  name='inbox-delete-infected'),
+    path('inbox/<uuid:pk>/remove/',             RemoveInboxItemView.as_view(),     name='inbox-remove'),
+    path('inbox/<uuid:pk>/save-to-storage/',    SaveToStorageView.as_view(),       name='inbox-save-to-storage'),
 ]

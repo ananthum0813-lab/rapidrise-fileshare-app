@@ -54,7 +54,7 @@ class File(models.Model):
     is_deleted  = models.BooleanField(default=False, db_index=True)
     deleted_at  = models.DateTimeField(null=True, blank=True)
 
-    # ── NEW: optional expiry ──────────────────────────────────────────────────
+    # ── optional expiry ──────────────────────────────────────────────────
     # When set, the Celery task `delete_expired_files` (apps/files/tasks.py)
     # will soft-delete this file once `expires_at` passes.
     # Null means the file never expires automatically (default behaviour).
@@ -138,6 +138,7 @@ class File(models.Model):
 
     # Alias used by views.py → FileDetailView.delete()
     def delete_file(self):
+        print("hi")
         self.soft_delete()
 
     def restore(self):

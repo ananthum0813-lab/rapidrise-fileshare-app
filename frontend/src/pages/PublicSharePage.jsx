@@ -183,7 +183,7 @@ export default function PublicSharePage() {
           </p>
         </div>
 
-        <p className="text-center text-xs text-gray-300 mt-6">Powered by FileVault · Secure File Sharing</p>
+        <p className="text-center text-xs text-gray-300 mt-6">Powered by FileShare · Secure File Sharing</p>
       </div>
     </div>
   )
