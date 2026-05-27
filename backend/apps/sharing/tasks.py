@@ -283,6 +283,7 @@ def _run_scan(file_id: str) -> None:
 
         if threat == 'INFECTED':
             _mark_result(file_obj, File.ScanStatus.INFECTED, detail)
+            print(f'[THREAT DETECTED] file_id={file_id} | {detail}')
             logger.warning(
                 '_run_scan: INFECTED file_id=%s reason=%s',
                 file_id,
@@ -349,7 +350,10 @@ def _full_scan(file_path: str, file_obj):
 def _check_extension(filename: str):
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
     if ext in BLOCKED_EXTENSIONS:
-        return f'Blocked extension: .{ext}'
+        return (
+            f'This file type (.{ext}) is not allowed because it can run programs '
+            f'on your computer and is commonly used to spread malware.'
+        )
     return None
 
 
@@ -359,7 +363,11 @@ def _check_magic_bytes(file_path: str):
             header = f.read(16)
         for offset, sig, desc in DANGEROUS_SIGNATURES:
             if header[offset:offset + len(sig)] == sig:
-                return f'Dangerous signature: {desc}'
+                return (
+                    f'This file contains the internal signature of a {desc}. '
+                    f'Even if it has a different name or extension, it is actually '
+                    f'an executable program and has been blocked for your safety.'
+                )
     except Exception as exc:
         logger.warning('_check_magic_bytes: %s', exc)
     return None
@@ -376,14 +384,21 @@ def _check_mime_consistency(file_path: str, stored_mime: str):
         return None
 
     if detected in BLOCKED_MIME_TYPES:
-        return f'Dangerous MIME type: {detected}'
+        return (
+            f'This file is identified as a {detected}, which is an executable '
+            f'or installer type that is not permitted for upload.'
+        )
 
     if stored_mime and detected:
         if (
             detected.split('/')[0] == 'application'
             and stored_mime.split('/')[0] in ('image', 'audio', 'video')
         ):
-            return f'MIME mismatch: claimed {stored_mime}, actual {detected}'
+            return (
+                f'This file is disguised — it was uploaded as a {stored_mime} '
+                f'(e.g. an image or video) but is actually a {detected}. '
+                f'Hiding executable files this way is a common attack technique.'
+            )
 
     return None
 
@@ -405,7 +420,10 @@ def _check_hash_blocklist(file_path: str, file_obj):
             pass
 
         if digest in STATIC_BLOCKED_HASHES:
-            return f'Known malicious hash: {digest[:16]}...'
+            return (
+                f'This exact file has been previously identified as malicious '
+                f'and is permanently blocked (file fingerprint: {digest[:16]}...).'
+            )
 
     except Exception as exc:
         logger.warning('_check_hash_blocklist: %s', exc)
@@ -425,14 +443,25 @@ def _check_archive_bomb(file_path: str):
         with zipfile.ZipFile(file_path, 'r') as zf:
             members = zf.infolist()
             if len(members) > 10000:
-                return f'Too many archive entries: {len(members)}'
+                return (
+                    f'This archive contains {len(members):,} files, which is abnormally high. '
+                    f'This is a known attack called a "zip bomb" designed to crash or overwhelm systems.'
+                )
             for member in members:
                 total += member.file_size
                 if total > 5 * 1024 * 1024 * 1024:
-                    return 'Archive bomb: uncompressed > 5GB'
+                    return (
+                        'This archive would expand to over 5 GB when extracted. '
+                        'This is a known attack called a "zip bomb" designed to exhaust '
+                        'disk space and crash systems.'
+                    )
 
         if (total / compressed) > ZIP_RATIO_LIMIT:
-            return f'Archive bomb ratio: {total // compressed}:1'
+            return (
+                f'This archive expands to {total // compressed}x its compressed size. '
+                f'This extreme compression ratio is a sign of a "zip bomb" — a file '
+                f'designed to exhaust disk space and crash systems when extracted.'
+            )
 
     except zipfile.BadZipFile:
         return None
@@ -448,7 +477,11 @@ def _check_malicious_patterns(file_path: str):
             raw = f.read(MAX_SCAN_BYTES)
         for pattern, desc in MALICIOUS_PATTERNS:
             if pattern.search(raw):
-                return f'Malicious pattern: {desc}'
+                return (
+                    f'This file contains a dangerous command pattern ({desc}) '
+                    f'that is used to run hidden programs or system commands. '
+                    f'This is a strong indicator of malware or a malicious script.'
+                )
     except Exception as exc:
         logger.warning('_check_malicious_patterns: %s', exc)
     return None
@@ -473,7 +506,12 @@ def _check_entropy(file_path: str):
 
         entropy = _shannon_entropy(data)
         if entropy > ENTROPY_THRESHOLD:
-            return f'Suspicious entropy: {entropy:.2f}'
+            return (
+                f'This file appears to be encrypted or heavily obfuscated '
+                f'(randomness score: {entropy:.2f}/8.00). '
+                f'Legitimate files are not normally this random. '
+                f'This is a common sign of hidden malware or a packed malicious payload.'
+            )
 
     except Exception as exc:
         logger.warning('_check_entropy: %s', exc)

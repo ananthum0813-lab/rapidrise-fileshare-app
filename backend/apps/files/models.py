@@ -138,7 +138,6 @@ class File(models.Model):
 
     # Alias used by views.py → FileDetailView.delete()
     def delete_file(self):
-        print("hi")
         self.soft_delete()
 
     def restore(self):
