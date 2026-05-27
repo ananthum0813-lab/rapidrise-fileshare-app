@@ -304,13 +304,7 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
               <i className="fas fa-arrow-up-right-from-square"></i> Open PDF
             </button>
           )}
-          <Link
-            to="/files"
-            onClick={onClose}
-            className="block w-full py-3 text-center bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200 transition-colors text-sm"
-          >
-            <i className="fas fa-folder-open mr-2"></i> View in Files
-          </Link>
+         
           <button
             onClick={onClose}
             className="w-full py-3 text-gray-500 font-bold hover:text-gray-700 transition-colors text-sm"
@@ -780,9 +774,10 @@ export default function Dashboard() {
         <div className="widget-card-elevated bg-white p-5 flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <h2 className="dashboard-section-title section-title">Storage Overview</h2>
-            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-violet-200 bg-violet-50 text-violet-600 transition hover:border-violet-300 hover:bg-violet-100 dark:border-transparent dark:bg-transparent dark:text-gray-400 dark:hover:text-gray-300">
-              <i className="fas fa-ellipsis-h text-sm" aria-hidden />
-            </button>
+           <i
+  className="fas fa-hdd text-sm text-violet-600 dark:text-violet-400"
+  aria-hidden
+/>
           </div>
 
           {/* Donut */}
