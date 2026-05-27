@@ -1,6 +1,5 @@
 import re
 import os
-import mimetypes
 from django.conf import settings
 from django.db.models import Sum
 from rest_framework import serializers
@@ -17,8 +16,8 @@ def sanitize_filename(name: str) -> str:
 
 
 def get_mime_type(file) -> str:
-    guessed, _ = mimetypes.guess_type(file.name)
-    return guessed or 'application/octet-stream'
+    from .file_validation import detect_mime_type
+    return detect_mime_type(file)
 
 
 class FileSerializer(serializers.ModelSerializer):
@@ -77,7 +76,7 @@ class FileUploadSerializer(serializers.Serializer):
                 )
                 continue
 
-            mime, _ = mimetypes.guess_type(f.name)
+            mime = get_mime_type(f)
             if allowed_types and mime not in allowed_types:
                 errors.append(
                     f"'{f.name}' — file type '{mime or 'unknown'}' is not allowed."

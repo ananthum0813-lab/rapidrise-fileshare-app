@@ -124,4 +124,4 @@ export const getPublicShareInfo = (token) =>
   publicApi.get(`${SHARING}/public/${token}/`)
 
 export const downloadPublicShare = (token) =>
-  publicApi.get(`${SHARING}/public/${token}/download/`, { responseType: 'blob' })
+  publicApi.get(`${SHARING}/public/${token}/download/?download=1`, { responseType: 'blob' })

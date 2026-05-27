@@ -289,7 +289,7 @@ export default function PublicZipSharePage() {
         </div>
 
         <p className="text-center text-xs text-slate-300 dark:text-slate-600 pb-6">
-          Powered by FileShare · Secure File Sharing
+          Powered by VShare · Secure File Sharing
         </p>
       </div>
     </div>

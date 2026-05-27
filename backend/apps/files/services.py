@@ -28,7 +28,7 @@ def send_share_email(
     try:
         body = (
             f'Hi,\n\n'
-            f'{sender_name} shared a file with you on FileShare.\n\n'
+            f'{sender_name} shared a file with you on VShare.\n\n'
             f'File: {file_name}\n'
             f'Download Link: {share_url}\n'
             f'Expires: {expires_at.strftime("%d %b %Y, %H:%M UTC")}\n'
@@ -40,7 +40,7 @@ def send_share_email(
         body += '\nDo not share this link with others.\n'
 
         send_mail(
-            subject=f'{sender_name} shared a file with you on FileShare',
+            subject=f'{sender_name} shared a file with you on VShare',
             message=body,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[recipient_email],

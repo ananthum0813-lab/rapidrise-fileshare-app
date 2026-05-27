@@ -26,7 +26,8 @@ from rest_framework.exceptions import PermissionDenied, NotFound, ValidationErro
 
 from config.exceptions import success_response
 from apps.files.models import File
-from apps.files.serializers import FileSerializer, sanitize_filename, get_mime_type
+from apps.files.serializers import FileSerializer, sanitize_filename
+from apps.files.file_validation import detect_mime_type
 
 from .models import (
     FileShare, ShareAnalyticsEvent,
@@ -115,7 +116,7 @@ def _validate_file(uploaded_file, allowed_extensions=None):
         errors.append(f'File type ".{ext}" is not allowed.')
     if allowed_extensions and ext not in [e.lower().lstrip('.') for e in allowed_extensions]:
         errors.append(f'File type ".{ext}" is not accepted for this request.')
-    mime = get_mime_type(uploaded_file)
+    mime = detect_mime_type(uploaded_file)
     allowed_mimes = getattr(settings, 'ALLOWED_MIME_TYPES', DEFAULT_ALLOWED_MIMES)
     if mime not in allowed_mimes:
         errors.append(f'MIME type "{mime}" is not permitted.')
@@ -137,6 +138,15 @@ def _content_disposition(filename: str, attachment: bool = True) -> str:
     return (
         f'{disposition}; filename="{ascii_name}"; '
         f"filename*=UTF-8''{utf8_encoded}"
+    )
+
+
+def _is_inline_preview_mime(mime: str) -> bool:
+    mime = (mime or '').lower()
+    return (
+        mime == 'application/pdf'
+        or mime.startswith('image/')
+        or mime.startswith('text/')
     )
 
 
@@ -607,11 +617,15 @@ class PublicShareDownloadView(APIView):
         user_agent = request.META.get('HTTP_USER_AGENT', '')
         share.mark_accessed(ip=ip, user_agent=user_agent)
         record_analytics_event(share, ShareAnalyticsEvent.EventType.DOWNLOAD, ip=ip, user_agent=user_agent)
+        force_download = request.query_params.get('download') in {'1', 'true', 'yes'}
+        mime = file_obj.mime_type or 'application/octet-stream'
+        as_attachment = force_download or not _is_inline_preview_mime(mime)
+
         response = FileResponse(
             open(path, 'rb'),
-            content_type=file_obj.mime_type or 'application/octet-stream',
+            content_type=mime,
         )
-        response['Content-Disposition']    = _content_disposition(file_obj.original_name)
+        response['Content-Disposition']    = _content_disposition(file_obj.original_name, attachment=as_attachment)
         response['Content-Length']         = file_obj.file_size
         response['X-Content-Type-Options'] = 'nosniff'
         response['Cache-Control']          = 'no-cache, no-store, must-revalidate'
