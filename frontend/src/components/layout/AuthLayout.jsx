@@ -1,18 +1,9 @@
 ﻿import { Link } from 'react-router-dom'
 import ThemeToggle from '@/components/ui/ThemeToggle'
+import BrandLogo from '@/components/ui/BrandLogo'
 
 const Logo = () => (
-  <div className="flex items-center gap-2.5">
-    <div className="brand-chip w-8 h-8 flex items-center justify-center">
-      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-      </svg>
-    </div>
-    <span className="font-display font-semibold text-gray-900 dark:text-gray-100 text-lg tracking-tight">
-      FileShare
-    </span>
-  </div>
+  <BrandLogo size="sm" />
 )
 
 export default function AuthLayout({ children, title, subtitle }) {
@@ -45,7 +36,7 @@ export default function AuthLayout({ children, title, subtitle }) {
       </main>
 
       <footer className="text-center py-5 text-xs text-gray-400 dark:text-gray-500">
-        © {new Date().getFullYear()} FileShare. All rights reserved.
+        © {new Date().getFullYear()} VShare. All rights reserved.
       </footer>
     </div>
   )

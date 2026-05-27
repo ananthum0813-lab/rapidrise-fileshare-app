@@ -21,6 +21,7 @@ import Settings  from '@/pages/Settings'
 import Starred   from '@/pages/Starred'
 import Trash     from '@/pages/Trash'
 import NotFound  from '@/pages/NotFound'
+import Landing   from '@/pages/Landing'
 
 // Public Pages
 import PublicSharePage    from '@/pages/PublicSharePage'
@@ -48,7 +49,8 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Root */}
-      <Route path="/" element={<RootRedirect />} />
+      <Route path="/" element={<Landing />} />
+      <Route path="/app" element={<RootRedirect />} />
 
       {/* Auth */}
       <Route path="/login"           element={<Login />} />

@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { logout } from '@/store/authSlice'
 import ThemeToggle from '@/components/ui/ThemeToggle'
+import BrandLogo from '@/components/ui/BrandLogo'
 
 const NAV_SECTIONS = [
   {
@@ -86,12 +87,7 @@ export default function AppLayout() {
     <div className="app-shell dark:dark-page-bg">
       <div className="mobile-chrome md:hidden">
         <div className="flex min-w-0 flex-shrink-0 items-center gap-2.5">
-          <div className="brand-chip flex h-8 w-8">
-            <i className="fas fa-cloud text-sm" aria-hidden />
-          </div>
-          <h1 className="chrome-title truncate font-display text-base font-semibold tracking-tight">
-            FileShare
-          </h1>
+          <BrandLogo size="sm" />
         </div>
         <div className="flex items-center gap-1">
           <ThemeToggle />
@@ -133,12 +129,7 @@ export default function AppLayout() {
       <aside className="app-sidebar">
         <div className="mb-5 flex flex-shrink-0 items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="brand-chip flex h-8 w-8 shrink-0">
-              <i className="fas fa-cloud text-sm" aria-hidden />
-            </div>
-            <h1 className="chrome-title truncate font-display text-base font-semibold tracking-tight">
-              FileShare
-            </h1>
+            <BrandLogo size="sm" />
           </div>
           <ThemeToggle />
         </div>

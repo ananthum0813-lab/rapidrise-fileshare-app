@@ -61,7 +61,7 @@ export default function Login() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
               <i className="fas fa-cloud text-white text-sm" />
             </div>
-            <span className="text-gray-900 dark:text-white font-semibold text-lg tracking-tight">FileShare</span>
+            <span className="text-gray-900 dark:text-white font-semibold text-lg tracking-tight">VShare</span>
           </div>
         </div>
 
@@ -264,7 +264,7 @@ export default function Login() {
         </div>{/* end hero content */}
 
         <p className="relative z-10 text-[11px] text-gray-400 dark:text-gray-600">
-          © {new Date().getFullYear()} FileShare · All rights reserved
+          © {new Date().getFullYear()} VShare · All rights reserved
         </p>
       </div>
 
@@ -286,7 +286,7 @@ export default function Login() {
               <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shadow-md shadow-blue-500/25">
                 <i className="fas fa-cloud text-white text-xs" />
               </div>
-              <span className="text-gray-900 dark:text-white font-semibold tracking-tight">FileShare</span>
+              <span className="text-gray-900 dark:text-white font-semibold tracking-tight">VShare</span>
             </div>
             <div className="hidden lg:block" />
             <ThemeToggle />
@@ -295,7 +295,7 @@ export default function Login() {
           {/* heading */}
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Welcome back</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5">Sign in to your FileShare account.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5">Sign in to your VShare account.</p>
           </div>
 
           {/* success alert */}
