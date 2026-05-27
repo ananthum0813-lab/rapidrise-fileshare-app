@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
-import { loginUser, registerUser, logoutUser, getProfile, updateProfile } from '@/api/authApi'
+import { loginUser, registerUser, logoutUser, getProfile, updateProfile, deleteAccount as deleteAccountApi } from '@/api/authApi'
 
 
 export const login = createAsyncThunk(
@@ -34,19 +34,19 @@ export const logout = createAsyncThunk(
     const refreshToken = getState().auth.refreshToken
     try {
       await logoutUser(refreshToken)
-    } catch (_) {
+    } catch {
     }
   }
 )
 
 export const verifySession = createAsyncThunk(
   'auth/verifySession',
-  async (_, { rejectWithValue }) => {
+  async () => {
     try {
       const { data } = await getProfile()
       return data.data // user object
-    } catch (err) {
-      return rejectWithValue('Session expired.')
+    } catch {
+      return 'Session expired.'
     }
   }
 )
@@ -59,6 +59,19 @@ export const editProfile = createAsyncThunk(
       return data.data
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || 'Profile update failed.')
+    }
+  }
+)
+
+export const deleteAccount = createAsyncThunk(
+  'auth/deleteAccount',
+  async ({ confirmationText }, { getState, rejectWithValue }) => {
+    try {
+      const refresh = getState().auth.refreshToken
+      await deleteAccountApi({ confirm: confirmationText, refresh })
+      return true
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || 'Account deletion failed.')
     }
   }
 )
@@ -168,6 +181,26 @@ const authSlice = createSlice({
       state.fieldErrors = null
       clearTokens()
     })
+
+    builder
+      .addCase(deleteAccount.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(deleteAccount.fulfilled, (state) => {
+        state.loading = false
+        state.user = null
+        state.accessToken = null
+        state.refreshToken = null
+        state.isAuthenticated = false
+        state.error = null
+        state.fieldErrors = null
+        clearTokens()
+      })
+      .addCase(deleteAccount.rejected, (state, { payload }) => {
+        state.loading = false
+        state.error = payload || 'Account deletion failed.'
+      })
 
     builder
       .addCase(editProfile.pending, (state) => {

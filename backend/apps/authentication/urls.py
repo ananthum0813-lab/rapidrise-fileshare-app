@@ -11,4 +11,5 @@ urlpatterns = [
     path('forgot-password/', views.ForgotPasswordView.as_view(), name='forgot-password'),
     path('reset-password/', views.ResetPasswordView.as_view(), name='reset-password'),
     path('token/refresh/', views.TokenRefreshView.as_view(), name='token-refresh'),
+    path('delete-account/', views.DeleteAccountView.as_view(), name='delete-account'),
 ]

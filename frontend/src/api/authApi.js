@@ -11,3 +11,4 @@ export const changePassword  = (data)          => api.post(`${AUTH}/change-passw
 export const forgotPassword  = (email)         => api.post(`${AUTH}/forgot-password/`, { email })
 export const resetPassword   = (data)          => api.post(`${AUTH}/reset-password/`, data)
 export const refreshToken    = (refresh)       => api.post(`${AUTH}/token/refresh/`, { refresh })
+export const deleteAccount   = (payload)       => api.post(`${AUTH}/delete-account/`, payload)

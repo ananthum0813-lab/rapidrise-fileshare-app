@@ -66,7 +66,7 @@ def send_password_reset_email(email: str) -> None:
     try:
         body = (
             f'Hi {user.first_name},\n\n'
-            f'You requested a password reset for your FileShare account.\n\n'
+            f'You requested a password reset for your VShare account.\n\n'
             f'Reset Link:\n'
             f'{reset_link}\n\n'
             f'This link expires in '
@@ -75,7 +75,7 @@ def send_password_reset_email(email: str) -> None:
         )
 
         send_mail(
-            subject='Reset Your FileShare Password',
+            subject='Reset Your VShare Password',
             message=body,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user.email],

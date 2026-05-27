@@ -138,3 +138,41 @@ class TokenRefreshView(APIView):
             })
         except TokenError as e:
             raise AuthenticationFailed(str(e))
+
+
+class DeleteAccountView(APIView):
+    """Permanently delete the authenticated user account and owned data."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        confirm = str(request.data.get('confirm', '')).strip().lower()
+        if confirm != 'delete':
+            raise ValidationError({
+                'confirm': 'Confirmation text mismatch. Send "delete" to confirm account deletion.'
+            })
+
+        refresh = request.data.get('refresh', '')
+        if refresh:
+            try:
+                RefreshToken(refresh).blacklist()
+            except TokenError:
+                pass
+
+        user = request.user
+        user_id = str(user.id)
+
+        # Ensure physical file cleanup before user cascade deletion.
+        from apps.files.models import File
+        user_files = File.objects.filter(owner=user)
+        for file_obj in user_files:
+            try:
+                file_obj.hard_delete()
+            except Exception:
+                logger.exception('DeleteAccountView: failed to hard-delete file %s', file_obj.pk)
+
+        user.delete()
+        return success_response(
+            message='Account deleted successfully.',
+            data={'deleted_user_id': user_id},
+            status_code=status.HTTP_200_OK,
+        )

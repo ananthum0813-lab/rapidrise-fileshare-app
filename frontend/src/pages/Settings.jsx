@@ -2,7 +2,8 @@
 import { useForm } from 'react-hook-form'
 import { useSelector, useDispatch } from 'react-redux'
 import { changePassword } from '@/api/authApi'
-import { editProfile } from '@/store/authSlice'
+import { deleteAccount, editProfile } from '@/store/authSlice'
+import { useNavigate } from 'react-router-dom'
 import { passwordRules, getApiError } from '@/utils/validators'
 import Alert from '@/components/ui/Alert'
 import Button from '@/components/ui/Button'
@@ -10,12 +11,16 @@ import Input from '@/components/ui/Input'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 
 export default function Settings() {
-  const { user, loading, error } = useSelector((s) => s.auth)
+  const { user, loading } = useSelector((s) => s.auth)
   const dispatch = useDispatch()
+  const navigate = useNavigate()
   const [changing, setChanging] = useState(false)
   const [errorMsg, setErrorMsg] = useState(null)
   const [success, setSuccess] = useState(null)
   const [editingProfile, setEditingProfile] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   const {
     register: field, handleSubmit, watch, reset,
@@ -79,6 +84,21 @@ export default function Settings() {
       setTimeout(() => setSuccess(null), 5000)
     } catch (err) {
       setErrorMsg(err || 'Failed to update profile.')
+    }
+  }
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true)
+    setErrorMsg(null)
+    try {
+      await dispatch(deleteAccount({ confirmationText: deleteConfirm })).unwrap()
+      navigate('/login', { replace: true })
+    } catch (err) {
+      setErrorMsg(err || 'Failed to delete account.')
+    } finally {
+      setDeleting(false)
+      setDeleteOpen(false)
+      setDeleteConfirm('')
     }
   }
 
@@ -148,10 +168,10 @@ export default function Settings() {
               ) : (
                 <form onSubmit={handleProfileSubmit(onProfileSubmit)} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input label="First Name" {...profileField('first_name')} error={profileErrors.first_name?.message} className="bg-gray-50 border-none rounded-lg" />
-                    <Input label="Last Name" {...profileField('last_name')} error={profileErrors.last_name?.message} className="bg-gray-50 border-none rounded-lg" />
+                    <Input label="First Name" {...profileField('first_name')} error={profileErrors.first_name?.message} className="bg-gray-50" />
+                    <Input label="Last Name" {...profileField('last_name')} error={profileErrors.last_name?.message} className="bg-gray-50" />
                   </div>
-                  <Input label="Birth Date" type="date" {...profileField('date_of_birth')} error={profileErrors.date_of_birth?.message} className="bg-gray-50 border-none rounded-lg" />
+                  <Input label="Birth Date" type="date" {...profileField('date_of_birth')} error={profileErrors.date_of_birth?.message} className="bg-gray-50" />
                   
                   <div className="flex gap-3 pt-4">
                     <button type="submit" disabled={loading} className="btn-primary">
@@ -179,7 +199,7 @@ export default function Settings() {
                     placeholder="••••••••"
                     {...field('old_password', { required: 'Required' })}
                     error={errors.old_password?.message}
-                    className="bg-gray-50 border-none rounded-lg"
+                    className="bg-gray-50"
                   />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <Input
@@ -188,7 +208,7 @@ export default function Settings() {
                       placeholder="••••••••"
                       {...field('new_password', passwordRules)}
                       error={errors.new_password?.message}
-                      className="bg-gray-50 border-none rounded-lg"
+                      className="bg-gray-50"
                     />
                     <Input
                       label="Confirm Password"
@@ -199,7 +219,7 @@ export default function Settings() {
                         validate: (v) => v === newPassword || 'Mismatch',
                       })}
                       error={errors.confirm_password?.message}
-                      className="bg-gray-50 border-none rounded-lg"
+                      className="bg-gray-50"
                     />
                   </div>
                 </div>
@@ -227,11 +247,60 @@ export default function Settings() {
               </p>
               <ThemeToggle variant="full" />
             </div>
+
+            <div className="card p-6 border border-red-200/70 dark:border-red-500/25">
+              <h3 className="text-base font-semibold text-red-600 dark:text-red-400 mb-1 flex items-center gap-2">
+                <i className="fas fa-triangle-exclamation" aria-hidden />
+                Danger Zone
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Permanently delete your account and all associated files, folders, shares, and submissions.
+              </p>
+              <Button variant="danger" className="w-full" onClick={() => setDeleteOpen(true)}>
+                <i className="fas fa-user-slash" aria-hidden />
+                Delete Account
+              </Button>
+            </div>
            
           </div>
 
         </div>
       </div>
+
+      {deleteOpen && (
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-md">
+            <div className="modal-header">
+              <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">Delete account</h4>
+              <button type="button" className="btn-ghost btn-sm" onClick={() => setDeleteOpen(false)}>
+                <i className="fas fa-times" aria-hidden />
+              </button>
+            </div>
+            <div className="modal-body space-y-3">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                This action is irreversible. To confirm, type <span className="font-semibold">delete</span>.
+              </p>
+              <Input
+                label="Confirmation"
+                placeholder='Type "delete"'
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+              />
+            </div>
+            <div className="modal-footer">
+              <Button variant="ghost" onClick={() => setDeleteOpen(false)} disabled={deleting}>Cancel</Button>
+              <Button
+                variant="danger"
+                onClick={handleDeleteAccount}
+                loading={deleting}
+                disabled={deleteConfirm.trim().toLowerCase() !== 'delete'}
+              >
+                Confirm delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
