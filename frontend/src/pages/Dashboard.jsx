@@ -569,7 +569,7 @@ export default function Dashboard() {
   const freeBytes = storage ? (storage.total_bytes - storage.used_bytes) : 0
   const freeMB    = Math.max(0, Math.round(freeBytes / (1024 * 1024)))
 
-  const avatarUrl = `https://ui-avatars.com/api/?name=${user?.first_name || 'User'}&background=2563eb&color=f0f4f8`
+  const avatarUrl = `https://ui-avatars.com/api/?name=${user?.first_name || 'User'}&background=5b57ea&color=f0f4f8`
 
   return (
     <div className="dashboard-shell">
