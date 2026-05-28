@@ -174,7 +174,7 @@ function StatCard({ label, value, sub, accent }) {
   return (
     <div className="widget-card rounded-lg p-5 flex flex-col gap-1 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">{label}</p>
-      <p className="text-2xl font-bold" style={{ color: accent || '#0f172a' }}>{value}</p>
+      <p className="text-2xl font-bold text-slate-900 dark:text-white" style={{ color: accent || '#0f172a' }}>{value}</p>
       {sub && <p className="text-xs text-gray-400 dark:text-gray-500">{sub}</p>}
     </div>
   )
