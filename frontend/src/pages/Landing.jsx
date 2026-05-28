@@ -3,79 +3,112 @@ import { useSelector } from 'react-redux'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 import BrandLogo from '@/components/ui/BrandLogo'
 
-const features = [
-  { icon: 'fa-shield-halved', title: 'Secure by default', desc: 'Protected sharing links, OTP flows, and safe upload checks.' },
-  { icon: 'fa-folder-tree', title: 'Organized workspace', desc: 'Manage files with folders, favorites, storage analytics, and trash recovery.' },
-  { icon: 'fa-bolt', title: 'Fast sharing', desc: 'Share single files or full ZIP bundles with expiry controls in seconds.' },
-]
-
 export default function Landing() {
   const { isAuthenticated } = useSelector((s) => s.auth)
+
   return (
-    <div className="min-h-screen dark:dark-page-bg">
-      <header className="auth-chrome">
-        <div className="mx-auto max-w-6xl flex flex-wrap items-center justify-between gap-3">
+    <div className="relative min-h-screen overflow-hidden bg-[#efedf8] dark:bg-[#020817] transition-colors duration-300">
+
+      {/* Background */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-24 left-0 h-[420px] w-[420px] rounded-full bg-violet-300/20 blur-3xl dark:bg-violet-500/10" />
+        <div className="absolute bottom-0 right-0 h-[420px] w-[420px] rounded-full bg-indigo-300/20 blur-3xl dark:bg-indigo-500/10" />
+      </div>
+
+      {/* Header */}
+      <header className="relative z-20">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
+          
           <BrandLogo />
-          <div className="flex w-full sm:w-auto items-center justify-end gap-2">
+
+          <div className="flex items-center gap-3">
             <ThemeToggle />
-            {isAuthenticated ? (
-              <Link to="/dashboard" className="btn-primary btn-sm sm:btn-primary">Open app</Link>
-            ) : (
-              <>
-                <Link to="/login" className="btn-ghost btn-sm sm:btn-ghost">Sign in</Link>
-                <Link to="/register" className="btn-primary btn-sm sm:btn-primary">Get started</Link>
-              </>
-            )}
+
+            <Link
+              to={isAuthenticated ? '/dashboard' : '/register'}
+              className="rounded-2xl bg-[#635BFF] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#635BFF]/30 transition-all duration-300 hover:bg-[#574ff5] hover:scale-[1.03]"
+            >
+              {isAuthenticated ? 'Dashboard' : 'Get Started'}
+            </Link>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-8 sm:py-12 lg:py-16">
-        <section className="widget-card-featured p-5 sm:p-8 lg:p-12">
-          <p className="insight-label mb-4 text-[11px] sm:text-xs"><i className="fas fa-lock" aria-hidden /> Enterprise-grade secure sharing</p>
-          <h1 className="text-2xl leading-tight sm:text-4xl lg:text-5xl font-display font-semibold tracking-tight text-gray-900 dark:text-gray-100 max-w-3xl">
-            Share files confidently with a clean, fast, modern workflow.
+      {/* Main */}
+      <main className="relative z-10 mx-auto flex min-h-[calc(100vh-90px)] max-w-7xl flex-col items-center justify-center gap-14 px-5 py-10 sm:px-8 lg:flex-row lg:gap-20">
+
+        {/* Left Content */}
+        <div className="w-full max-w-xl text-center lg:text-left">
+
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white/70 px-4 py-1.5 text-xs font-medium text-violet-700 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-900/60 dark:text-violet-300">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            Secure File Sharing
+          </div>
+
+          <h1 className="text-4xl font-bold leading-tight tracking-tight text-slate-900 dark:text-white sm:text-5xl lg:text-6xl">
+            Share files in a
+            <span className="block bg-gradient-to-r from-[#635BFF] to-indigo-500 bg-clip-text text-transparent">
+              modern workspace
+            </span>
           </h1>
-          <p className="mt-3 sm:mt-4 text-sm sm:text-base text-gray-600 dark:text-gray-300 max-w-2xl">
-            VShare helps teams upload, organize, and distribute files with robust security, elegant UI, and a responsive experience across devices.
+
+          <p className="mt-5 max-w-lg text-base leading-relaxed text-slate-600 dark:text-slate-400 sm:text-lg">
+            Fast uploads, secure sharing, and a beautiful experience across all devices.
           </p>
-          <div className="mt-6 sm:mt-7 flex flex-col sm:flex-row sm:flex-wrap gap-2.5 sm:gap-3">
-            <Link to={isAuthenticated ? '/dashboard' : '/register'} className="btn-primary w-full sm:w-auto">
-              <i className="fas fa-arrow-right" aria-hidden /> {isAuthenticated ? 'Go to dashboard' : 'Start free'}
+
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center lg:justify-start">
+            <Link
+              to={isAuthenticated ? '/dashboard' : '/register'}
+              className="rounded-2xl bg-[#635BFF] px-7 py-3 text-center text-sm font-semibold text-white shadow-xl shadow-[#635BFF]/30 transition-all duration-300 hover:bg-[#574ff5] hover:scale-[1.03]"
+            >
+              {isAuthenticated ? 'Open Workspace' : 'Start Free'}
             </Link>
-            <Link to="/login" className="btn-secondary w-full sm:w-auto">Sign in</Link>
-          </div>
 
-          <div className="mt-5 sm:mt-7 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
-            <div className="widget-card p-3.5 sm:p-4">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Availability</p>
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">Mobile, tablet, desktop</p>
+            {!isAuthenticated && (
+              <Link
+                to="/login"
+                className="rounded-2xl border border-violet-200 bg-white/70 px-7 py-3 text-center text-sm font-semibold text-slate-700 backdrop-blur transition-all duration-300 hover:border-violet-300 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200"
+              >
+                Sign In
+              </Link>
+            )}
+          </div>
+        </div>
+
+        {/* Right Preview Card */}
+        <div className="w-full max-w-md">
+          <div className="rounded-[36px] border border-violet-100 bg-white/80 p-6 shadow-2xl shadow-violet-200/40 backdrop-blur-xl dark:border-slate-800 dark:bg-[#071225]/90 dark:shadow-none">
+
+            {/* Top */}
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+                  VShare
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Secure Workspace
+                </p>
+              </div>
+
+              {/* Icon Button */}
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#635BFF] shadow-lg shadow-[#635BFF]/30">
+                <i className="fas fa-cloud text-xl text-white" />
+              </div>
             </div>
-            <div className="widget-card p-3.5 sm:p-4">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Sharing model</p>
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">Direct links + ZIP bundles</p>
-            </div>
-            <div className="widget-card p-3.5 sm:p-4">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Security</p>
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">Validation, OTP, expiry controls</p>
+
+            {/* Upload Preview */}
+            <div className="mt-8 rounded-[30px] border-2 border-dashed border-violet-200 bg-white/70 p-12 text-center dark:border-slate-700 dark:bg-slate-900/50">
+
+              {/* Big Upload Icon */}
+              <div className="mx-auto flex h-32 w-32 items-center justify-center rounded-[36px] bg-[#635BFF] shadow-2xl shadow-[#635BFF]/30">
+                <i className="fas fa-cloud-arrow-up text-6xl text-white" />
+              </div>
+
             </div>
           </div>
-        </section>
-
-        <section className="mt-5 sm:mt-8 grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-          {features.map((f) => (
-            <article key={f.title} className="widget-card p-4 sm:p-5">
-              <div className="widget-icon mb-3"><i className={`fas ${f.icon}`} aria-hidden /></div>
-              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{f.title}</h2>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{f.desc}</p>
-            </article>
-          ))}
-        </section>
+        </div>
       </main>
-
-      <footer className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
-        © {new Date().getFullYear()} VShare · Secure file sharing for modern teams.
-      </footer>
     </div>
   )
 }
