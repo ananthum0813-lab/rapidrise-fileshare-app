@@ -350,7 +350,6 @@ function FileViewerModal({ file, onClose }) {
   )
 }
 
-/* ── NEW: Save-to-Storage modal with optional rename ── */
 function SaveToStorageModal({ submission, onCancel, onConfirm, loading }) {
   const defaultName = submission?.original_filename || ''
   const [filename, setFilename] = useState(defaultName)
@@ -1265,7 +1264,9 @@ function RequestsPanel() {
 }
 
 
-const SCAN_POLL_INTERVAL = 5000
+// ── Polling interval: 10 s (was 5 s) — fires only while items are still
+//    in pending/scanning state; stops automatically once all resolve. ──
+const SCAN_POLL_INTERVAL = 10000
 
 function InboxPanel() {
   const dispatch = useDispatch()
@@ -1279,17 +1280,20 @@ function InboxPanel() {
   const [errorMsg,        setErrorMsg]        = useState('')
   const [currentPage,     setCurrentPage]     = useState(1)
   const [initialLoaded,   setInitialLoaded]   = useState(false)
-  // ── NEW state for save-to-storage ──
-  const [saveModal,       setSaveModal]       = useState(null)   // submission object
+  const [saveModal,       setSaveModal]       = useState(null)
   const [saveLoading,     setSaveLoading]     = useState(false)
   const [saveSuccessMsg,  setSaveSuccessMsg]  = useState('')
 
   const pollRef = useRef(null)
 
-  const hasScanning = useMemo(() =>
-    inbox.some((s) => s.scan_status === 'scanning' || s.scan_status === 'pending'),
-    [inbox]
+  // Only the IDs of items still pending/scanning — used for targeted polling
+  const scanningIds = useMemo(
+    () => inbox.filter((s) => s.scan_status === 'scanning' || s.scan_status === 'pending').map((s) => s.id),
+    [inbox],
   )
+
+  // True when at least one item is still being scanned
+  const hasScanning = scanningIds.length > 0
 
   const handleDownload = useCallback(async (downloadUrl, filename) => {
     try {
@@ -1322,13 +1326,20 @@ function InboxPanel() {
     loadInbox()
   }, [loadInbox])
 
+  // ── Smart polling: runs silently every 10 s, but ONLY while there are
+  //    items still in pending/scanning state. Stops the moment they all
+  //    resolve to safe/infected/scan_failed. No UI indicator shown. ──
   useEffect(() => {
     if (pollRef.current) clearInterval(pollRef.current)
+
     if (hasScanning) {
       pollRef.current = setInterval(() => {
+        // Re-fetch only the current page so we get updated scan statuses.
+        // The inbox slice will merge the results and update just those rows.
         dispatch(fetchInbox({ page: currentPage, status: activeStatus }))
       }, SCAN_POLL_INTERVAL)
     }
+
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [hasScanning, dispatch, currentPage, activeStatus])
 
@@ -1372,7 +1383,6 @@ function InboxPanel() {
     loadInbox()
   }
 
-  // ── NEW: save completed file to permanent user storage ──
   const handleSaveToStorage = async (filename) => {
     if (!saveModal) return
     setSaveLoading(true)
@@ -1415,12 +1425,7 @@ function InboxPanel() {
           <h2 className="text-lg font-bold text-slate-900">Submission Inbox</h2>
           <p className="text-sm text-slate-500">Files submitted via your requests — review, view, download, or delete.</p>
         </div>
-        {hasScanning && (
-          <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 font-semibold">
-            <i className="fas fa-spinner fa-spin text-[10px]"></i>
-            Auto-refreshing scan status…
-          </div>
-        )}
+        {/* Auto-refresh banner removed — polling runs silently in the background */}
       </div>
 
       {scanStatusCounts && Object.keys(scanStatusCounts).length > 0 && (
@@ -1436,7 +1441,7 @@ function InboxPanel() {
         </div>
       )}
 
-      {errorMsg      && <Alert type="error"   message={errorMsg}      className="rounded-xl" />}
+      {errorMsg       && <Alert type="error"   message={errorMsg}       className="rounded-xl" />}
       {saveSuccessMsg && <Alert type="success" message={saveSuccessMsg} className="rounded-xl" />}
 
       <div className="flex gap-1.5 flex-wrap">
@@ -1480,7 +1485,6 @@ function InboxPanel() {
             const isScanning   = ['scanning', 'pending'].includes(sub.scan_status)
             const downloadable = isSafe && sub.download_url
             const viewable     = isSafe && sub.file_url
-            // ── NEW: conditions for the two new feature areas ──
             const isComplete    = sub.status === 'complete'
             const isNeedsAction = sub.status === 'needs_action'
 
@@ -1516,7 +1520,6 @@ function InboxPanel() {
                         <i className="fas fa-circle-exclamation mr-1"></i>{sub.rejection_reason}
                       </p>
                     )}
-                    {/* ── NEW: notice for complete files not yet saved ── */}
                     {isComplete && !sub.saved_to_storage && (
                       <div className="mt-2 px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-100 text-xs text-emerald-700 flex items-center gap-1.5">
                         <i className="fas fa-circle-info flex-shrink-0"></i>
@@ -1548,7 +1551,6 @@ function InboxPanel() {
                       </span>
                     )}
 
-                    {/* ── pending: approve / flag / reject ── */}
                     {sub.status === 'pending' && !isInfected && (
                       <>
                         <button
@@ -1574,7 +1576,6 @@ function InboxPanel() {
                       </>
                     )}
 
-                    {/* ── NEW: needs_action (flagged): approve + reject for re-review ── */}
                     {isNeedsAction && !isInfected && (
                       <>
                         <span className="text-[10px] font-bold text-orange-500 bg-orange-50 border border-orange-100 px-2 py-1 rounded-lg flex items-center gap-1">
@@ -1597,7 +1598,6 @@ function InboxPanel() {
                       </>
                     )}
 
-                    {/* approved: mark complete */}
                     {sub.status === 'approved' && (
                       <button
                         onClick={() => { setReviewModal({ submission: sub, action: 'complete' }); setReviewNote('') }}
@@ -1607,7 +1607,6 @@ function InboxPanel() {
                       </button>
                     )}
 
-                    {/* ── NEW: complete + safe: save to storage ── */}
                     {isComplete && isSafe && !sub.saved_to_storage && (
                       <button
                         onClick={() => setSaveModal(sub)}
@@ -1644,7 +1643,6 @@ function InboxPanel() {
         </div>
       )}
 
-      {/* review modal — unchanged */}
       {reviewModal && (
         <div className="modal-overlay">
           <div className="modal-panel p-6 max-w-md w-full">
@@ -1675,7 +1673,6 @@ function InboxPanel() {
         </div>
       )}
 
-      {/* delete confirm — unchanged */}
       {deleteConfirm && (
         <ConfirmModal
           title={
@@ -1696,7 +1693,6 @@ function InboxPanel() {
         />
       )}
 
-      {/* ── NEW: save-to-storage modal ── */}
       {saveModal && (
         <SaveToStorageModal
           submission={saveModal}
