@@ -34,9 +34,11 @@
   --border-focus:   #818cf8;
 
   /* ── Typography ───────────────────────────────────────────────────────── */
+  /* CHANGED: secondary lightened from #4a4862 → #3d3b57 (more contrast on light bg) */
+  /* CHANGED: muted lightened from #8c8aaa → #6e6c8a (more readable without being loud) */
   --text-primary:   #0f0e1a;
-  --text-secondary: #4a4862;
-  --text-muted:     #8c8aaa;
+  --text-secondary: #3d3b57;
+  --text-muted:     #6e6c8a;
   --text-inverse:   #ffffff;
 
   /* ── Brand ────────────────────────────────────────────────────────────── */
@@ -123,7 +125,7 @@
   --radius-input:10px;
 }
 
-/* ── DARK MODE (unchanged from original) ──────────────────────────────────── */
+/* ── DARK MODE ──────────────────────────────────────────────────────────── */
 .dark {
   color-scheme: dark;
   --bg-page:            #03060e;
@@ -139,8 +141,10 @@
   --border-subtle: #162850;
   --border-hover: #2e5290;
   --text-primary: #f0f4f8;
-  --text-secondary: #8ba3c7;
-  --text-muted: #6b85a8;
+  /* CHANGED: secondary bumped from #8ba3c7 → #9db8d8 (more visible on deep dark bg) */
+  /* CHANGED: muted bumped from #6b85a8 → #7a96b8 (legible without competing with secondary) */
+  --text-secondary: #9db8d8;
+  --text-muted: #7a96b8;
   --accent-primary: #818cf8;
   --accent-primary-hover: #6366f1;
   --accent-electric: #818cf8;
@@ -868,7 +872,7 @@
   }
   html:not(.dark) .nav-link-idle:hover {
     background: linear-gradient(90deg, #f0eef8 0%, #f7f6fc 100%);
-    border-color: var(--border-subtle);   /* color only — no new border declaration */
+    border-color: var(--border-subtle);
     box-shadow: 0 1px 2px rgb(15 10 40 / 0.04);
   }
 

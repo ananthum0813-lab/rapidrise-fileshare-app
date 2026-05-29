@@ -80,13 +80,16 @@ const StatTile = ({ icon, label, value, tint = 'indigo' }) => (
 
 function TabBar({ tabs, active, onChange }) {
   return (
-    <div className="tab-track">
+    <div
+      className="tab-track overflow-x-auto"
+      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+    >
       {tabs.map((t) => (
         <button
           key={t.id}
           type="button"
           onClick={() => onChange(t.id)}
-          className={`tab-btn ${active === t.id ? 'tab-btn-active' : ''}`}
+          className={`tab-btn flex-shrink-0 ${active === t.id ? 'tab-btn-active' : ''}`}
         >
           <i className={`fas ${t.icon} text-[11px]`} aria-hidden />
           {t.label}
@@ -100,7 +103,7 @@ function TabBar({ tabs, active, onChange }) {
 function ConfirmModal({ title, body, confirmLabel, confirmClass, onCancel, onConfirm, loading }) {
   return (
     <div className="modal-overlay">
-      <div className="modal-panel p-6 max-w-sm w-full">
+      <div className="modal-panel p-6 max-w-sm w-full mx-4">
         <h3 className="section-title text-base mb-2">{title}</h3>
         <p className="page-subtitle mb-6">{body}</p>
         <div className="flex gap-3">
@@ -253,7 +256,7 @@ function FileSelector({ files, loading, selectedFiles, onToggle }) {
 function Pagination({ currentPage, totalPages, count, onPageChange, loading, label }) {
   if (!totalPages || totalPages <= 1) return null
   return (
-    <div className="flex items-center justify-center gap-2 pt-2">
+    <div className="flex items-center justify-center gap-2 pt-2 flex-wrap">
       <button
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage <= 1 || loading}
@@ -288,7 +291,7 @@ function FileViewerModal({ file, onClose }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
-        className="modal-panel w-full max-w-4xl max-h-[90vh]"
+        className="modal-panel w-full max-w-4xl max-h-[90vh] mx-2 sm:mx-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
@@ -313,7 +316,7 @@ function FileViewerModal({ file, onClose }) {
               <img src={file.file_url} alt={file.original_filename} className="max-w-full max-h-[70vh] object-contain rounded-xl shadow-md" />
             </div>
           )}
-          {isPdf && <iframe src={file.file_url} className="w-full h-[70vh] rounded-xl border border-slate-200" title={file.original_filename} />}
+          {isPdf && <iframe src={file.file_url} className="w-full h-[60vh] sm:h-[70vh] rounded-xl border border-slate-200" title={file.original_filename} />}
           {isVideo && (
             <div className="flex items-center justify-center">
               <video controls className="max-w-full max-h-[70vh] rounded-xl shadow-md">
@@ -357,7 +360,7 @@ function SaveToStorageModal({ submission, onCancel, onConfirm, loading }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-panel p-6 max-w-sm w-full">
+      <div className="modal-panel p-6 max-w-sm w-full mx-4">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center flex-shrink-0">
             <i className="fas fa-floppy-disk text-emerald-600"></i>
@@ -412,6 +415,66 @@ function SaveToStorageModal({ submission, onCancel, onConfirm, loading }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function FormModal({ title, subtitle, icon, iconBg, onClose, children, maxWidth = 'max-w-2xl' }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-6"
+      style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(6px)' }}
+      onClick={onClose}
+    >
+      <div
+        className={`relative w-full ${maxWidth} bg-white dark:bg-slate-900 rounded-3xl shadow-2xl flex flex-col max-h-[90vh] form-modal-enter`}
+        style={{ boxShadow: '0 32px 80px -12px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.08)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
+          <div className={`w-9 h-9 sm:w-10 sm:h-10 ${iconBg} rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm`}>
+            <i className={`fas ${icon} text-sm`}></i>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 leading-tight">{title}</h2>
+            {subtitle && <p className="text-xs text-slate-400 mt-0.5 leading-tight line-clamp-1">{subtitle}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-700 transition-all flex-shrink-0"
+            aria-label="Close"
+          >
+            <i className="fas fa-xmark text-sm"></i>
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-4 sm:px-6 py-4 sm:py-6 custom-scrollbar">
+          {children}
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes formModalEnter {
+          from { opacity: 0; transform: translateY(20px) scale(0.97); }
+          to   { opacity: 1; transform: translateY(0)    scale(1);    }
+        }
+        .form-modal-enter { animation: formModalEnter 0.22s cubic-bezier(0.34,1.56,0.64,1) both; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+      `}</style>
     </div>
   )
 }
@@ -547,6 +610,13 @@ function SharesPanel() {
 
   const showSpinner = !initialLoaded && (sharing || zipSharing)
 
+  const closeForm = () => {
+    setShowForm(false)
+    reset()
+    setEmails([])
+    setSelectedFiles([])
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -555,11 +625,11 @@ function SharesPanel() {
           <p className="text-sm text-slate-500">1 file → private download link per recipient · 2+ files → ZIP bundle per recipient</p>
         </div>
         <button
-          onClick={() => setShowForm((v) => !v)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-sm"
+          onClick={() => setShowForm(true)}
+          className="self-start sm:self-auto flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-sm"
         >
-          <i className={`fas ${showForm ? 'fa-xmark' : 'fa-share-nodes'}`}></i>
-          {showForm ? 'Cancel' : 'Share Files'}
+          <i className="fas fa-share-nodes"></i>
+          Share Files
         </button>
       </div>
 
@@ -567,104 +637,110 @@ function SharesPanel() {
       {successMsg && <Alert type="success" message={successMsg} className="rounded-xl" />}
 
       {showForm && (
-        <Card className="p-5 sm:p-6">
-          <h3 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
-            <i className="fas fa-share-alt text-indigo-500"></i> New Share
-          </h3>
-          <div className="flex items-start gap-2 mb-5 px-3 py-2.5 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-700">
-            <i className="fas fa-shield-halved mt-0.5 flex-shrink-0"></i>
-            <span>Share links are <strong>private and unique per recipient</strong>. Each link is sent by email — no public links are created. Links expire automatically.</span>
-          </div>
+        <FormModal
+          title="Share Files"
+          subtitle="1 file → private link per recipient · 2+ files → ZIP bundle per recipient"
+          icon="fa-share-alt"
+          iconBg="bg-indigo-100 text-indigo-600"
+          onClose={closeForm}
+          maxWidth="max-w-2xl"
+        >
+          <div className="space-y-5">
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-700">
+              <i className="fas fa-shield-halved mt-0.5 flex-shrink-0"></i>
+              <span>Share links are <strong>private and unique per recipient</strong>. Each link is sent by email — no public links are created. Links expire automatically.</span>
+            </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            <FileSelector files={allFiles} loading={allFilesLoading} selectedFiles={selectedFiles} onToggle={toggleFile} />
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+              <FileSelector files={allFiles} loading={allFilesLoading} selectedFiles={selectedFiles} onToggle={toggleFile} />
 
-            {selectedFiles.length > 0 && (
-              <div className={`flex items-start gap-3 px-4 py-3 rounded-xl border text-xs font-semibold ${
-                isSingleMode ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-violet-50 border-violet-100 text-violet-700'
-              }`}>
-                <i className={`fas ${isSingleMode ? 'fa-link' : 'fa-file-zipper'} text-sm mt-0.5 flex-shrink-0`}></i>
-                <span>
-                  {isSingleMode
-                    ? 'Single file mode — each recipient receives their own private download link'
-                    : `ZIP bundle mode — ${selectedFiles.length} files will be bundled; each recipient gets one ZIP download link`}
-                </span>
-              </div>
-            )}
-
-            {isZipMode && (
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">ZIP File Name</label>
-                <div className="flex items-stretch">
-                  <input type="text" {...field('zip_name')} placeholder="shared_files" className="flex-1 px-4 py-3 bg-slate-50 rounded-l-xl border border-r-0 border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none" />
-                  <span className="px-3 py-3 bg-slate-100 rounded-r-xl text-sm text-slate-500 font-medium border border-l-0 border-slate-200">.zip</span>
+              {selectedFiles.length > 0 && (
+                <div className={`flex items-start gap-3 px-4 py-3 rounded-xl border text-xs font-semibold ${
+                  isSingleMode ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-violet-50 border-violet-100 text-violet-700'
+                }`}>
+                  <i className={`fas ${isSingleMode ? 'fa-link' : 'fa-file-zipper'} text-sm mt-0.5 flex-shrink-0`}></i>
+                  <span>
+                    {isSingleMode
+                      ? 'Single file mode — each recipient receives their own private download link'
+                      : `ZIP bundle mode — ${selectedFiles.length} files will be bundled; each recipient gets one ZIP download link`}
+                  </span>
                 </div>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Expires After</label>
-              <select {...field('expiration_hours')} className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm font-medium text-slate-800 focus:ring-2 focus:ring-indigo-200 focus:outline-none">
-                <option value="1">1 hour</option>
-                <option value="24">1 day</option>
-                <option value="72">3 days</option>
-                <option value="168">1 week</option>
-                <option value="720">30 days</option>
-              </select>
-            </div>
-
-            <div>
-              <EmailChipInput
-                label="Recipients"
-                helper="(required — each gets their own private link by email)"
-                value={emails}
-                onChange={setEmails}
-                required
-              />
-              {emails.length === 0 && (
-                <p className="text-xs text-amber-600 font-medium mt-1.5 flex items-center gap-1">
-                  <i className="fas fa-circle-exclamation text-[10px]"></i>
-                  At least one recipient email is required to share files.
-                </p>
               )}
-            </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Message (optional)</label>
-              <input type="text" {...field('message')} placeholder="Add a personal note shown in the email…" className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none" />
-            </div>
+              {isZipMode && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">ZIP File Name</label>
+                  <div className="flex items-stretch">
+                    <input type="text" {...field('zip_name')} placeholder="shared_files" className="flex-1 px-4 py-3 bg-slate-50 rounded-l-xl border border-r-0 border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none" />
+                    <span className="px-3 py-3 bg-slate-100 rounded-r-xl text-sm text-slate-500 font-medium border border-l-0 border-slate-200">.zip</span>
+                  </div>
+                </div>
+              )}
 
-            {selectedFiles.length > 0 && emails.length > 0 && (
-              <div className="flex items-start gap-3 px-4 py-3 bg-indigo-50 rounded-xl border border-indigo-100">
-                <i className="fas fa-info-circle text-indigo-400 mt-0.5 flex-shrink-0"></i>
-                <p className="text-xs text-indigo-700 leading-relaxed">
-                  {isSingleMode
-                    ? <><strong>{emails.length} unique private link{emails.length !== 1 ? 's' : ''}</strong> sent by email immediately. Links expire after the selected period.</>
-                    : <><strong>{selectedFiles.length} files</strong> bundled into <strong>{emails.length} private ZIP archive{emails.length !== 1 ? 's' : ''}</strong> — one per recipient, sent by email.</>}
-                </p>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Expires After</label>
+                <select {...field('expiration_hours')} className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm font-medium text-slate-800 focus:ring-2 focus:ring-indigo-200 focus:outline-none">
+                  <option value="1">1 hour</option>
+                  <option value="24">1 day</option>
+                  <option value="72">3 days</option>
+                  <option value="168">1 week</option>
+                  <option value="720">30 days</option>
+                </select>
               </div>
-            )}
 
-            <div className="flex flex-col sm:flex-row gap-3 pt-1">
-              <button
-                type="submit"
-                disabled={isSubmitting || !isFormValid}
-                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {isSubmitting ? (
-                  <><i className="fas fa-spinner fa-spin"></i>Sharing…</>
-                ) : isZipMode ? (
-                  <><i className="fas fa-file-zipper"></i>Create ZIP Share ({selectedFiles.length} files · {emails.length || '…'} recipients)</>
-                ) : (
-                  <><i className="fas fa-paper-plane"></i>Share with {emails.length || '…'} recipient{emails.length !== 1 ? 's' : ''}</>
+              <div>
+                <EmailChipInput
+                  label="Recipients"
+                  helper="(required — each gets their own private link by email)"
+                  value={emails}
+                  onChange={setEmails}
+                  required
+                />
+                {emails.length === 0 && (
+                  <p className="text-xs text-amber-600 font-medium mt-1.5 flex items-center gap-1">
+                    <i className="fas fa-circle-exclamation text-[10px]"></i>
+                    At least one recipient email is required to share files.
+                  </p>
                 )}
-              </button>
-              <button type="button" onClick={() => setShowForm(false)} className="sm:w-auto px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all">
-                Cancel
-              </button>
-            </div>
-          </form>
-        </Card>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Message (optional)</label>
+                <input type="text" {...field('message')} placeholder="Add a personal note shown in the email…" className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none" />
+              </div>
+
+              {selectedFiles.length > 0 && emails.length > 0 && (
+                <div className="flex items-start gap-3 px-4 py-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                  <i className="fas fa-info-circle text-indigo-400 mt-0.5 flex-shrink-0"></i>
+                  <p className="text-xs text-indigo-700 leading-relaxed">
+                    {isSingleMode
+                      ? <><strong>{emails.length} unique private link{emails.length !== 1 ? 's' : ''}</strong> sent by email immediately. Links expire after the selected period.</>
+                      : <><strong>{selectedFiles.length} files</strong> bundled into <strong>{emails.length} private ZIP archive{emails.length !== 1 ? 's' : ''}</strong> — one per recipient, sent by email.</>}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !isFormValid}
+                  className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <><i className="fas fa-spinner fa-spin"></i>Sharing…</>
+                  ) : isZipMode ? (
+                    <><i className="fas fa-file-zipper"></i>Create ZIP Share ({selectedFiles.length} files · {emails.length || '…'} recipients)</>
+                  ) : (
+                    <><i className="fas fa-paper-plane"></i>Share with {emails.length || '…'} recipient{emails.length !== 1 ? 's' : ''}</>
+                  )}
+                </button>
+                <button type="button" onClick={closeForm} className="sm:w-auto px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </FormModal>
       )}
 
       {showSpinner ? (
@@ -685,7 +761,9 @@ function SharesPanel() {
             const isZip = s._type === 'zip'
             return (
               <Card key={`${s._type}-${s.id}`} className="p-4 sm:p-5">
+                {/* top row: info + actions */}
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                  {/* left: file info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isZip ? 'bg-violet-100' : 'bg-indigo-100'}`}>
@@ -697,7 +775,7 @@ function SharesPanel() {
                           <p className="text-[10px] text-violet-500 font-semibold">{s.file_count} files bundled</p>
                         </div>
                       ) : (
-                        <p className="text-sm font-bold text-slate-900 truncate max-w-[200px] sm:max-w-xs">{s.file_name}</p>
+                        <p className="text-sm font-bold text-slate-900 truncate max-w-[180px] sm:max-w-xs">{s.file_name}</p>
                       )}
                       <StatusBadge status={s.status} />
                       {isZip && <span className="text-[10px] px-2 py-0.5 bg-violet-50 text-violet-600 rounded-full font-bold border border-violet-100">ZIP</span>}
@@ -706,7 +784,8 @@ function SharesPanel() {
                       <i className="fas fa-envelope text-slate-400 mr-1"></i>{s.recipient_email}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                  {/* right: actions */}
+                  <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
                     {s.status === 'active' && (
                       <button onClick={() => setActionConfirm({ id: s.id, type: s._type, action: 'revoke' })} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-semibold hover:bg-amber-100 transition-all border border-amber-100">
                         <i className="fas fa-ban text-[11px]"></i>Revoke
@@ -717,6 +796,8 @@ function SharesPanel() {
                     </button>
                   </div>
                 </div>
+
+                {/* stats grid */}
                 <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
                     ...(!isZip ? [] : [{ icon: 'fa-files', label: 'Files', value: s.file_count }]),
@@ -732,6 +813,7 @@ function SharesPanel() {
                     </div>
                   ))}
                 </div>
+
                 {isZip && s.files_info?.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-slate-100">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Files in ZIP</p>
@@ -812,7 +894,7 @@ function AnalyticsPanel() {
         <p className="text-sm text-slate-500">Aggregated stats across single-file shares and ZIP bundles.</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         <StatTile icon="fa-share-nodes"  label="Total Shares"    value={fmt(totals?.total_shares)}    tint="indigo"  />
         <StatTile icon="fa-download"     label="Total Downloads" value={fmt(totals?.total_downloads)} tint="emerald" />
         <StatTile icon="fa-circle-check" label="Active"          value={fmt(totals?.active_count)}    tint="emerald" />
@@ -821,7 +903,7 @@ function AnalyticsPanel() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card className="p-5">
+        <Card className="p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-7 h-7 bg-indigo-100 rounded-lg flex items-center justify-center"><i className="fas fa-file text-indigo-600 text-xs"></i></div>
             <h3 className="text-sm font-bold text-slate-800">Single-file Shares</h3>
@@ -840,7 +922,7 @@ function AnalyticsPanel() {
             ))}
           </div>
         </Card>
-        <Card className="p-5">
+        <Card className="p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-7 h-7 bg-violet-100 rounded-lg flex items-center justify-center"><i className="fas fa-file-zipper text-violet-600 text-xs"></i></div>
             <h3 className="text-sm font-bold text-slate-800">ZIP Bundle Shares</h3>
@@ -863,19 +945,19 @@ function AnalyticsPanel() {
 
       {top_shares.length > 0 && (
         <Card className="overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+          <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center gap-2">
             <i className="fas fa-trophy text-amber-500"></i>
             <h3 className="text-sm font-bold text-slate-900">Top Single-file Shares by Downloads</h3>
           </div>
           <div className="divide-y divide-slate-50">
             {top_shares.map((s, i) => (
-              <div key={s.id} className="flex items-center gap-4 px-6 py-4 flex-wrap sm:flex-nowrap">
+              <div key={s.id} className="flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-4 flex-wrap sm:flex-nowrap">
                 <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${i === 0 ? 'bg-amber-100 text-amber-700' : i === 1 ? 'bg-slate-100 text-slate-600' : 'bg-orange-50 text-orange-600'}`}>{i + 1}</div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-800 truncate">{s.file_name}</p>
-                  <p className="text-xs text-slate-400">{s.recipient_email}</p>
+                  <p className="text-xs text-slate-400 truncate">{s.recipient_email}</p>
                 </div>
-                <div className="flex items-center gap-4 text-xs flex-shrink-0">
+                <div className="flex items-center gap-3 sm:gap-4 text-xs flex-shrink-0">
                   <span className="flex items-center gap-1 text-emerald-600 font-semibold"><i className="fas fa-download text-[10px]"></i>{fmt(s.download_count)}</span>
                   <StatusBadge status={s.status} />
                 </div>
@@ -975,6 +1057,13 @@ function RequestsPanel() {
   const totalCount = requestPagination?.count || 0
   const showSpinner = !initialLoaded && requestLoading
 
+  const closeForm = () => {
+    setShowForm(false)
+    reset()
+    setRecipientEmails([])
+    setEmailError('')
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -983,11 +1072,11 @@ function RequestsPanel() {
           <p className="text-sm text-slate-500">Ask recipients to upload files — upload links delivered by email only.</p>
         </div>
         <button
-          onClick={() => setShowForm((v) => !v)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-sm"
+          onClick={() => setShowForm(true)}
+          className="self-start sm:self-auto flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-sm"
         >
-          <i className={`fas ${showForm ? 'fa-xmark' : 'fa-plus'}`}></i>
-          {showForm ? 'Cancel' : 'New Request'}
+          <i className="fas fa-plus"></i>
+          New Request
         </button>
       </div>
 
@@ -995,126 +1084,132 @@ function RequestsPanel() {
       {successMsg && <Alert type="success" message={successMsg} className="rounded-xl" />}
 
       {showForm && (
-        <Card className="p-5 sm:p-6">
-          <h3 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
-            <i className="fas fa-inbox text-indigo-500"></i> Create Upload Request
-          </h3>
-          <div className="mb-5 space-y-2">
-            <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-700">
-              <i className="fas fa-shield-halved mt-0.5 flex-shrink-0"></i>
-              <span><strong>Email delivery only</strong> — upload links are sent directly to recipients and are not publicly accessible. Each recipient gets a unique, single-use link.</span>
-            </div>
-            <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 rounded-xl border border-amber-100 text-xs text-amber-700">
-              <i className="fas fa-virus-slash mt-0.5 flex-shrink-0"></i>
-              <span>All uploaded files are <strong>automatically scanned for viruses</strong> before they appear in your inbox. Infected files are quarantined and flagged immediately.</span>
-            </div>
-            <div className="flex items-start gap-2 px-3 py-2.5 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-700">
-              <i className="fas fa-key mt-0.5 flex-shrink-0"></i>
-              <span>Recipients must <strong>verify their email via a one-time code (OTP)</strong> before they can upload. This ensures only the intended person can use each upload link.</span>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit(validateAndSubmit)} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Title *</label>
-              <input
-                type="text"
-                {...field('title', { required: 'Title is required.' })}
-                placeholder="e.g. Q4 Invoice Submission"
-                className={`w-full px-4 py-3 bg-slate-50 rounded-xl border text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none ${errors.title ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-200'}`}
-              />
-              {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title.message}</p>}
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Description</label>
-              <textarea {...field('description')} rows={3} placeholder="What files do you need? Any specific requirements?" className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none resize-none" />
-            </div>
-
-            <div>
-              <EmailChipInput
-                label="Recipients"
-                helper="(required — each gets their own unique upload link by email)"
-                value={recipientEmails}
-                onChange={(v) => { setRecipientEmails(v); if (v.length > 0) setEmailError('') }}
-                required
-              />
-              {emailError && (
-                <div className="mt-2 flex items-start gap-2 px-3 py-2 bg-red-50 rounded-xl border border-red-200 text-xs text-red-700">
-                  <i className="fas fa-circle-exclamation mt-0.5 flex-shrink-0"></i>
-                  <span>{emailError}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Expires After</label>
-                <select {...field('expiration_hours')} className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none">
-                  <option value="24">1 day</option>
-                  <option value="72">3 days</option>
-                  <option value="168">1 week</option>
-                  <option value="720">30 days</option>
-                  <option value="8760">1 year</option>
-                </select>
+        <FormModal
+          title="Create Upload Request"
+          subtitle="Ask recipients to upload files via a secure, email-delivered link"
+          icon="fa-inbox"
+          iconBg="bg-indigo-100 text-indigo-600"
+          onClose={closeForm}
+          maxWidth="max-w-2xl"
+        >
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-700">
+                <i className="fas fa-shield-halved mt-0.5 flex-shrink-0"></i>
+                <span><strong>Email delivery only</strong> — upload links are sent directly to recipients and are not publicly accessible. Each recipient gets a unique, single-use link.</span>
               </div>
+              <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 rounded-xl border border-amber-100 text-xs text-amber-700">
+                <i className="fas fa-virus-slash mt-0.5 flex-shrink-0"></i>
+                <span>All uploaded files are <strong>automatically scanned for viruses</strong> before they appear in your inbox. Infected files are quarantined and flagged immediately.</span>
+              </div>
+              <div className="flex items-start gap-2 px-3 py-2.5 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-700">
+                <i className="fas fa-key mt-0.5 flex-shrink-0"></i>
+                <span>Recipients must <strong>verify their email via a one-time code (OTP)</strong> before they can upload. This ensures only the intended person can use each upload link.</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit(validateAndSubmit)} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Title *</label>
+                <input
+                  type="text"
+                  {...field('title', { required: 'Title is required.' })}
+                  placeholder="e.g. Q4 Invoice Submission"
+                  className={`w-full px-4 py-3 bg-slate-50 rounded-xl border text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none ${errors.title ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-200'}`}
+                />
+                {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title.message}</p>}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Description</label>
+                <textarea {...field('description')} rows={3} placeholder="What files do you need? Any specific requirements?" className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none resize-none" />
+              </div>
+
+              <div>
+                <EmailChipInput
+                  label="Recipients"
+                  helper="(required — each gets their own unique upload link by email)"
+                  value={recipientEmails}
+                  onChange={(v) => { setRecipientEmails(v); if (v.length > 0) setEmailError('') }}
+                  required
+                />
+                {emailError && (
+                  <div className="mt-2 flex items-start gap-2 px-3 py-2 bg-red-50 rounded-xl border border-red-200 text-xs text-red-700">
+                    <i className="fas fa-circle-exclamation mt-0.5 flex-shrink-0"></i>
+                    <span>{emailError}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Expires After</label>
+                  <select {...field('expiration_hours')} className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none">
+                    <option value="24">1 day</option>
+                    <option value="72">3 days</option>
+                    <option value="168">1 week</option>
+                    <option value="720">30 days</option>
+                    <option value="8760">1 year</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">
+                    Max Files Per Recipient
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    {...field('max_files')}
+                    className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    <i className="fas fa-info-circle mr-1"></i>Each recipient gets this many upload slots independently.
+                  </p>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">
-                  Max Files Per Recipient
+                  Allowed File Types <span className="normal-case text-slate-400 font-normal">(optional — leave blank to accept all safe types)</span>
                 </label>
                 <input
-                  type="number"
-                  min="1"
-                  max="50"
-                  {...field('max_files')}
+                  type="text"
+                  {...field('allowed_extensions')}
+                  placeholder="e.g. pdf, docx, jpg, png"
                   className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  <i className="fas fa-info-circle mr-1"></i>Each recipient gets this many upload slots independently.
-                </p>
+                <p className="text-xs text-slate-400 mt-1">Separate with commas. Executable files (.exe, .sh, .bat…) are always blocked.</p>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">
-                Allowed File Types <span className="normal-case text-slate-400 font-normal">(optional — leave blank to accept all safe types)</span>
-              </label>
-              <input
-                type="text"
-                {...field('allowed_extensions')}
-                placeholder="e.g. pdf, docx, jpg, png"
-                className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 focus:outline-none"
-              />
-              <p className="text-xs text-slate-400 mt-1">Separate with commas. Executable files (.exe, .sh, .bat…) are always blocked.</p>
-            </div>
+              {recipientEmails.length > 0 && (
+                <div className="flex items-start gap-3 px-4 py-3 bg-emerald-50 rounded-xl border border-emerald-100">
+                  <i className="fas fa-check-circle text-emerald-500 mt-0.5 flex-shrink-0"></i>
+                  <p className="text-xs text-emerald-700 leading-relaxed">
+                    <strong>{recipientEmails.length} private upload link{recipientEmails.length !== 1 ? 's' : ''}</strong> will be sent by email. Each recipient must verify via OTP before uploading. All uploads are virus-scanned before delivery.
+                  </p>
+                </div>
+              )}
 
-            {recipientEmails.length > 0 && (
-              <div className="flex items-start gap-3 px-4 py-3 bg-emerald-50 rounded-xl border border-emerald-100">
-                <i className="fas fa-check-circle text-emerald-500 mt-0.5 flex-shrink-0"></i>
-                <p className="text-xs text-emerald-700 leading-relaxed">
-                  <strong>{recipientEmails.length} private upload link{recipientEmails.length !== 1 ? 's' : ''}</strong> will be sent by email. Each recipient must verify via OTP before uploading. All uploads are virus-scanned before delivery.
-                </p>
+              <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-sm"
+                >
+                  {isSubmitting ? (
+                    <><i className="fas fa-spinner fa-spin text-sm"></i>Sending…</>
+                  ) : (
+                    <><i className="fas fa-paper-plane"></i>Create &amp; Send {recipientEmails.length > 0 ? `(${recipientEmails.length} recipient${recipientEmails.length !== 1 ? 's' : ''})` : 'Request'}</>
+                  )}
+                </button>
+                <button type="button" onClick={closeForm} className="sm:w-auto px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all">
+                  Cancel
+                </button>
               </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row gap-3 pt-1">
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-sm"
-              >
-                {isSubmitting ? (
-                  <><i className="fas fa-spinner fa-spin text-sm"></i>Sending…</>
-                ) : (
-                  <><i className="fas fa-paper-plane"></i>Create &amp; Send {recipientEmails.length > 0 ? `(${recipientEmails.length} recipient${recipientEmails.length !== 1 ? 's' : ''})` : 'Request'}</>
-                )}
-              </button>
-              <button type="button" onClick={() => setShowForm(false)} className="sm:w-auto px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all">
-                Cancel
-              </button>
-            </div>
-          </form>
-        </Card>
+            </form>
+          </div>
+        </FormModal>
       )}
 
       {showSpinner ? (
@@ -1141,7 +1236,7 @@ function RequestsPanel() {
 
             return (
               <Card key={req.id} className="p-4 sm:p-5">
-                <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-bold text-slate-900">{req.title}</p>
@@ -1159,7 +1254,7 @@ function RequestsPanel() {
                       )}
                     </div>
                     {req.description && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{req.description}</p>}
-                    <div className="flex flex-wrap items-center gap-3 mt-2 text-[11px] text-slate-400">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[11px] text-slate-400">
                       {req.expires_at && (
                         <span><i className="fas fa-clock mr-1"></i>Expires {new Date(req.expires_at).toLocaleDateString()}</span>
                       )}
@@ -1185,6 +1280,7 @@ function RequestsPanel() {
                     )}
                   </div>
                 </div>
+
                 {recipients.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-slate-100">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
@@ -1264,8 +1360,6 @@ function RequestsPanel() {
 }
 
 
-// ── Polling interval: 10 s (was 5 s) — fires only while items are still
-//    in pending/scanning state; stops automatically once all resolve. ──
 const SCAN_POLL_INTERVAL = 10000
 
 function InboxPanel() {
@@ -1286,13 +1380,11 @@ function InboxPanel() {
 
   const pollRef = useRef(null)
 
-  // Only the IDs of items still pending/scanning — used for targeted polling
   const scanningIds = useMemo(
     () => inbox.filter((s) => s.scan_status === 'scanning' || s.scan_status === 'pending').map((s) => s.id),
     [inbox],
   )
 
-  // True when at least one item is still being scanned
   const hasScanning = scanningIds.length > 0
 
   const handleDownload = useCallback(async (downloadUrl, filename) => {
@@ -1326,16 +1418,11 @@ function InboxPanel() {
     loadInbox()
   }, [loadInbox])
 
-  // ── Smart polling: runs silently every 10 s, but ONLY while there are
-  //    items still in pending/scanning state. Stops the moment they all
-  //    resolve to safe/infected/scan_failed. No UI indicator shown. ──
   useEffect(() => {
     if (pollRef.current) clearInterval(pollRef.current)
 
     if (hasScanning) {
       pollRef.current = setInterval(() => {
-        // Re-fetch only the current page so we get updated scan statuses.
-        // The inbox slice will merge the results and update just those rows.
         dispatch(fetchInbox({ page: currentPage, status: activeStatus }))
       }, SCAN_POLL_INTERVAL)
     }
@@ -1425,7 +1512,6 @@ function InboxPanel() {
           <h2 className="text-lg font-bold text-slate-900">Submission Inbox</h2>
           <p className="text-sm text-slate-500">Files submitted via your requests — review, view, download, or delete.</p>
         </div>
-        {/* Auto-refresh banner removed — polling runs silently in the background */}
       </div>
 
       {scanStatusCounts && Object.keys(scanStatusCounts).length > 0 && (
@@ -1444,12 +1530,16 @@ function InboxPanel() {
       {errorMsg       && <Alert type="error"   message={errorMsg}       className="rounded-xl" />}
       {saveSuccessMsg && <Alert type="success" message={saveSuccessMsg} className="rounded-xl" />}
 
-      <div className="flex gap-1.5 flex-wrap">
+      {/* Status filter tabs — horizontally scrollable on mobile */}
+      <div
+        className="flex gap-1.5 overflow-x-auto pb-1"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
         {statusTabs.map((t) => (
           <button
             key={t.id}
             onClick={() => { setActiveStatus(t.id); setCurrentPage(1) }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
               activeStatus === t.id
                 ? 'bg-indigo-600 text-white border-indigo-600'
                 : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
@@ -1480,30 +1570,31 @@ function InboxPanel() {
       ) : (
         <div className="space-y-3">
           {inbox.map((sub) => {
-            const isInfected   = ['infected', 'scan_failed'].includes(sub.scan_status)
-            const isSafe       = sub.scan_status === 'safe'
-            const isScanning   = ['scanning', 'pending'].includes(sub.scan_status)
-            const downloadable = isSafe && sub.download_url
-            const viewable     = isSafe && sub.file_url
+            const isInfected    = ['infected', 'scan_failed'].includes(sub.scan_status)
+            const isSafe        = sub.scan_status === 'safe'
+            const isScanning    = ['scanning', 'pending'].includes(sub.scan_status)
+            const downloadable  = isSafe && sub.download_url
+            const viewable      = isSafe && sub.file_url
             const isComplete    = sub.status === 'complete'
             const isNeedsAction = sub.status === 'needs_action'
 
             return (
               <Card key={sub.id} className={`p-4 sm:p-5 ${isInfected ? 'border-red-100 bg-red-50/30' : ''}`}>
-                <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${isInfected ? 'bg-red-100' : isSafe ? 'bg-emerald-50' : 'bg-indigo-50'}`}>
+                {/* top section: icon + info */}
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${isInfected ? 'bg-red-100' : isSafe ? 'bg-emerald-50' : 'bg-indigo-50'}`}>
                     <i className={`fas ${isInfected ? 'fa-bug text-red-500' : isSafe ? 'fa-shield-halved text-emerald-500' : sourceIcon(sub.source_type) + ' text-indigo-500'}`}></i>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-bold text-slate-900 truncate max-w-[200px] sm:max-w-xs">{sub.original_filename}</p>
+                      <p className="text-sm font-bold text-slate-900 truncate max-w-full sm:max-w-xs">{sub.original_filename}</p>
                       <StatusBadge status={sub.status} />
                       <ScanBadge status={sub.scan_status} />
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[11px] text-slate-400">
-                      {sub.submitter_email && <span><i className="fas fa-envelope mr-1"></i>{sub.submitter_email}</span>}
+                      {sub.submitter_email && <span className="truncate max-w-[160px] sm:max-w-none"><i className="fas fa-envelope mr-1"></i>{sub.submitter_email}</span>}
                       {sub.submitter_name  && <span><i className="fas fa-user mr-1"></i>{sub.submitter_name}</span>}
-                      {sub.request_title   && <span><i className="fas fa-inbox mr-1"></i>{sub.request_title}</span>}
+                      {sub.request_title   && <span className="truncate max-w-[120px] sm:max-w-none"><i className="fas fa-inbox mr-1"></i>{sub.request_title}</span>}
                       <span><i className="fas fa-clock mr-1"></i>{new Date(sub.submitted_at).toLocaleString()}</span>
                     </div>
                     {isInfected && sub.scan_result && (
@@ -1533,101 +1624,102 @@ function InboxPanel() {
                       </div>
                     )}
                   </div>
+                </div>
 
-                  <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap">
-                    {viewable && (
-                      <button onClick={() => setViewFile(sub)} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-all flex items-center gap-1">
-                        <i className="fas fa-eye text-[10px]"></i> View
-                      </button>
-                    )}
-                    {downloadable && (
-                      <button onClick={() => handleDownload(sub.download_url, sub.original_filename)} className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all flex items-center gap-1">
-                        <i className="fas fa-download text-[10px]"></i> Download
-                      </button>
-                    )}
-                    {isScanning && (
-                      <span className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-semibold flex items-center gap-1.5">
-                        <i className="fas fa-spinner fa-spin text-[10px]"></i>Scanning
-                      </span>
-                    )}
-
-                    {sub.status === 'pending' && !isInfected && (
-                      <>
-                        <button
-                          onClick={() => { setReviewModal({ submission: sub, action: 'approve' }); setReviewNote('') }}
-                          disabled={!isSafe}
-                          title={!isSafe ? 'Wait for security scan to complete' : undefined}
-                          className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          <i className="fas fa-check text-[10px]"></i> Approve
-                        </button>
-                        <button
-                          onClick={() => { setReviewModal({ submission: sub, action: 'needs_action' }); setReviewNote('') }}
-                          className="px-3 py-1.5 bg-orange-50 text-orange-600 rounded-lg text-xs font-bold hover:bg-orange-100 transition-all flex items-center gap-1"
-                        >
-                          <i className="fas fa-flag text-[10px]"></i> Flag
-                        </button>
-                        <button
-                          onClick={() => { setReviewModal({ submission: sub, action: 'reject' }); setReviewNote('') }}
-                          className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-all flex items-center gap-1"
-                        >
-                          <i className="fas fa-xmark text-[10px]"></i> Reject
-                        </button>
-                      </>
-                    )}
-
-                    {isNeedsAction && !isInfected && (
-                      <>
-                        <span className="text-[10px] font-bold text-orange-500 bg-orange-50 border border-orange-100 px-2 py-1 rounded-lg flex items-center gap-1">
-                          <i className="fas fa-flag text-[9px]"></i>Flagged
-                        </span>
-                        <button
-                          onClick={() => { setReviewModal({ submission: sub, action: 'approve' }); setReviewNote('') }}
-                          disabled={!isSafe}
-                          title={!isSafe ? 'Wait for security scan to complete' : undefined}
-                          className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          <i className="fas fa-check text-[10px]"></i> Approve
-                        </button>
-                        <button
-                          onClick={() => { setReviewModal({ submission: sub, action: 'reject' }); setReviewNote('') }}
-                          className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-all flex items-center gap-1"
-                        >
-                          <i className="fas fa-xmark text-[10px]"></i> Reject
-                        </button>
-                      </>
-                    )}
-
-                    {sub.status === 'approved' && (
-                      <button
-                        onClick={() => { setReviewModal({ submission: sub, action: 'complete' }); setReviewNote('') }}
-                        className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-all flex items-center gap-1.5"
-                      >
-                        <i className="fas fa-circle-check text-[10px]"></i> Complete
-                      </button>
-                    )}
-
-                    {isComplete && isSafe && !sub.saved_to_storage && (
-                      <button
-                        onClick={() => setSaveModal(sub)}
-                        className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm"
-                      >
-                        <i className="fas fa-floppy-disk text-[10px]"></i> Save to Storage
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => setDeleteConfirm(sub)}
-                      disabled={deletingFile || removingItem}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 disabled:opacity-40 ${
-                        isInfected ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                      title={isInfected ? 'Permanently delete infected file' : 'Delete this file from inbox'}
-                    >
-                      <i className="fas fa-trash text-[10px]"></i>
-                      {isInfected ? 'Delete' : 'Remove'}
+                {/* action buttons — full width below, wrapping */}
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-1.5 flex-wrap">
+                  {viewable && (
+                    <button onClick={() => setViewFile(sub)} className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-all">
+                      <i className="fas fa-eye text-[10px]"></i> View
                     </button>
-                  </div>
+                  )}
+                  {downloadable && (
+                    <button onClick={() => handleDownload(sub.download_url, sub.original_filename)} className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all">
+                      <i className="fas fa-download text-[10px]"></i> Download
+                    </button>
+                  )}
+                  {isScanning && (
+                    <span className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-semibold">
+                      <i className="fas fa-spinner fa-spin text-[10px]"></i>Scanning
+                    </span>
+                  )}
+
+                  {sub.status === 'pending' && !isInfected && (
+                    <>
+                      <button
+                        onClick={() => { setReviewModal({ submission: sub, action: 'approve' }); setReviewNote('') }}
+                        disabled={!isSafe}
+                        title={!isSafe ? 'Wait for security scan to complete' : undefined}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <i className="fas fa-check text-[10px]"></i> Approve
+                      </button>
+                      <button
+                        onClick={() => { setReviewModal({ submission: sub, action: 'needs_action' }); setReviewNote('') }}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-orange-50 text-orange-600 rounded-lg text-xs font-bold hover:bg-orange-100 transition-all"
+                      >
+                        <i className="fas fa-flag text-[10px]"></i> Flag
+                      </button>
+                      <button
+                        onClick={() => { setReviewModal({ submission: sub, action: 'reject' }); setReviewNote('') }}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-all"
+                      >
+                        <i className="fas fa-xmark text-[10px]"></i> Reject
+                      </button>
+                    </>
+                  )}
+
+                  {isNeedsAction && !isInfected && (
+                    <>
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-orange-500 bg-orange-50 border border-orange-100 px-2 py-1 rounded-lg">
+                        <i className="fas fa-flag text-[9px]"></i>Flagged
+                      </span>
+                      <button
+                        onClick={() => { setReviewModal({ submission: sub, action: 'approve' }); setReviewNote('') }}
+                        disabled={!isSafe}
+                        title={!isSafe ? 'Wait for security scan to complete' : undefined}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <i className="fas fa-check text-[10px]"></i> Approve
+                      </button>
+                      <button
+                        onClick={() => { setReviewModal({ submission: sub, action: 'reject' }); setReviewNote('') }}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-all"
+                      >
+                        <i className="fas fa-xmark text-[10px]"></i> Reject
+                      </button>
+                    </>
+                  )}
+
+                  {sub.status === 'approved' && (
+                    <button
+                      onClick={() => { setReviewModal({ submission: sub, action: 'complete' }); setReviewNote('') }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-all"
+                    >
+                      <i className="fas fa-circle-check text-[10px]"></i> Complete
+                    </button>
+                  )}
+
+                  {isComplete && isSafe && !sub.saved_to_storage && (
+                    <button
+                      onClick={() => setSaveModal(sub)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all shadow-sm"
+                    >
+                      <i className="fas fa-floppy-disk text-[10px]"></i> Save to Storage
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => setDeleteConfirm(sub)}
+                    disabled={deletingFile || removingItem}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40 ${
+                      isInfected ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                    title={isInfected ? 'Permanently delete infected file' : 'Delete this file from inbox'}
+                  >
+                    <i className="fas fa-trash text-[10px]"></i>
+                    {isInfected ? 'Delete' : 'Remove'}
+                  </button>
                 </div>
               </Card>
             )
@@ -1645,7 +1737,7 @@ function InboxPanel() {
 
       {reviewModal && (
         <div className="modal-overlay">
-          <div className="modal-panel p-6 max-w-md w-full">
+          <div className="modal-panel p-6 max-w-md w-full mx-4">
             <h3 className="section-title text-base mb-1 capitalize">{reviewModal.action.replace(/_/g, ' ')} Submission</h3>
             <p className="page-subtitle mb-4">File: <span className="font-semibold text-gray-800 dark:text-gray-200">{reviewModal.submission.original_filename}</span></p>
             <textarea

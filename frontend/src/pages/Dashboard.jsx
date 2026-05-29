@@ -304,7 +304,6 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
               <i className="fas fa-arrow-up-right-from-square"></i> Open PDF
             </button>
           )}
-         
           <button
             onClick={onClose}
             className="w-full py-3 text-gray-500 font-bold hover:text-gray-700 transition-colors text-sm"
@@ -339,7 +338,6 @@ export default function Dashboard() {
   const [activityFiles, setActivityFiles]       = useState([])
   const [activityLoading, setActivityLoading]   = useState(false)
 
-  // ── Quick-upload state (Drop Files zone in right column) ──
   const [dropDragActive,     setDropDragActive]     = useState(false)
   const [dropSelectedFiles,  setDropSelectedFiles]  = useState([])
   const [dropUploading,      setDropUploading]      = useState(false)
@@ -406,14 +404,14 @@ export default function Dashboard() {
     try {
       const { data } = await getStorageDashboard()
       setStorageDash(data.data)
-    } catch { /* silently fail */ }
+    } catch { }
   }, [])
 
   const loadActivityFiles = useCallback(async () => {
     setActivityLoading(true)
     try {
       const cutoff = new Date()
-      cutoff.setDate(cutoff.getDate() - 7)
+      cutoff.setDate(cutoff.getDate() - 14)
       cutoff.setHours(0, 0, 0, 0)
 
       let page      = 1
@@ -462,7 +460,6 @@ export default function Dashboard() {
     } catch { alert('Download failed.') }
   }
 
-  // ── Quick-upload handlers ──
   const filesRef = useRef(files)
   useEffect(() => { filesRef.current = files }, [files])
 
@@ -526,12 +523,13 @@ export default function Dashboard() {
   }))
   const totalFileCount = fileTypeBreakdown.reduce((sum, t) => sum + t.count, 0)
 
-  const chartFiles   = activityFiles.length > 0 ? activityFiles : files
-  const hasAnyFiles  = (storage?.file_count ?? 0) > 0
-  const showChart    = hasAnyFiles
+  const chartFiles  = activityFiles.length > 0 ? activityFiles : files
+  const hasAnyFiles = (storage?.file_count ?? 0) > 0
+  const showChart   = hasAnyFiles
 
   const weekTrend = calcWeekTrend(chartFiles)
 
+  // todayUploads: count from chartFiles where uploaded_at is today
   const todayUploads = chartFiles.filter((f) => {
     if (!f.uploaded_at) return false
     return new Date(f.uploaded_at).toDateString() === new Date().toDateString()
@@ -551,8 +549,13 @@ export default function Dashboard() {
     return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
   }
 
+  // mostActiveDay: only count files uploaded within the last 7 days
+  const now7 = new Date()
+  const msPerDay = 86400000
   const dayCounts = chartFiles.reduce((acc, f) => {
     if (!f.uploaded_at) return acc
+    const diffDays = (now7 - new Date(f.uploaded_at)) / msPerDay
+    if (diffDays >= 7) return acc
     const day = new Date(f.uploaded_at).toLocaleDateString('en-US', { weekday: 'short' })
     acc[day] = (acc[day] || 0) + 1
     return acc
@@ -573,12 +576,12 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard-shell">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="brand-chip flex h-10 w-10 shrink-0">
             <i className="fas fa-table-cells-large text-white text-base" aria-hidden />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="page-title leading-tight">
                 {user?.first_name ? `${user.first_name}'s Workspace` : 'My Workspace'}
@@ -588,7 +591,7 @@ export default function Dashboard() {
                 Active
               </span>
             </div>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-xs text-gray-400 mt-0.5 truncate">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               {todayUploads > 0 && (
                 <span className="ml-2 text-brand-500 font-medium">
@@ -599,8 +602,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="relative flex-1 sm:flex-none" ref={searchRef}>
+        <div className="flex flex-row items-center gap-3 shrink-0">
+          <div className="relative flex-1 sm:flex-none sm:w-72" ref={searchRef}>
             <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
             <input
               ref={searchInputRef}
@@ -610,7 +613,7 @@ export default function Dashboard() {
               onChange={(e) => handleSearchChange(e.target.value)}
               onKeyDown={handleSearchKeydown}
               onFocus={() => searchQuery.trim().length > 0 && setShowSearchDropdown(true)}
-              className="field w-full sm:w-80 pl-12 pr-4 shadow-none"
+              className="field w-full pl-12 pr-4 shadow-none"
             />
             {showSearchDropdown && (
               <div className="absolute top-full left-0 right-0 mt-2 widget-card-elevated rounded-xl shadow-dropdown z-50 max-h-96 overflow-y-auto p-0">
@@ -684,13 +687,13 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-          <Link to="/settings">
+          <Link to="/settings" className="shrink-0">
             <img src={avatarUrl} alt="avatar" className="h-11 w-11 rounded-full ring-2 ring-white shadow-md cursor-pointer hover:opacity-80 transition" />
           </Link>
         </div>
       </div>
 
-      {/* ── Top stat cards ── */}
+      {/* Top stat cards */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="widget-card dashboard-stat-card bg-white p-5">
           <div className="flex items-start justify-between gap-3 min-w-0">
@@ -767,20 +770,16 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Main grid ── */}
+      {/* Main grid */}
       <div className="dashboard-grid-main">
 
-        {/* ── Storage Overview — flex col so content fills full height, no vacant gap ── */}
+        {/* Storage Overview */}
         <div className="widget-card-elevated bg-white p-5 flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <h2 className="dashboard-section-title section-title">Storage Overview</h2>
-           <i
-  className="fas fa-hdd text-sm text-violet-600 dark:text-violet-400"
-  aria-hidden
-/>
+            <i className="fas fa-hdd text-sm text-violet-600 dark:text-violet-400" aria-hidden />
           </div>
 
-          {/* Donut */}
           <div className="flex items-center justify-center">
             <div className="relative h-32 w-32">
               <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
@@ -804,7 +803,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Used / Free legend */}
           <div className="mt-3 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -822,7 +820,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* File type breakdown */}
           {fileTypeBreakdown.length > 0 && (
             <div className="mt-4 pt-3 border-t border-gray-100">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">File Types</p>
@@ -851,7 +848,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Skeleton while loading */}
           {!storageDash && fileTypeBreakdown.length === 0 && (
             <div className="mt-4 pt-3 border-t border-gray-100 space-y-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">File Types</p>
@@ -867,10 +863,8 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ── Spacer pushes summary to bottom ── */}
           <div className="flex-1" />
 
-          {/* ── Summary grid — fills the vacant space logically ── */}
           <div className="mt-4 pt-3 border-t border-gray-100">
             <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Summary</p>
             <div className="grid grid-cols-2 gap-2">
@@ -899,7 +893,6 @@ export default function Dashboard() {
               Manage Storage
             </Link>
 
-            {/* ── Storage health insight merged in ── */}
             <div className={`mt-2 flex items-start gap-2 rounded-xl px-3 py-2.5 ${
               usedPercentage >= 80 ? 'bg-red-50' : usedPercentage >= 50 ? 'bg-amber-50' : 'bg-emerald-50'
             }`}>
@@ -918,14 +911,14 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ── Centre column: Activity + Recent Files ── */}
+        {/* Centre column: Activity + Recent Files */}
         <div className="flex flex-col gap-6">
 
           {/* Upload Activity */}
           <div className="widget-card-elevated bg-white p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
               <h2 className="dashboard-section-title section-title">Upload Activity</h2>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {hasAnyFiles && !activityLoading && (
                   <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
                     weekTrend.trend === 'up'
@@ -1022,20 +1015,18 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* ── Footer pinned to bottom of Recent Files card ── */}
             <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
               <span className="text-xs text-gray-400">
                 Showing {recentFiles.length} of {storage?.file_count ?? 0} files
               </span>
-              
             </div>
           </div>
         </div>
 
-        {/* ── Right column: Quick Upload + Quick Actions ── */}
+        {/* Right column: Quick Upload + Quick Actions */}
         <div className="flex flex-col gap-6">
 
-          {/* ── Quick Upload — drop files directly from the dashboard ── */}
+          {/* Quick Upload */}
           <div className="widget-card-elevated bg-white p-5 flex-1 flex flex-col">
             <div className="flex items-center gap-2 mb-3">
               <div className="stat-card-icon icon-tint-sky !h-8 !w-8 text-xs">
@@ -1044,7 +1035,6 @@ export default function Dashboard() {
               <h2 className="dashboard-section-title section-title text-sm">Quick Upload</h2>
             </div>
 
-            {/* Hidden file input */}
             <input
               ref={dropFileInputRef}
               type="file"
@@ -1054,7 +1044,6 @@ export default function Dashboard() {
               aria-hidden="true"
             />
 
-            {/* Success banner */}
             {dropUploadSuccess && (
               <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700 font-semibold">
                 <i className="fas fa-circle-check flex-shrink-0" />
@@ -1062,7 +1051,6 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Drop zone */}
             <div
               role="button"
               tabIndex={0}
@@ -1081,7 +1069,7 @@ export default function Dashboard() {
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl pointer-events-none transition-colors ${
                 dropDragActive ? 'bg-brand-100 text-brand-600' : 'bg-gray-50 text-gray-400'
               }`}>
-                <i className={`fas ${dropDupeChecking || dropUploading ? 'fa-spinner fa-spin' : dropDragActive ? 'fa-cloud-arrow-up' : 'fa-cloud-arrow-up'}`} />
+                <i className={`fas ${dropDupeChecking || dropUploading ? 'fa-spinner fa-spin' : 'fa-cloud-arrow-up'}`} />
               </div>
               <div className="text-center pointer-events-none">
                 <p className="text-xs font-bold text-gray-700">
@@ -1091,7 +1079,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Staged files preview + upload button */}
             {dropSelectedFiles.length > 0 && !dropUploading && (
               <div className="mt-3 space-y-2">
                 <div className="max-h-24 overflow-y-auto space-y-1">
@@ -1126,7 +1113,6 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Footer link */}
             <div className="mt-3 pt-3 border-t border-gray-100">
               <Link
                 to="/files"
@@ -1138,17 +1124,17 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* ── Quick Actions ── */}
+          {/* Quick Actions */}
           <div className="widget-card-featured bg-white p-5 flex-1 flex flex-col">
             <div className="relative flex flex-col flex-1">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-[#8b9cb8] mb-0.5">Navigation</p>
               <h2 className="dashboard-section-title section-title mb-4">Quick Actions</h2>
               <div className="space-y-2">
                 {[
-                  { to: '/files',   icon: 'fa-folder-open',       label: 'Upload Files', tint: 'sky' },
-                  { to: '/sharing', icon: 'fa-share-from-square', label: 'Share Files', tint: 'violet' },
-                  { to: '/storage', icon: 'fa-hard-drive',        label: 'Manage Storage', tint: 'amber' },
-                  { to: '/settings',icon: 'fa-gear',              label: 'Settings', tint: 'indigo' },
+                  { to: '/files',    icon: 'fa-folder-open',       label: 'Upload Files',   tint: 'sky' },
+                  { to: '/sharing',  icon: 'fa-share-from-square', label: 'Share Files',    tint: 'violet' },
+                  { to: '/storage',  icon: 'fa-hard-drive',        label: 'Manage Storage', tint: 'amber' },
+                  { to: '/settings', icon: 'fa-gear',              label: 'Settings',       tint: 'indigo' },
                 ].map(({ to, icon, label, tint }) => (
                   <Link key={to} to={to} className="widget-action-row group">
                     <span className="flex items-center gap-2.5 text-sm font-medium text-slate-700 dark:text-gray-200">
@@ -1182,48 +1168,47 @@ export default function Dashboard() {
             </div>
           </div>
 
-        </div>{/* end right column */}
+        </div>
+      </div>
 
-      </div>{/* end dashboard-grid-main */}
+      {/* Bottom mini-stat cards */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4 items-stretch">
 
-      {/* ── Bottom mini-stat cards ── */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 items-stretch">
-
-        <div className="widget-card-elevated bg-white flex items-center gap-3 px-4 py-4 min-h-[80px]">
-          <div className="stat-card-icon icon-tint-indigo !h-9 !w-9 text-sm shrink-0">
+        <div className="widget-card-elevated bg-white flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4 min-h-[80px] overflow-hidden">
+          <div className="stat-card-icon icon-tint-indigo !h-8 !w-8 sm:!h-9 sm:!w-9 text-xs sm:text-sm shrink-0">
             <i className="fas fa-weight-hanging" aria-hidden />
           </div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 leading-none mb-0.5">Avg Size</p>
-            <p className="text-sm font-bold text-gray-900 truncate">{fmtBytes(avgFileBytes)}</p>
-            <p className="text-[10px] text-gray-400 mt-0.5">per file</p>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-gray-400 leading-none mb-0.5 truncate">Avg Size</p>
+            <p className="text-xs sm:text-sm font-bold text-gray-900 truncate">{fmtBytes(avgFileBytes)}</p>
+            <p className="text-[9px] sm:text-[10px] text-gray-400 mt-0.5">per file</p>
           </div>
         </div>
 
-        <div className="widget-card-elevated bg-white flex items-center gap-3 px-4 py-4 min-h-[80px]">
-          <div className="stat-card-icon icon-tint-violet !h-9 !w-9 text-sm shrink-0">
+        <div className="widget-card-elevated bg-white flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4 min-h-[80px] overflow-hidden">
+          <div className="stat-card-icon icon-tint-violet !h-8 !w-8 sm:!h-9 sm:!w-9 text-xs sm:text-sm shrink-0">
             <i className="fas fa-share-from-square" aria-hidden />
           </div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 leading-none mb-0.5">Shared</p>
-            <p className="text-sm font-bold text-gray-900">{sharedRatio}%</p>
-            <p className="text-[10px] text-gray-400 mt-0.5">of your files</p>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-gray-400 leading-none mb-0.5 truncate">Shared</p>
+            <p className="text-xs sm:text-sm font-bold text-gray-900">{sharedRatio}%</p>
+            <p className="text-[9px] sm:text-[10px] text-gray-400 mt-0.5 truncate">of your files</p>
           </div>
         </div>
 
-        <div className="widget-card-elevated bg-white flex items-center gap-3 px-4 py-4 min-h-[80px]">
-          <div className="stat-card-icon icon-tint-cyan !h-9 !w-9 text-sm shrink-0">
+        <div className="widget-card-elevated bg-white flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4 min-h-[80px] overflow-hidden">
+          <div className="stat-card-icon icon-tint-cyan !h-8 !w-8 sm:!h-9 sm:!w-9 text-xs sm:text-sm shrink-0">
             <i className="fas fa-calendar-day" aria-hidden />
           </div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 leading-none mb-0.5">Top Day</p>
-            <p className="text-sm font-bold text-gray-900">{mostActiveDay ?? '—'}</p>
-            <p className="text-[10px] text-gray-400 mt-0.5">most uploads</p>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-gray-400 leading-none mb-0.5 truncate">Top Day</p>
+            <p className="text-xs sm:text-sm font-bold text-gray-900">{mostActiveDay ?? '—'}</p>
+            <p className="text-[9px] sm:text-[10px] text-gray-400 mt-0.5 truncate">most uploads</p>
           </div>
         </div>
 
-        <div className="widget-card-elevated bg-white flex items-center gap-3 px-4 py-4 min-h-[80px]">
-          <div className={`stat-card-icon !h-9 !w-9 text-sm shrink-0 ${
+        <div className="widget-card-elevated bg-white flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4 min-h-[80px] overflow-hidden">
+          <div className={`stat-card-icon !h-8 !w-8 sm:!h-9 sm:!w-9 text-xs sm:text-sm shrink-0 ${
             weekTrend.trend === 'up' ? 'icon-tint-emerald'
             : weekTrend.trend === 'down' ? 'icon-tint-rose'
             : 'icon-tint-slate'
@@ -1234,10 +1219,10 @@ export default function Dashboard() {
               : 'fa-minus'
             }`} aria-hidden />
           </div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 leading-none mb-0.5">This Week</p>
-            <p className="text-sm font-bold text-gray-900">{weekTrend.thisWeek} uploads</p>
-            <p className="text-[10px] mt-0.5 font-medium" style={{
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-gray-400 leading-none mb-0.5 truncate">This Week</p>
+            <p className="text-xs sm:text-sm font-bold text-gray-900 truncate">{weekTrend.thisWeek} uploads</p>
+            <p className="text-[9px] sm:text-[10px] mt-0.5 font-medium truncate" style={{
               color: weekTrend.trend === 'up' ? '#10b981' : weekTrend.trend === 'down' ? '#ef4444' : '#94a3b8'
             }}>
               {weekTrend.lastWeek > 0
@@ -1249,7 +1234,7 @@ export default function Dashboard() {
 
       </div>
 
-      {/* ── Modals ── */}
+      {/* Modals */}
       {selectedFile && (
         <FileDetailModal
           file={selectedFile}
