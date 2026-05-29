@@ -702,7 +702,7 @@ export default function Dashboard() {
               <i className="fas fa-file-lines" aria-hidden />
             </div>
           </div>
-          <p className="dashboard-metric mt-4 text-2xl dark:text-gray-100">{storage?.file_count ?? 0}</p>
+          <p className="dashboard-metric mt-4 text-2xl dark:text-gray-100">{storageDash?.file_count ?? storage?.file_count ?? 0}</p>
           <p className="dashboard-subtext mt-1">in your account</p>
           <div className="dashboard-stat-card__footer">
             {topType && topType.count > 0 && (
@@ -870,7 +870,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-xl bg-gray-50 px-3 py-2.5">
                 <p className="text-[10px] text-gray-400 font-medium leading-none mb-1">Total Files</p>
-                <p className="text-sm font-bold text-gray-800">{storage?.file_count ?? 0}</p>
+                <p className="text-sm font-bold text-gray-800">{storageDash?.file_count ?? storage?.file_count ?? 0}</p>
               </div>
               <div className="rounded-xl bg-gray-50 px-3 py-2.5">
                 <p className="text-[10px] text-gray-400 font-medium leading-none mb-1">Used</p>

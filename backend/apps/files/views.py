@@ -469,14 +469,13 @@ class StorageDashboardView(APIView):
 
     def get(self, request):
         user       = request.user
-        active_qs  = File.objects.filter(owner=user, is_deleted=False)
+        active_qs = File.objects.filter(owner=user, is_deleted=False)
+        all_qs    = File.objects.filter(owner=user)
 
-        agg = active_qs.aggregate(
-            used=Sum('file_size'),
-            file_count=Count('id'),
-        )
-        used        = agg['used'] or 0
-        file_count  = agg['file_count'] or 0
+        agg        = all_qs.aggregate(used=Sum('file_size'))
+        file_count = active_qs.aggregate(file_count=Count('id'))['file_count'] or 0
+
+        used = agg['used'] or 0
         total_bytes = settings.MAX_STORAGE_BYTES
         available   = max(0, total_bytes - used)
         usage_pct   = round((used / total_bytes) * 100, 2) if total_bytes else 0
