@@ -1,5 +1,5 @@
-﻿import { useEffect, useState, useRef, useCallback } from 'react'
-import { useSelector } from 'react-redux'
+import { useEffect, useState, useRef, useCallback } from 'react'
+
 import {
   getTrash,
   restoreFile,
@@ -7,11 +7,11 @@ import {
   emptyTrash,
   batchRestore,
 } from '@/api/filesApi'
+import { toast } from 'react-hot-toast'
 
 const POLL_INTERVAL_MS = 30_000   // 30 s → catches the purge within one extra cycle
 
 export default function Trash() {
-  const { user } = useSelector((s) => s.auth)
   const [trashedFiles, setTrashedFiles]             = useState([])
   const [loading, setLoading]                       = useState(true)
   const [pagination, setPagination]                 = useState({})
@@ -25,7 +25,7 @@ export default function Trash() {
 
   const currentPageRef = useRef(1)
 
-  const fetchTrash = useCallback(async (page = 1, { silent = false } = {}) => {
+  const fetchTrash = useCallback(async function fetchTrashInner(page = 1, { silent = false } = {}) {
     try {
       if (!silent) setLoading(true)
       const response = await getTrash(page)
@@ -41,11 +41,11 @@ export default function Trash() {
       currentPageRef.current = page
 
       if ((data.results || []).length === 0 && page > 1) {
-        fetchTrash(page - 1, { silent })
+        fetchTrashInner(page - 1, { silent })
       }
     } catch (err) {
       console.error('Fetch trash error:', err)
-      if (!silent) alert('Failed to fetch trash. Please try again.')
+      if (!silent) toast.error('Failed to fetch trash. Please try again.')
     } finally {
       if (!silent) setLoading(false)
     }
@@ -76,7 +76,7 @@ export default function Trash() {
       await restoreFile(fileId)
       await fetchTrash(currentPageRef.current)
     } catch {
-      alert('Failed to restore file. Please try again.')
+      toast.error('Failed to restore file. Please try again.')
     } finally {
       setRestoreLoading((prev) => ({ ...prev, [fileId]: false }))
     }
@@ -87,9 +87,10 @@ export default function Trash() {
       setActionLoading('delete')
       await permanentlyDelete(fileId)
       setDeleteConfirm(null)
+      toast.success('File permanently deleted', { id: 'delete-success' })
       await fetchTrash(currentPageRef.current)
     } catch {
-      alert('Failed to permanently delete file. Please try again.')
+      toast.error('Failed to permanently delete file. Please try again.')
     } finally {
       setActionLoading(null)
     }
@@ -103,7 +104,7 @@ export default function Trash() {
       setSelectedCheckboxes(new Set())
       await fetchTrash(currentPageRef.current)
     } catch {
-      alert('Batch restore failed. Please try again.')
+      toast.error('Batch restore failed. Please try again.')
     } finally {
       setActionLoading(null)
     }
@@ -118,9 +119,10 @@ export default function Trash() {
       }
       setSelectedCheckboxes(new Set())
       setShowBatchDelete(false)
+      toast.success(`${fileIds.length} files permanently deleted`, { id: 'batch-delete-success' })
       await fetchTrash(currentPageRef.current)
     } catch {
-      alert('Batch delete failed. Please try again.')
+      toast.error('Batch delete failed. Please try again.')
     } finally {
       setActionLoading(null)
     }
@@ -131,9 +133,10 @@ export default function Trash() {
       setActionLoading('empty')
       await emptyTrash()
       setShowEmptyTrash(false)
+      toast.success('Trash emptied permanently', { id: 'empty-trash-success' })
       await fetchTrash(1)
     } catch {
-      alert('Failed to empty trash. Please try again.')
+      toast.error('Failed to empty trash. Please try again.')
     } finally {
       setActionLoading(null)
     }

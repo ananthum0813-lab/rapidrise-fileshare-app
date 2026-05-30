@@ -1,4 +1,5 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
+import { toast } from 'react-hot-toast'
 import {
   getAllFiles as apiGetAllFiles,
   getShares,
@@ -49,9 +50,12 @@ export const share = createAsyncThunk(
   async (formData, { rejectWithValue }) => {
     try {
       const { data } = await apiCreateShare(formData)
+      toast.success('File shared successfully', { id: 'share-success' })
       return data.data
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to share file.')
+      const errorMsg = err.response?.data?.message || 'Failed to share file.'
+      toast.error(errorMsg, { id: 'share-error' })
+      return rejectWithValue(errorMsg)
     }
   },
 )
@@ -73,9 +77,12 @@ export const deleteShare = createAsyncThunk(
   async (shareId, { rejectWithValue }) => {
     try {
       await apiDeleteShare(shareId)
+      toast.success('Share removed successfully', { id: 'delete-share-success' })
       return shareId
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to delete share.')
+      const errorMsg = err.response?.data?.message || 'Failed to delete share.'
+      toast.error(errorMsg, { id: 'delete-share-error' })
+      return rejectWithValue(errorMsg)
     }
   },
 )
@@ -85,9 +92,12 @@ export const createZipShare = createAsyncThunk(
   async (formData, { rejectWithValue }) => {
     try {
       const { data } = await apiCreateZipShare(formData)
+      toast.success('ZIP share created successfully', { id: 'zip-share-success' })
       return data.data
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to create ZIP share.')
+      const errorMsg = err.response?.data?.message || 'Failed to create ZIP share.'
+      toast.error(errorMsg, { id: 'zip-share-error' })
+      return rejectWithValue(errorMsg)
     }
   },
 )
@@ -169,9 +179,12 @@ export const createRequest = createAsyncThunk(
   async (formData, { rejectWithValue }) => {
     try {
       const { data } = await apiCreateRequest(formData)
+      toast.success('File request created successfully', { id: 'create-request-success' })
       return data.data
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to create request.')
+      const errorMsg = err.response?.data?.message || 'Failed to create file request.'
+      toast.error(errorMsg, { id: 'create-request-error' })
+      return rejectWithValue(errorMsg)
     }
   },
 )
@@ -217,11 +230,14 @@ export const deleteInfectedFile = createAsyncThunk(
   async (submissionId, { rejectWithValue }) => {
     try {
       await apiDeleteInfectedFile(submissionId)
+      toast.success('Infected file deleted successfully', { id: 'delete-infected-success' })
       return submissionId
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to delete file.')
+      const errorMsg = err.response?.data?.message || 'Failed to delete infected file.'
+      toast.error(errorMsg, { id: 'delete-infected-error' })
+      return rejectWithValue(errorMsg)
     }
-  },
+  }
 )
 
 export const removeInboxItem = createAsyncThunk(

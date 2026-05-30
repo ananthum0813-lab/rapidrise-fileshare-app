@@ -267,13 +267,20 @@ class FileUploadView(APIView):
             except Exception as e:
                 errors.append(f'{f.name}: Upload failed — {e}')
 
+        if uploaded:
+            msg = f'{len(uploaded)} file(s) uploaded successfully.'
+        elif errors:
+            msg = ' | '.join(errors)
+        else:
+            msg = 'Upload failed.'
+
         return success_response(
             data={
                 'uploaded': uploaded,
                 'errors':   errors or None,
                 'count':    len(uploaded),
             },
-            message=f'{len(uploaded)} file(s) uploaded successfully.' if uploaded else 'Upload failed.',
+            message=msg,
             status_code=status.HTTP_201_CREATED if uploaded else status.HTTP_400_BAD_REQUEST,
         )
 
@@ -773,7 +780,7 @@ class BatchRestoreView(APIView):
 import logging
 from django.utils import timezone as tz
 from rest_framework.exceptions import PermissionDenied
-from apps.files.models import File  # harmless re-alias
+from apps.files.models import File  
 from .models import Folder
 from .serializers import (
     FolderSerializer,

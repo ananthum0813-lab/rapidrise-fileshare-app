@@ -1,9 +1,9 @@
-﻿/**
+/**
  * Files.jsx 
  *
  */
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchFiles, upload, remove, fetchStorage, rename } from '@/store/filesSlice'
 import {
@@ -29,6 +29,7 @@ import DuplicateModal from '@/components/DuplicateModal'
 import { resolveFileName, stageFiles } from '@/utils/fileNaming'
 import AddToFolderModal from '@/components/modals/AddToFolderModal'
 import FileShareModal   from '@/components/modals/FileShareModal'
+import { toast } from 'react-hot-toast'
 import SetExpiryModal, {  // ← NEW
   getExpiryInfo,
   variantClasses,
@@ -705,6 +706,7 @@ export default function Files() {
   }
 
   const handleDownload = async (file) => {
+    const toastId = toast.loading(`Downloading ${file.original_name}...`)
     try {
       const { data } = await downloadFile(file.id)
       const blob = new Blob([data], {
@@ -714,7 +716,8 @@ export default function Files() {
       const a   = document.createElement('a')
       a.href = url; a.download = file.original_name; a.click()
       window.URL.revokeObjectURL(url)
-    } catch { alert('Download failed.') }
+      toast.success('Download successful!', { id: toastId })
+    } catch { toast.error('Download failed.', { id: toastId }) }
   }
 
   const handleOpenPreview = () => {
@@ -749,7 +752,7 @@ export default function Files() {
       await dispatch(fetchFiles({ page: currentPage, search, ordering }))
     } catch {
       setLocalFavs((prev) => ({ ...prev, [file.id]: file.is_favorite }))
-      alert('Failed to update favourite.')
+      toast.error('Failed to update favourite.')
     } finally {
       setStarLoading((prev) => ({ ...prev, [file.id]: false }))
     }

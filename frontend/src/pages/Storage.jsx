@@ -1,6 +1,7 @@
-﻿import { useEffect, useState, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
+import { toast } from 'react-hot-toast'
 import { remove } from '@/store/filesSlice'
 import {
   getStorageDashboard,
@@ -288,7 +289,6 @@ const SORT_OPTIONS = [
 
 export default function Storage() {
   const dispatch  = useDispatch()
-  const navigate  = useNavigate()
 
   const [dash,        setDash]        = useState(null)
   const [dashLoading, setDashLoading] = useState(true)
@@ -379,13 +379,16 @@ export default function Storage() {
   // ── Handlers ────────────────────────────────────────────────────────────────
 
   const handleDownload = async (fileId, name) => {
+    const toastId = toast.loading(`Downloading ${name || 'file'}...`)
     try {
       const resp = await downloadFile(fileId)
       const url  = URL.createObjectURL(new Blob([resp.data]))
       const a    = Object.assign(document.createElement('a'), { href: url, download: name })
       document.body.appendChild(a); a.click()
       setTimeout(() => { URL.revokeObjectURL(url); a.remove() }, 1000)
-    } catch (e) {
+      toast.success('Download successful!', { id: toastId })
+    } catch {
+      toast.error('Download failed.', { id: toastId })
       setActionError('Download failed.')
     }
   }
@@ -400,7 +403,7 @@ export default function Storage() {
     try {
       await dispatch(remove(id)).unwrap()
       loadDash(); loadLargest(); loadRecent()
-    } catch (e) {
+    } catch {
       setActionError('Delete failed.')
     }
   }
@@ -452,7 +455,7 @@ export default function Storage() {
     try {
       await emptyTrash()
       loadDash()
-    } catch (e) {
+    } catch {
       setActionError('Failed to empty trash.')
     } finally {
       setEmptyingTrash(false)

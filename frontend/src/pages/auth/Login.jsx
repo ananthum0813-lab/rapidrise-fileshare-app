@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
+import { toast } from 'react-hot-toast'
 import { login, clearError } from '@/store/authSlice'
 import { emailRules } from '@/utils/validators'
 import ThemeToggle from '@/components/ui/ThemeToggle'
@@ -28,6 +29,19 @@ export default function Login() {
   useEffect(() => {
     if (isAuthenticated) navigate(from, { replace: true })
   }, [isAuthenticated, navigate, from])
+
+  useEffect(() => {
+    if (successMessage) {
+      toast.success(successMessage, { id: 'login-success' })
+      window.history.replaceState({}, document.title)
+    }
+  }, [successMessage])
+
+  useEffect(() => {
+    if (error) toast.error(error, { id: 'login-error' })
+  }, [error])
+
+
 
   const onSubmit = async (formData) => {
     const result = await dispatch(login(formData))
@@ -261,36 +275,6 @@ export default function Login() {
               Sign in to your VShare account to continue.
             </p>
           </div>
-
-          {/* Success alert */}
-          {successMessage && (
-            <div
-              className="mb-4 flex items-center gap-2.5 px-4 py-3 rounded-xl text-[13px]"
-              style={{
-                background: 'var(--color-success-bg)',
-                border: '1px solid var(--color-success-border)',
-                color: 'var(--color-success)',
-              }}
-            >
-              <i className="fas fa-circle-check flex-shrink-0 text-xs" />
-              <span>{successMessage}</span>
-            </div>
-          )}
-
-          {/* Error alert */}
-          {error && (
-            <div
-              className="mb-4 flex items-center gap-2.5 px-4 py-3 rounded-xl text-[13px]"
-              style={{
-                background: 'var(--color-danger-bg)',
-                border: '1px solid var(--color-danger-border)',
-                color: 'var(--color-danger)',
-              }}
-            >
-              <i className="fas fa-circle-exclamation flex-shrink-0 text-xs" />
-              <span>{error}</span>
-            </div>
-          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">

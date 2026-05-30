@@ -1,11 +1,12 @@
-﻿import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchFiles, fetchStorage, upload } from '@/store/filesSlice'
-import { computeSHA256, checkDuplicate, deleteFile as apiDeleteFile } from '@/api/filesApi'
+import { computeSHA256, checkDuplicate } from '@/api/filesApi'
 import { resolveFileName, stageFiles } from '@/utils/fileNaming'
 import { fetchShares, fetchZipShares, fetchGlobalAnalytics } from '@/store/sharingSlice'
 import { downloadFile, getFiles, getStorageDashboard, getFilesWithPageSize } from '@/api/filesApi'
+import { toast } from 'react-hot-toast'
 
 const timeAgo = (date) => {
   if (!date) return 'Unknown'
@@ -319,8 +320,8 @@ function FileDetailModal({ file, shares, onClose, onDownload }) {
 export default function Dashboard() {
   const dispatch = useDispatch()
   const { user } = useSelector((s) => s.auth)
-  const { files, storage, loading: filesLoading } = useSelector((s) => s.files)
-  const { shares, pagination, zipShares, zipPagination, globalAnalytics } = useSelector((s) => s.sharing)
+  const { files, storage } = useSelector((s) => s.files)
+  const { shares, zipShares, globalAnalytics } = useSelector((s) => s.sharing)
 
   const [searchQuery, setSearchQuery]               = useState('')
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
@@ -404,7 +405,9 @@ export default function Dashboard() {
     try {
       const { data } = await getStorageDashboard()
       setStorageDash(data.data)
-    } catch { }
+    } catch (err) {
+      console.error(err)
+    }
   }, [])
 
   const loadActivityFiles = useCallback(async () => {
@@ -451,13 +454,15 @@ export default function Dashboard() {
   }, [dispatch, loadStorageDash, loadActivityFiles])
 
   const handleDownload = async (file) => {
+    const toastId = toast.loading(`Downloading ${file.original_name}...`)
     try {
       const { data } = await downloadFile(file.id)
       const url = window.URL.createObjectURL(data)
       const a   = document.createElement('a')
       a.href = url; a.download = file.original_name; a.click()
       window.URL.revokeObjectURL(url)
-    } catch { alert('Download failed.') }
+      toast.success('Download successful!', { id: toastId })
+    } catch { toast.error('Download failed.', { id: toastId }) }
   }
 
   const filesRef = useRef(files)

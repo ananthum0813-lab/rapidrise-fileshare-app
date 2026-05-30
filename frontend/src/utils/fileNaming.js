@@ -120,53 +120,66 @@ export function getRootBase(filename) {
  * @returns {File}  — same file if no conflict, or a new File with a safe name
  */
 export function resolveFileName(file, existingNames = new Set(), batchNames = new Set()) {
-  const [rawBase, ext] = splitName(file.name)
-
-  // Canonical root shared by all variants of this file
-  const cleanBase = stripDjangoSuffix(rawBase)
-  const rootBase  = stripOurCounter(cleanBase)
-  const rootLower = rootBase.toLowerCase()
-  const extLower  = ext.toLowerCase()
-
-  // Union of all names to check against
   const allNames = new Set(
     [...existingNames, ...batchNames].map((n) => n.toLowerCase())
   )
 
-  // ── Collect all counter values already occupied ───────────────────────────
-  // counter 0 = no suffix ("file.png"), counter N = "file (N).png"
+  // 1. If the exact original name is totally free, use it as-is!
+  // This prevents uniquely named files like "movie (2025).mp4" from being
+  // aggressively processed and renamed.
+  if (!allNames.has(file.name.toLowerCase())) {
+    return file
+  }
+
+  // 2. We have a collision. Let's find a safe deduplication counter.
+  const [rawBase, ext] = splitName(file.name)
+  const extLower = ext.toLowerCase()
+
+  const cleanBase = stripDjangoSuffix(rawBase)
+  
+  // 3. Only strip `(N)` if it looks like OUR deduplication counter.
+  // We guess it's ours if `base` + `ext` is actually present in the system.
+  let rootBase = cleanBase
+  const m = COUNTER_RE.exec(cleanBase)
+  if (m) {
+    const potentialRoot = m[1].trimEnd()
+    const potentialZero = `${potentialRoot}${ext}`.toLowerCase()
+    // If the counter-0 file exists, then this `(N)` is likely a sequence counter we should group with.
+    if (allNames.has(potentialZero)) {
+      rootBase = potentialRoot
+    }
+  }
+
+  const rootLower = rootBase.toLowerCase()
+
+  // 4. Collect all counter values already occupied
   const occupied = new Set()
 
   for (const name of allNames) {
     const [b, e] = splitName(name)
-    if (e !== extLower) continue             // different extension → skip
+    if (e !== extLower) continue
 
-    // Check counter-0 slot
     if (b === rootLower) {
       occupied.add(0)
       continue
     }
 
-    // Check " (N)" slot
-    const m = COUNTER_RE.exec(b)
-    if (m && m[1].trimEnd().toLowerCase() === rootLower) {
-      occupied.add(parseInt(m[2], 10))
+    const match = COUNTER_RE.exec(b)
+    if (match && match[1].trimEnd().toLowerCase() === rootLower) {
+      occupied.add(parseInt(match[2], 10))
     }
   }
 
-  // ── Find lowest free counter ──────────────────────────────────────────────
+  // 5. Find lowest free counter
   let counter = 0
   while (occupied.has(counter)) counter++
 
-  // ── Build the resolved name ───────────────────────────────────────────────
+  // 6. Build the resolved name
   const resolvedName = counter === 0
     ? `${rootBase}${ext}`
     : `${rootBase} (${counter})${ext}`
 
-  // No change needed — return the original File untouched
   if (resolvedName === file.name) return file
-
-  // Return a new File with the safe name (File objects are immutable)
   return new File([file], resolvedName, { type: file.type, lastModified: file.lastModified })
 }
 

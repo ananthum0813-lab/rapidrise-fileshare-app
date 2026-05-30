@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Folders.jsx — Dedicated Folders management page
  *
  * Features:
@@ -27,7 +27,7 @@ import {
   clearShareResult,
 } from '@/store/foldersSlice'
 import { addFilesToFolder as apiAddFilesToFolder } from '@/api/foldersApi'
-import { getFiles, getFilesWithPageSize } from '@/api/filesApi'
+import { getFilesWithPageSize } from '@/api/filesApi'
 
 
 const FOLDER_COLORS = [

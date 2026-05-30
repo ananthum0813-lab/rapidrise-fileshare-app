@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { loginUser, registerUser, logoutUser, getProfile, updateProfile, deleteAccount as deleteAccountApi } from '@/api/authApi'
+import { toast } from 'react-hot-toast'
 
 
 export const login = createAsyncThunk(
@@ -7,9 +8,12 @@ export const login = createAsyncThunk(
   async (credentials, { rejectWithValue }) => {
     try {
       const { data } = await loginUser(credentials)
+      toast.success('Login successful', { id: 'login-success' })
       return data.data // { tokens: { access, refresh }, user: {...} }
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Login failed.')
+      const errorMsg = err.response?.data?.message || 'Login failed.'
+      toast.error(errorMsg, { id: 'login-error' })
+      return rejectWithValue(errorMsg)
     }
   }
 )
@@ -23,6 +27,7 @@ export const register = createAsyncThunk(
     } catch (err) {
       const errors = err.response?.data?.errors
       const message = err.response?.data?.message || 'Registration failed.'
+      toast.error(message, { id: 'register-error' })
       return rejectWithValue({ message, errors })
     }
   }
@@ -34,7 +39,9 @@ export const logout = createAsyncThunk(
     const refreshToken = getState().auth.refreshToken
     try {
       await logoutUser(refreshToken)
+      toast.success('Logout successful', { id: 'logout-success' })
     } catch {
+      toast.error('Logout failed.', { id: 'logout-error' })
     }
   }
 )
@@ -56,9 +63,12 @@ export const editProfile = createAsyncThunk(
   async (profileData, { rejectWithValue }) => {
     try {
       const { data } = await updateProfile(profileData)
+      toast.success('Profile updated successfully', { id: 'profile-update-success' })
       return data.data
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Profile update failed.')
+      const errorMsg = err.response?.data?.message || 'Profile update failed.'
+      toast.error(errorMsg, { id: 'profile-update-error' })
+      return rejectWithValue(errorMsg)
     }
   }
 )
@@ -69,9 +79,12 @@ export const deleteAccount = createAsyncThunk(
     try {
       const refresh = getState().auth.refreshToken
       await deleteAccountApi({ confirm: confirmationText, refresh })
+      toast.success('Account deleted successfully', { id: 'account-deleted' })
       return true
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Account deletion failed.')
+      const errorMsg = err.response?.data?.message || 'Account deletion failed.'
+      toast.error(errorMsg, { id: 'account-delete-error' })
+      return rejectWithValue(errorMsg)
     }
   }
 )

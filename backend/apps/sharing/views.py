@@ -1029,9 +1029,10 @@ class PublicRecipientUploadView(APIView):
             recipient.record_upload(ip=ip)
 
         if not created:
+            msg = ' | '.join(e['errors'][0] if isinstance(e, dict) and 'errors' in e else str(e) for e in errors) if errors else 'No files uploaded.'
             return success_response(
                 data={'submitted': 0, 'errors': errors},
-                message='No files uploaded.',
+                message=msg,
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1129,9 +1130,14 @@ class PublicFileRequestUploadView(APIView):
                     logger.exception('Scan dispatch failed for file %s', file_record.id)
             except Exception as exc:
                 errors.append({'file': f.name, 'errors': [str(exc)]})
+        if not created:
+            msg = ' | '.join(e['errors'][0] if isinstance(e, dict) and 'errors' in e else str(e) for e in errors) if errors else 'No files uploaded.'
+        else:
+            msg = f'{len(created)} file(s) submitted.'
+
         return success_response(
             data={'submitted': len(created), 'errors': errors or None},
-            message=f'{len(created)} file(s) submitted.',
+            message=msg,
             status_code=status.HTTP_201_CREATED if created else status.HTTP_400_BAD_REQUEST,
         )
 

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * components/modals/FileShareModal.jsx
  *
  * Fixes in this version:
@@ -244,7 +244,6 @@ export default function FileShareModal({ file, onClose }) {
   }
 
   const expiryLabel = EXPIRY_OPTIONS.find((o) => o.value === expiry)?.label ?? `${expiry}h`
-  const hasAnyError = !!emailError || !!generalError || !!fileError
 
   return (
     <div

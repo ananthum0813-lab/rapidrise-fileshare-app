@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PublicSharePage.jsx
  * ─────────────────────────────────────────────────────────────────────────────
  * Route: /share/:token   (no auth required)
@@ -15,6 +15,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getPublicShareInfo, downloadPublicShare } from '@/api/sharingApi'
+import { toast } from 'react-hot-toast'
 
 function formatBytes(bytes) {
   if (!bytes) return '—'
@@ -97,6 +98,7 @@ export default function PublicSharePage() {
 
   const handleDownload = async () => {
     setDownloading(true)
+    const toastId = toast.loading(`Downloading ${shareInfo?.file_name || 'file'}...`)
     try {
       const { data } = await downloadPublicShare(token)
       const url = window.URL.createObjectURL(data)
@@ -106,8 +108,9 @@ export default function PublicSharePage() {
       a.click()
       window.URL.revokeObjectURL(url)
       setDownloaded(true)
+      toast.success('Download successful!', { id: toastId })
     } catch {
-      alert('Download failed. The link may have expired.')
+      toast.error('Download failed. The link may have expired.', { id: toastId })
     } finally {
       setDownloading(false)
     }

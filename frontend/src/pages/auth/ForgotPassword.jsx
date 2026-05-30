@@ -1,12 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { forgotPassword } from '@/api/authApi'
+import { toast } from 'react-hot-toast'
 import { emailRules, getApiError } from '@/utils/validators'
 import AuthLayout from '@/components/layout/AuthLayout'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
-import Alert from '@/components/ui/Alert'
 
 export default function ForgotPassword() {
   const [loading, setLoading] = useState(false)
@@ -14,6 +14,10 @@ export default function ForgotPassword() {
   const [error, setError] = useState(null)
 
   const { register: field, handleSubmit, formState: { errors } } = useForm({ mode: 'onTouched' })
+
+  useEffect(() => {
+    if (error) toast.error(error, { id: 'forgot-error' })
+  }, [error])
 
   const onSubmit = async ({ email }) => {
     setLoading(true)
@@ -64,8 +68,6 @@ export default function ForgotPassword() {
           error={errors.email?.message}
           {...field('email', emailRules)}
         />
-
-        {error && <Alert type="error" message={error} />}
 
         <Button type="submit" variant="primary" fullWidth loading={loading}>
           Send reset link

@@ -22,6 +22,7 @@ import {
   removeInboxItem,
 } from '@/store/sharingSlice'
 import Alert from '@/components/ui/Alert'
+import { toast } from 'react-hot-toast'
 
 
 const fmt = (n) => (n ?? 0).toLocaleString()
@@ -885,7 +886,7 @@ function AnalyticsPanel() {
     </div>
   )
 
-  const { totals, top_shares = [], top_zips = [], single_file = {}, zip_shares = {} } = globalAnalytics
+  const { totals, top_shares = [], single_file = {}, zip_shares = {} } = globalAnalytics
 
   return (
     <div className="space-y-6">
@@ -1388,9 +1389,10 @@ function InboxPanel() {
   const hasScanning = scanningIds.length > 0
 
   const handleDownload = useCallback(async (downloadUrl, filename) => {
+    const toastId = toast.loading(`Downloading ${filename || 'file'}...`)
     try {
       if (!downloadUrl) {
-        setErrorMsg('Download URL not available')
+        toast.error('Download URL not available', { id: toastId })
         return
       }
       const response = await api.get(downloadUrl, { responseType: 'blob' })
@@ -1403,9 +1405,10 @@ function InboxPanel() {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(blobUrl)
+      toast.success('Download successful!', { id: toastId })
     } catch (error) {
       console.error('Download failed:', error)
-      setErrorMsg(`Download failed: ${error.response?.statusText || error.message}`)
+      toast.error('Download failed.', { id: toastId })
     }
   }, [])
 
@@ -1802,7 +1805,7 @@ function InboxPanel() {
 
 export default function Sharing() {
   const dispatch = useDispatch()
-  const { shares, zipShares, inbox, inboxStatusCounts } = useSelector((s) => s.sharing)
+  const { shares, zipShares, inboxStatusCounts } = useSelector((s) => s.sharing)
   const [activeTab, setActiveTab] = useState(
     () => localStorage.getItem('sharingActiveTab') || 'shares'
   )

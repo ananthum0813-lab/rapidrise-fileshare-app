@@ -1,13 +1,13 @@
-﻿/**
+/**
  * PublicZipSharePage.jsx
- * ─────────────────────────────────────────────────────────────────────────────
+ * -----------------------------------------------------------------------------
  * Route: /zip-share/:token   (no auth required)
  *
  * Page recipients see when a ZIP bundle has been shared with them.
  * Flow:
- *  1. Load → GET /api/sharing/public/zip/<token>/  to validate + fetch file list
+ *  1. Load ? GET /api/sharing/public/zip/<token>/  to validate + fetch file list
  *  2. Show ZIP name, file list, expiry, message
- *  3. Download button → GET /api/sharing/public/zip/<token>/download/  (blob)
+ *  3. Download button ? GET /api/sharing/public/zip/<token>/download/  (blob)
  *
  * Add this route to your App router:
  *   <Route path="/zip-share/:token" element={<PublicZipSharePage />} />
@@ -16,17 +16,18 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getPublicZipShareInfo, downloadPublicZipShare } from '@/api/sharingApi'
+import { toast } from 'react-hot-toast'
 
 
 function fmtDate(iso) {
-  if (!iso) return '—'
+  if (!iso) return '�'
   return new Date(iso).toLocaleDateString(undefined, {
     year: 'numeric', month: 'long', day: 'numeric',
   })
 }
 
 function fmtDateTime(iso) {
-  if (!iso) return '—'
+  if (!iso) return '�'
   return new Date(iso).toLocaleString(undefined, {
     year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
@@ -52,18 +53,24 @@ function mimeIcon(mime) {
 
 function ErrorScreen({ type, message }) {
   const config = {
-    expired:  { emoji: '⏰', title: 'Link Expired',         sub: 'This ZIP share link has expired and is no longer available.',    color: 'text-amber-600',  bg: 'from-amber-50 to-orange-50 dark:from-amber-950 dark:to-orange-950' },
-    revoked:  { emoji: '🔒', title: 'Link Revoked',          sub: 'This share link has been revoked by the sender.',                color: 'text-gray-600 dark:text-gray-400',  bg: 'from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800'  },
-    invalid:  { emoji: '🔗', title: 'Link Not Found',        sub: 'This share link is invalid or has been removed.',               color: 'text-gray-600 dark:text-gray-400',  bg: 'from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800'  },
-    error:    { emoji: '⚠️', title: 'Something Went Wrong',  sub: message || 'An unexpected error occurred. Please try again.',   color: 'text-red-600',    bg: 'from-red-50 to-rose-50 dark:from-red-950 dark:to-rose-950'     },
-  }[type] || { emoji: '⚠️', title: 'Error', sub: message, color: 'text-red-600', bg: 'from-red-50 to-rose-50 dark:from-red-950 dark:to-rose-950' }
+    invalid:  { emoji: '??', title: 'Invalid Link',  sub: 'This zip share link is invalid or malformed.',             color: 'text-gray-600',   bg: 'from-gray-50 to-slate-50 dark:from-gray-900 dark:to-slate-900'    },
+    expired:  { emoji: '?', title: 'Link Expired',   sub: 'This zip share link has expired and is no longer active.', color: 'text-amber-600', bg: 'from-amber-50 to-yellow-50 dark:from-amber-950 dark:to-yellow-950' },
+    revoked:  { emoji: '??', title: 'Access Revoked', sub: 'The owner has disabled access to this zip share.',         color: 'text-gray-600',   bg: 'from-gray-50 to-slate-50 dark:from-gray-900 dark:to-slate-900'    },
+    error:    { emoji: '??', title: 'Unable to Process Request',  sub: message || 'An unexpected error occurred. Please try again.',   color: 'text-red-600',    bg: 'from-red-50 to-rose-50 dark:from-red-950 dark:to-rose-950'     },
+  }[type] || { emoji: '??', title: 'Error',          sub: 'Something unexpected happened.',                           color: 'text-red-600',    bg: 'from-red-50 to-rose-50 dark:from-red-950 dark:to-rose-950'     }
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${config.bg} flex items-center justify-center p-4`}>
-      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-dropdown p-10 max-w-md w-full text-center border border-gray-100 dark:border-gray-700">
-        <div className="text-6xl mb-5 select-none">{config.emoji}</div>
-        <h2 className={`text-2xl font-bold mb-3 ${config.color}`}>{config.title}</h2>
-        <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">{config.sub}</p>
+    <div className={`min-h-screen bg-gradient-to-br ${config.bg} flex items-center justify-center p-4 sm:p-6`}>
+      <div className="bg-white/80 dark:bg-midnight-800/80 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl p-8 sm:p-12 max-w-md w-full text-center border border-white/20 dark:border-midnight-600/50">
+        <div className="text-6xl sm:text-7xl mb-6 drop-shadow-sm">{config.emoji}</div>
+        <h2 className={`text-2xl sm:text-3xl font-black mb-3 ${config.color}`}>{config.title}</h2>
+        <p className="text-gray-600 dark:text-gray-400 text-sm sm:text-base leading-relaxed mb-8">{config.sub}</p>
+        <button
+          onClick={() => window.location.href = '/'}
+          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-xl font-bold text-sm transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 w-full sm:w-auto"
+        >
+          <i className="fas fa-home"></i> Go to Homepage
+        </button>
       </div>
     </div>
   )
@@ -104,7 +111,6 @@ function FileListItem({ file }) {
     </div>
   )
 }
-
 
 export default function PublicZipSharePage() {
   const { token } = useParams()
@@ -148,6 +154,7 @@ export default function PublicZipSharePage() {
     if (downloading) return
     setDownloading(true)
     setDlError('')
+    const toastId = toast.loading(`Downloading ${info?.zip_name || 'shared_files.zip'}...`)
     try {
       const { data } = await downloadPublicZipShare(token)
       const url  = window.URL.createObjectURL(new Blob([data], { type: 'application/zip' }))
@@ -159,11 +166,13 @@ export default function PublicZipSharePage() {
       link.remove()
       window.URL.revokeObjectURL(url)
       setDownloaded(true)
+      toast.success('Download successful!', { id: toastId })
     } catch (err) {
       const msg = err.response?.data?.detail
         || err.response?.data?.message
         || 'Download failed. The link may have expired.'
       setDlError(msg)
+      toast.error('Download failed.', { id: toastId })
     } finally {
       setDownloading(false)
     }
@@ -270,9 +279,9 @@ export default function PublicZipSharePage() {
             {isExpired ? (
               <><i className="fas fa-clock"></i>Link Expired</>
             ) : downloading ? (
-              <><i className="fas fa-spinner fa-spin"></i>Preparing download…</>
+              <><i className="fas fa-spinner fa-spin"></i>Preparing download�</>
             ) : downloaded ? (
-              <><i className="fas fa-circle-check"></i>Downloaded · Click to download again</>
+              <><i className="fas fa-circle-check"></i>Downloaded � Click to download again</>
             ) : (
               <><i className="fas fa-download"></i>Download ZIP ({fileCount} file{fileCount !== 1 ? 's' : ''})</>
             )}
@@ -289,7 +298,7 @@ export default function PublicZipSharePage() {
         </div>
 
         <p className="text-center text-xs text-slate-300 dark:text-slate-600 pb-6">
-          Powered by VShare · Secure File Sharing
+          Powered by VShare � Secure File Sharing
         </p>
       </div>
     </div>

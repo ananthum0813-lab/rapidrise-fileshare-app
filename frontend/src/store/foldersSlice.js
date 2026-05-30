@@ -14,6 +14,7 @@ import {
   removeFilesFromFolder as apiRemoveFiles,
   shareFolderFiles as apiShare,
 } from '@/api/foldersApi'
+import { toast } from 'react-hot-toast'
 
 
 export const fetchFolders = createAsyncThunk(
@@ -45,9 +46,12 @@ export const createFolder = createAsyncThunk(
   async (payload, { rejectWithValue }) => {
     try {
       const { data } = await apiCreate(payload)
+      toast.success('Folder created successfully', { id: 'create-folder-success' })
       return data.data
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to create folder.')
+      const errorMsg = err.response?.data?.message || 'Failed to create folder.'
+      toast.error(errorMsg, { id: 'create-folder-error' })
+      return rejectWithValue(errorMsg)
     }
   }
 )
@@ -57,9 +61,12 @@ export const updateFolder = createAsyncThunk(
   async ({ folderId, payload }, { rejectWithValue }) => {
     try {
       const { data } = await apiUpdate(folderId, payload)
+      toast.success('Folder renamed successfully', { id: 'rename-folder-success' })
       return data.data
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to update folder.')
+      const errorMsg = err.response?.data?.message || 'Failed to update folder.'
+      toast.error(errorMsg, { id: 'rename-folder-error' })
+      return rejectWithValue(errorMsg)
     }
   }
 )
@@ -69,9 +76,12 @@ export const deleteFolder = createAsyncThunk(
   async (folderId, { rejectWithValue }) => {
     try {
       await apiDelete(folderId)
+      toast.success('Folder deleted successfully', { id: 'delete-folder-success' })
       return folderId
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to delete folder.')
+      const errorMsg = err.response?.data?.message || 'Failed to delete folder.'
+      toast.error(errorMsg, { id: 'delete-folder-error' })
+      return rejectWithValue(errorMsg)
     }
   }
 )
@@ -81,9 +91,12 @@ export const addFilesToFolder = createAsyncThunk(
   async ({ folderId, fileIds }, { rejectWithValue }) => {
     try {
       const { data } = await apiAddFiles(folderId, fileIds)
+      toast.success('Files added to folder successfully', { id: 'add-files-success' })
       return { folderId, ...data.data }
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to add files.')
+      const errorMsg = err.response?.data?.message || 'Failed to add files.'
+      toast.error(errorMsg, { id: 'add-files-error' })
+      return rejectWithValue(errorMsg)
     }
   }
 )
@@ -93,9 +106,12 @@ export const removeFilesFromFolder = createAsyncThunk(
   async ({ folderId, fileIds }, { rejectWithValue }) => {
     try {
       const { data } = await apiRemoveFiles(folderId, fileIds)
+      toast.success('Files removed from folder', { id: 'remove-files-success' })
       return { folderId, fileIds, ...data.data }
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to remove files.')
+      const errorMsg = err.response?.data?.message || 'Failed to remove files.'
+      toast.error(errorMsg, { id: 'remove-files-error' })
+      return rejectWithValue(errorMsg)
     }
   }
 )
@@ -105,9 +121,12 @@ export const shareFolderFiles = createAsyncThunk(
   async ({ folderId, payload }, { rejectWithValue }) => {
     try {
       const { data } = await apiShare(folderId, payload)
+      toast.success('Folder shared successfully', { id: 'share-folder-success' })
       return data.data
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Share failed.')
+      const errorMsg = err.response?.data?.message || 'Share failed.'
+      toast.error(errorMsg, { id: 'share-folder-error' })
+      return rejectWithValue(errorMsg)
     }
   }
 )

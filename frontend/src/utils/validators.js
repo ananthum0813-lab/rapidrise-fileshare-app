@@ -21,13 +21,13 @@ export const passwordRules = {
 export const firstNameRules = {
   required: 'First name is required.',
   validate: (v) =>
-    /^[A-Za-z\s'\-]{2,}$/.test(v.trim()) || 'First name: letters only, minimum 2 characters.',
+    /^[A-Za-z\s'-]{2,}$/.test(v.trim()) || 'First name: letters only, minimum 2 characters.',
 }
 
 export const lastNameRules = {
   required: 'Last name is required.',
   validate: (v) =>
-    /^[A-Za-z\s'\-]{1,}$/.test(v.trim()) || 'Last name: letters only.',
+    /^[A-Za-z\s'-]{1,}$/.test(v.trim()) || 'Last name: letters only.',
 }
 
 export const dateOfBirthRules = {

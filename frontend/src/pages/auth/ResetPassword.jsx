@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { resetPassword } from '@/api/authApi'
+import { toast } from 'react-hot-toast'
 import { passwordRules, getApiError } from '@/utils/validators'
 import AuthLayout from '@/components/layout/AuthLayout'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
-import Alert from '@/components/ui/Alert'
 
 export default function ResetPassword() {
   const navigate = useNavigate()
@@ -18,11 +18,16 @@ export default function ResetPassword() {
   const [success, setSuccess] = useState(false)
 
   const { register: field, handleSubmit, watch, formState: { errors } } = useForm({ mode: 'onTouched' })
+  // eslint-disable-next-line react-hooks/incompatible-library
   const newPassword = watch('new_password')
 
   useEffect(() => {
     if (!token) navigate('/forgot-password', { replace: true })
   }, [token, navigate])
+
+  useEffect(() => {
+    if (error) toast.error(error, { id: 'reset-error' })
+  }, [error])
 
   const onSubmit = async ({ new_password, confirm_password }) => {
     setLoading(true)
@@ -81,8 +86,6 @@ export default function ResetPassword() {
             validate: (v) => v === newPassword || 'Passwords do not match.',
           })}
         />
-
-        {error && <Alert type="error" message={error} />}
 
         <Button type="submit" variant="primary" fullWidth loading={loading}>
           Reset password

@@ -1,4 +1,4 @@
-﻿import { useEffect } from 'react'
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { verifySession } from '@/store/authSlice'
@@ -85,9 +85,26 @@ function AppRoutes() {
   )
 }
 
+import { Toaster } from 'react-hot-toast'
+
 export default function App() {
   return (
     <BrowserRouter>
+      <Toaster 
+        position="top-right" 
+        toastOptions={{
+          duration: 5000,
+          className: 'dark:bg-[#1a2234] dark:text-gray-100',
+          success: { duration: 4000 },
+          error: { duration: 8000 },
+          style: {
+            background: 'var(--bg-surface)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border-default)',
+            boxShadow: 'var(--shadow-dropdown)',
+          },
+        }}
+      />
       <AppRoutes />
     </BrowserRouter>
   )

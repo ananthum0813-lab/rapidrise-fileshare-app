@@ -1,5 +1,7 @@
+import React from 'react'
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
-import { getFiles, uploadFiles, deleteFile, getStorageInfo, renameFile } from '@/api/filesApi'
+import { getFiles, uploadFiles, deleteFile, getStorageInfo, renameFile, restoreFile as restoreFileAPI } from '@/api/filesApi'
+import { toast } from 'react-hot-toast'
 
 
 export const fetchFiles = createAsyncThunk(
@@ -17,24 +19,75 @@ export const fetchFiles = createAsyncThunk(
 export const upload = createAsyncThunk(
   'files/upload',
   async ({ files, expiryOption = 'never' }, { rejectWithValue }) => {
+    const toastId = toast.loading('Uploading...')
     try {
       const { data } = await uploadFiles(files, expiryOption)
+      toast.success(files.length > 1 ? `${files.length} files uploaded successfully` : 'File uploaded successfully', { id: toastId })
       return data.data
     } catch (err) {
-      const errors = err.response?.data?.errors || err.response?.data?.message
-      return rejectWithValue(errors || 'Upload failed.')
+      const status = err.response?.status
+      let errorMsg = err.response?.data?.errors || err.response?.data?.message || err.response?.data?.detail
+      
+      if (!errorMsg && err.response?.data && typeof err.response.data === 'object') {
+        errorMsg = err.response.data
+      }
+
+      if (!errorMsg) {
+        errorMsg = 'Upload failed: Network or server error. Please check your connection and try again.'
+      }
+      
+      if (typeof errorMsg !== 'string') {
+        try {
+          errorMsg = Object.values(errorMsg).flat().join(' ') || 'Upload failed: Unable to process the server response.'
+        } catch {
+          errorMsg = 'Upload failed: An unexpected error occurred while parsing the server response.'
+        }
+      }
+
+      if (status === 413) {
+        errorMsg = 'Upload failed: File size exceeds the maximum upload limit.'
+      } else if (status === 402 || errorMsg.toLowerCase().includes('storage')) {
+        errorMsg = 'Upload failed: Storage is full. Delete files or empty trash and try again.'
+      } else if (status === 415) {
+        errorMsg = 'Upload failed: Unsupported file type.'
+      }
+      
+      toast.error(errorMsg, { id: toastId })
+      return rejectWithValue(errorMsg)
     }
   }
 )
 
 export const remove = createAsyncThunk(
   'files/remove',
-  async (fileId, { rejectWithValue }) => {
+  async (fileId, { dispatch, rejectWithValue }) => {
     try {
       await deleteFile(fileId)
+      toast.success(
+        (t) => React.createElement('div', { className: 'flex items-center gap-4' },
+          React.createElement('span', null, 'Moved to Trash'),
+          React.createElement('button', {
+            onClick: async () => {
+              toast.dismiss(t.id)
+              try {
+                await restoreFileAPI(fileId)
+                toast.success('File restored', { id: `restore-${fileId}` })
+                dispatch(fetchFiles())
+                dispatch(fetchStorage())
+              } catch {
+                toast.error('Failed to restore file')
+              }
+            },
+            className: 'text-sm font-semibold text-brand-500 hover:text-brand-600 transition-colors'
+          }, 'Undo')
+        ),
+        { id: `delete-file-${fileId}` }
+      )
       return fileId
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Delete failed.')
+      const msg = err.response?.data?.message || 'Delete failed.'
+      toast.error(msg, { id: `delete-file-${fileId}-error` })
+      return rejectWithValue(msg)
     }
   }
 )
@@ -44,7 +97,20 @@ export const fetchStorage = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const { data } = await getStorageInfo()
-      return data.data
+      const storage = data.data
+      if (storage.total_bytes > 0) {
+        const usagePercent = (storage.used_bytes / storage.total_bytes) * 100
+        if (usagePercent >= 100) {
+          toast.error('Storage is completely full. Delete files or empty trash immediately to resume uploading.', { id: 'storage-full', duration: 8000 })
+        } else if (usagePercent >= 95) {
+          toast.error('Storage almost full (95%). Delete files or empty trash to continue uploading.', { id: 'storage-warning-critical' })
+        } else if (usagePercent >= 90) {
+          toast("You're using 90% of your storage capacity.", { id: 'storage-warning-90', icon: '⚠️', duration: 6000 })
+        } else if (usagePercent >= 80) {
+          toast("You're using 80% of your storage capacity.", { id: 'storage-warning-80', icon: '⚠️', duration: 6000 })
+        }
+      }
+      return storage
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || 'Failed to fetch storage info.')
     }
@@ -56,9 +122,12 @@ export const rename = createAsyncThunk(
   async ({ fileId, newName }, { rejectWithValue }) => {
     try {
       const { data } = await renameFile(fileId, newName)
+      toast.success('File renamed successfully')
       return data.data
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Rename failed.')
+      const msg = err.response?.data?.message || 'Rename failed.'
+      toast.error(msg)
+      return rejectWithValue(msg)
     }
   }
 )

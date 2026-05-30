@@ -1,14 +1,14 @@
-﻿import { useEffect, useState } from 'react'
-import { useSelector } from 'react-redux'
+import { useEffect, useState } from 'react'
+
 import {
   getFavorites,
   toggleFavorite,
   deleteFile,
   downloadFile,
 } from '@/api/filesApi'
+import { toast } from 'react-hot-toast'
 
 export default function Starred() {
-  const { user } = useSelector((s) => s.auth)
   const [starredFiles, setStarredFiles]             = useState([])
   const [loading, setLoading]                       = useState(true)
   const [pagination, setPagination]                 = useState({})
@@ -34,7 +34,7 @@ export default function Starred() {
       setCurrentPage(page)
     } catch (err) {
       console.error('Fetch starred error:', err)
-      alert('Failed to fetch starred files. Please try again.')
+      toast.error('Failed to fetch starred files. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -81,6 +81,7 @@ export default function Starred() {
   }, [previewBlobUrl])
 
   const handleDownload = async (file) => {
+    const toastId = toast.loading(`Downloading ${file.original_name}...`)
     try {
       const { data } = await downloadFile(file.id)
       const blob = new Blob([data], {
@@ -92,8 +93,9 @@ export default function Starred() {
       a.download = file.original_name
       a.click()
       window.URL.revokeObjectURL(url)
+      toast.success('Download successful!', { id: toastId })
     } catch {
-      alert('Download failed.')
+      toast.error('Download failed.', { id: toastId })
     }
   }
 
@@ -106,9 +108,10 @@ export default function Starred() {
     try {
       setStarLoading((prev) => ({ ...prev, [fileId]: true }))
       await toggleFavorite(fileId)
+      toast.success('File removed from favourites', { id: 'unstar-success' })
       await fetchStarred(currentPage)
     } catch {
-      alert('Failed to unstar file. Please try again.')
+      toast.error('Failed to unstar file. Please try again.')
     } finally {
       setStarLoading((prev) => ({ ...prev, [fileId]: false }))
     }
@@ -119,9 +122,10 @@ export default function Starred() {
       setActionLoading('delete')
       await deleteFile(fileId)
       setDeleteConfirm(null)
+      toast.success('File moved to trash', { id: 'trash-success' })
       await fetchStarred(currentPage)
     } catch {
-      alert('Failed to delete file. Please try again.')
+      toast.error('Failed to delete file. Please try again.')
     } finally {
       setActionLoading(null)
     }
@@ -134,10 +138,11 @@ export default function Starred() {
       for (const fileId of fileIds) {
         await toggleFavorite(fileId)
       }
+      toast.success(`${fileIds.length} files removed from favourites`, { id: 'batch-unstar-success' })
       setSelectedCheckboxes(new Set())
       await fetchStarred(currentPage)
     } catch {
-      alert('Batch unstar failed. Please try again.')
+      toast.error('Batch unstar failed. Please try again.')
     } finally {
       setActionLoading(null)
     }

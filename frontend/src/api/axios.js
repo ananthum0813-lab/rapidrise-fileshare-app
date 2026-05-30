@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { toast } from 'react-hot-toast'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
@@ -26,6 +27,13 @@ const processQueue = (error, token = null) => {
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
+    // Global Error Notifications
+    if (!error.response) {
+      toast.error('Network disconnected or server unavailable.', { id: 'network-error' })
+    } else if (error.response.status >= 500) {
+      toast.error('Unexpected server error occurred.', { id: 'server-error' })
+    }
+
     const original = error.config
 
     if (error.response?.status === 401 && !original._retry) {
@@ -36,6 +44,7 @@ api.interceptors.response.use(
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
         if (window.location.pathname !== '/login') {
+          toast.error('Session expired. Please log in again.', { id: 'session-expired' })
           window.location.replace('/login')
         }
         return Promise.reject(error)
@@ -70,6 +79,7 @@ api.interceptors.response.use(
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
         if (window.location.pathname !== '/login') {
+          toast.error('Session expired. Please log in again.', { id: 'session-expired' })
           window.location.replace('/login')
         }
         return Promise.reject(err)

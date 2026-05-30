@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
+import { toast } from 'react-hot-toast'
 import { register, clearError } from '@/store/authSlice'
 import {
   emailRules, passwordRules,
@@ -21,12 +22,20 @@ export default function Register() {
     formState: { errors },
   } = useForm({ mode: 'onTouched' })
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const password = watch('password')
 
   useEffect(() => { dispatch(clearError()) }, [dispatch])
+  
   useEffect(() => {
     if (isAuthenticated) navigate('/dashboard', { replace: true })
   }, [isAuthenticated, navigate])
+
+  useEffect(() => {
+    if (error && typeof error === 'string') toast.error(error, { id: 'register-error' })
+  }, [error])
+
+
 
   const onSubmit = async (formData) => {
     const result = await dispatch(register(formData))
@@ -280,21 +289,6 @@ export default function Register() {
                 Start sharing files securely in minutes.
               </p>
             </div>
-
-            {/* Error alert */}
-            {error && (
-              <div
-                className="mb-4 flex items-center gap-2.5 px-4 py-3 rounded-xl text-[13px]"
-                style={{
-                  background: 'var(--color-danger-bg)',
-                  border: '1px solid var(--color-danger-border)',
-                  color: 'var(--color-danger)',
-                }}
-              >
-                <i className="fas fa-circle-exclamation flex-shrink-0 text-xs" />
-                <span>{error}</span>
-              </div>
-            )}
 
             {/* ── Form ── */}
             <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-3">

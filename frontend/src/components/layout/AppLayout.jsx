@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { logout } from '@/store/authSlice'
@@ -36,6 +36,9 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const { user } = useSelector((s) => s.auth)
   const fileCount = useSelector((s) => s.files.storage?.file_count ?? 0)
+  const usedBytes = useSelector((s) => s.files.storage?.used_bytes ?? 0)
+  const totalBytes = useSelector((s) => s.files.storage?.total_bytes ?? 1)
+  const usagePercent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0
   const [signingOut, setSigningOut] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -174,8 +177,24 @@ export default function AppLayout() {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        <div className="page-container px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <main className="min-w-0 flex-1 overflow-y-auto flex flex-col">
+        {usagePercent >= 95 && (
+          <div className="flex-shrink-0 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-500/30 p-3 sm:px-6 flex items-center justify-between shadow-sm z-10">
+            <div className="flex items-center gap-3">
+              <i className="fas fa-triangle-exclamation text-red-500 dark:text-red-400 text-lg"></i>
+              <div>
+                <p className="text-sm font-semibold text-red-800 dark:text-red-300 leading-tight">Storage Almost Full</p>
+                <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">
+                  You have used {usagePercent.toFixed(1)}% of your storage. Please delete files or empty your trash.
+                </p>
+              </div>
+            </div>
+            <NavLink to="/trash" className="text-sm font-medium text-red-700 dark:text-red-300 bg-red-100 hover:bg-red-200 dark:bg-red-800/50 dark:hover:bg-red-800 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ml-4">
+              Empty Trash
+            </NavLink>
+          </div>
+        )}
+        <div className="page-container flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
           <Outlet />
         </div>
       </main>

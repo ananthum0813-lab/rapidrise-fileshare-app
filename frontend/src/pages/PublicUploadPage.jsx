@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PublicUploadPage.jsx
  *
  * Route: /request/upload/:token
@@ -412,7 +412,7 @@ export default function PublicUploadPage() {
   }, [token]) // eslint-disable-line
 
 
-  const triggerOtpSend = async () => {
+  async function triggerOtpSend() {
     try {
       const { data } = await sendRecipientOTP(token)
       const payload  = data.data || data
