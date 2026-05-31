@@ -88,6 +88,7 @@ export default function AppLayout() {
 
   return (
     <div className="app-shell dark:dark-page-bg">
+      {/* Mobile top bar */}
       <div className="mobile-chrome md:hidden">
         <div className="flex min-w-0 flex-shrink-0 items-center gap-2.5">
           <BrandLogo size="sm" />
@@ -106,6 +107,7 @@ export default function AppLayout() {
         </div>
       </div>
 
+      {/* Mobile backdrop */}
       {mobileMenuOpen && (
         <button
           type="button"
@@ -115,6 +117,7 @@ export default function AppLayout() {
         />
       )}
 
+      {/* Mobile menu panel */}
       {mobileMenuOpen && (
         <div className="mobile-menu-panel">
           {renderNavSections(() => setMobileMenuOpen(false))}
@@ -129,6 +132,7 @@ export default function AppLayout() {
         </div>
       )}
 
+      {/* Desktop sidebar */}
       <aside className="app-sidebar">
         <div className="mb-5 flex flex-shrink-0 items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -141,32 +145,34 @@ export default function AppLayout() {
           <div className="space-y-0.5 overflow-y-auto pr-1">{renderNavSections()}</div>
         </nav>
 
+        {/* User profile widget */}
         <div className="widget-card mt-5 flex-shrink-0 rounded-xl border border-gray-200 bg-white p-3.5 dark:border-midnight-500">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="relative flex-shrink-0">
-              <img
-                src={
-                  user?.avatar
-                  || `https://ui-avatars.com/api/?name=${user?.first_name || 'User'}&background=6366f1&color=e8ecf4`
-                }
-                className="h-9 w-9 rounded-lg border border-gray-200 object-cover dark:border-indigo-500/25"
-                alt=""
-              />
-              <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500 dark:border-midnight-700" />
-            </div>
+          <button
+            type="button"
+            onClick={() => navigate('/settings')}
+            className="mb-3 flex items-center gap-3 w-full text-left p-2 rounded-xl transition-colors duration-200 hover:bg-gray-50 dark:hover:bg-midnight-700"
+          >
+            <img
+              src={
+                user?.avatar
+                || `https://ui-avatars.com/api/?name=${user?.first_name || 'User'}&background=6366f1&color=e8ecf4`
+              }
+              className="h-11 w-11 flex-shrink-0 rounded-full border-2 border-indigo-200 object-cover dark:border-indigo-500/40"
+              alt=""
+            />
             <div className="min-w-0 flex-1 overflow-hidden">
-              <p className="truncate text-sm font-medium leading-tight text-gray-900 dark:text-gray-100">
+              <p className="truncate text-sm font-semibold leading-tight text-gray-900 dark:text-gray-100">
                 {user?.first_name || 'User'}
               </p>
               <p className="truncate text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
             </div>
-          </div>
+          </button>
 
           <button
             type="button"
             onClick={handleLogout}
             disabled={signingOut}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-700 transition-colors duration-200 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50 dark:border-midnight-500 dark:text-gray-300 dark:hover:border-red-500/30 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-700 transition-colors duration-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 disabled:opacity-50 dark:border-midnight-500 dark:text-gray-300 dark:hover:border-red-500/30 dark:hover:bg-red-500/10 dark:hover:text-red-400"
           >
             <i
               className={`fas ${signingOut ? 'fa-circle-notch fa-spin' : 'fa-arrow-right-from-bracket'}`}
@@ -177,11 +183,12 @@ export default function AppLayout() {
         </div>
       </aside>
 
+      {/* Main content */}
       <main className="min-w-0 flex-1 overflow-y-auto flex flex-col">
         {usagePercent >= 95 && (
           <div className="flex-shrink-0 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-500/30 p-3 sm:px-6 flex items-center justify-between shadow-sm z-10">
             <div className="flex items-center gap-3">
-              <i className="fas fa-triangle-exclamation text-red-500 dark:text-red-400 text-lg"></i>
+              <i className="fas fa-triangle-exclamation text-red-500 dark:text-red-400 text-lg" />
               <div>
                 <p className="text-sm font-semibold text-red-800 dark:text-red-300 leading-tight">Storage Almost Full</p>
                 <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">
@@ -189,7 +196,10 @@ export default function AppLayout() {
                 </p>
               </div>
             </div>
-            <NavLink to="/trash" className="text-sm font-medium text-red-700 dark:text-red-300 bg-red-100 hover:bg-red-200 dark:bg-red-800/50 dark:hover:bg-red-800 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ml-4">
+            <NavLink
+              to="/trash"
+              className="text-sm font-medium text-red-700 dark:text-red-300 bg-red-100 hover:bg-red-200 dark:bg-red-800/50 dark:hover:bg-red-800 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ml-4"
+            >
               Empty Trash
             </NavLink>
           </div>

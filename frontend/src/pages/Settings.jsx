@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useSelector, useDispatch } from 'react-redux'
 import { changePassword } from '@/api/authApi'
@@ -140,7 +140,7 @@ export default function Settings() {
               {!editingProfile ? (
                 <div className="flex flex-col md:flex-row gap-8 items-start">
                   <div className="relative group">
-                    <img src={avatarUrl} className="w-24 h-24 rounded-lg border-4 border-brand-50 shadow-inner" alt="User" />
+                    <img src={avatarUrl} className="w-24 h-24 rounded-full border-4 border-brand-50 shadow-inner" alt="User" />
                     <div className="absolute -bottom-2 -right-2 bg-green-500 w-6 h-6 border-4 border-white rounded-full"></div>
                   </div>
                   
@@ -171,7 +171,7 @@ export default function Settings() {
                     <Input label="First Name" {...profileField('first_name')} error={profileErrors.first_name?.message} className="bg-gray-50" />
                     <Input label="Last Name" {...profileField('last_name')} error={profileErrors.last_name?.message} className="bg-gray-50" />
                   </div>
-                  <Input label="Birth Date" type="date" {...profileField('date_of_birth')} error={profileErrors.date_of_birth?.message} className="bg-gray-50" />
+                  <Input label="Birth Date" type="date" {...profileField('date_of_birth')} error={profileErrors.date_of_birth?.message} className="bg-gray-50" onClick={(e) => e.target.showPicker && e.target.showPicker()} />
                   
                   <div className="flex gap-3 pt-4">
                     <button type="submit" disabled={loading} className="btn-primary">
@@ -197,6 +197,7 @@ export default function Settings() {
                     label="Current Password"
                     type="password"
                     placeholder="••••••••"
+                    autoComplete="new-password"
                     {...field('old_password', { required: 'Required' })}
                     error={errors.old_password?.message}
                     className="bg-gray-50"

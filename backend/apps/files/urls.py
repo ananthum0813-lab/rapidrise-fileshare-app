@@ -1,6 +1,3 @@
-"""
-apps/files/urls.py
-"""
 from django.urls import path
 from .views import (
     # ── File views ────────────────────────────────────────────────────────────
@@ -12,7 +9,7 @@ from .views import (
     FileRenameView,
     StorageInfoView,
     SetExpiryView,
-    # ── Storage dashboard (new) ───────────────────────────────────────────────
+    # ── Storage dashboard  ───────────────────────────────────────────────
     StorageDashboardView,
     LargestFilesView,
     RecentFilesView,

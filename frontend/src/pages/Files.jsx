@@ -745,11 +745,13 @@ export default function Files() {
   }
 
   const handleToggleFavorite = async (file) => {
+    const wasFav = localFavs[file.id] ?? file.is_favorite
     setLocalFavs((prev) => ({ ...prev, [file.id]: !prev[file.id] }))
     setStarLoading((prev) => ({ ...prev, [file.id]: true }))
     try {
       await toggleFavorite(file.id)
       await dispatch(fetchFiles({ page: currentPage, search, ordering }))
+      toast.success(wasFav ? 'File removed from starred' : 'File starred')
     } catch {
       setLocalFavs((prev) => ({ ...prev, [file.id]: file.is_favorite }))
       toast.error('Failed to update favourite.')
@@ -858,17 +860,17 @@ export default function Files() {
         </div>
 
                 {selectedFiles.length > 0 && (
-          <div className="bg-gray-900 rounded-lg p-5 mb-6 text-white ">
+          <div className="bg-brand-50 border border-brand-200 dark:bg-gray-900 dark:border-gray-800 rounded-lg p-5 mb-6 text-brand-950 dark:text-white">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <div className="flex items-center gap-4 min-w-0">
-                <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <i className="fas fa-file-circle-plus text-xl" />
+                <div className="w-12 h-12 bg-brand-200/50 dark:bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <i className="fas fa-file-circle-plus text-xl text-brand-700 dark:text-white" />
                 </div>
                 <div className="min-w-0">
                   <p className="font-bold">{selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} ready</p>
-                  <p className="text-xs text-brand-200 truncate">{selectedFiles.map((f) => f.name).join(', ').slice(0, 60)}…</p>
+                  <p className="text-xs text-brand-700/80 dark:text-brand-200 truncate">{selectedFiles.map((f) => f.name).join(', ').slice(0, 60)}…</p>
                   {renamedCount > 0 && (
-                    <p className="text-xs text-amber-300 font-semibold mt-0.5 flex items-center gap-1">
+                    <p className="text-xs text-amber-600 dark:text-amber-300 font-semibold mt-0.5 flex items-center gap-1">
                       <i className="fas fa-triangle-exclamation" />{renamedCount} renamed to avoid conflicts
                     </p>
                   )}
@@ -876,18 +878,18 @@ export default function Files() {
               </div>
 
                             <div className="flex gap-2 w-full sm:w-auto flex-shrink-0">
-                <button onClick={() => { setSelectedFiles([]); setRenamedCount(0) }} className="px-4 py-2 text-sm font-bold text-brand-200 hover:text-white">Cancel</button>
+                <button onClick={() => { setSelectedFiles([]); setRenamedCount(0) }} className="px-4 py-2 text-sm font-bold text-brand-700 hover:text-brand-900 dark:text-brand-200 dark:hover:text-white">Cancel</button>
                 <button onClick={handleUpload} disabled={uploading}
-                  className="px-6 py-2 bg-white text-gray-900 rounded-xl font-bold text-sm hover:bg-brand-50 transition-all flex items-center gap-2 disabled:opacity-60">
+                  className="px-6 py-2 bg-brand-600 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-all flex items-center gap-2 disabled:opacity-60">
                   {uploading ? <><i className="fas fa-spinner fa-spin" />Uploading…</> : <><i className="fas fa-upload" />Upload</>}
                 </button>
               </div>
             </div>
 
-                        <div className="mt-4 pt-4 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        <div className="mt-4 pt-4 border-t border-brand-200/60 dark:border-white/10 flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <div className="flex items-center gap-2 flex-shrink-0">
-                <i className="fas fa-clock text-brand-300 text-sm" />
-                <span className="text-xs font-bold text-brand-200 uppercase tracking-wider">Auto-delete</span>
+                <i className="fas fa-clock text-brand-500 dark:text-brand-300 text-sm" />
+                <span className="text-xs font-bold text-brand-700 dark:text-brand-200 uppercase tracking-wider">Auto-delete</span>
               </div>
               <div className="flex flex-wrap gap-2">
                 {EXPIRY_OPTIONS.map(({ value, label }) => (
@@ -897,8 +899,8 @@ export default function Files() {
                     onClick={() => setExpiryOption(value)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                       expiryOption === value
-                        ? 'bg-white text-gray-900 border-white'
-                        : 'bg-white/10 text-brand-200 border-white/20 hover:bg-white/20'
+                        ? 'bg-brand-600 text-white border-brand-600 dark:bg-white dark:text-gray-900 dark:border-white'
+                        : 'bg-white/50 text-brand-700 border-brand-200 hover:bg-white dark:bg-white/10 dark:text-brand-200 dark:border-white/20 dark:hover:bg-white/20'
                     }`}
                   >
                     {label}
@@ -906,7 +908,7 @@ export default function Files() {
                 ))}
               </div>
               {expiryOption !== 'never' && (
-                <span className="text-[11px] text-amber-300 font-semibold flex items-center gap-1 ml-auto">
+                <span className="text-[11px] text-amber-600 dark:text-amber-300 font-semibold flex items-center gap-1 ml-auto">
                   <i className="fas fa-triangle-exclamation text-[10px]" />
                   Files will auto-delete after {EXPIRY_OPTIONS.find((o) => o.value === expiryOption)?.label.toLowerCase()}
                 </span>

@@ -27,7 +27,7 @@ class FilePagination(PageNumberPagination):
     max_page_size = 100
 
 
-# ── Expiry option → timedelta mapping ────────────────────────────────────────
+#  Expiry option → timedelta mapping 
 
 _EXPIRY_DELTAS = {
     '1_minute': timedelta(minutes=1),
@@ -48,7 +48,7 @@ def _expiry_option_to_dt(expiry_option: str | None):
     return timezone.now() + delta
 
 
-# ── Shared expiry guard ───────────────────────────────────────────────────────
+# Shared expiry guard
 
 def _assert_not_expired(file_obj) -> None:
     if file_obj.is_expired:
@@ -59,7 +59,7 @@ def _assert_not_expired(file_obj) -> None:
         )
 
 
-# ── Filename deduplication ────────────────────────────────────────────────────
+# Filename deduplication 
 
 def _split_name(filename: str) -> tuple[str, str]:
     if '.' in filename:
@@ -123,7 +123,7 @@ def resolve_unique_filename(desired_name: str, owner, exclude_pk=None) -> str:
     return f'{root_base} ({counter}){ext}'
 
 
-# ── SHA-256 helper ────────────────────────────────────────────────────────────
+#  SHA-256 helper 
 
 def _compute_sha256(f) -> str:
     h = hashlib.sha256()
@@ -133,7 +133,7 @@ def _compute_sha256(f) -> str:
     return h.hexdigest()
 
 
-# ── MIME category helper (shared by dashboard views) ─────────────────────────
+#  MIME category helper (shared by dashboard views) 
 
 _CATEGORY_PREFIXES = {
     'Images':    ('image/',),
@@ -458,7 +458,7 @@ class StorageInfoView(APIView):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Storage dashboard  (NEW)
+# Storage dashboard  
 # ──────────────────────────────────────────────────────────────────────────────
 
 class StorageDashboardView(APIView):

@@ -1,12 +1,4 @@
-"""
-apps/files/models.py
-─────────────────────────────────────────────────────────────────────────────
-Changes from previous version:
-  • Added `expires_at`  — optional expiry datetime (null = never expires).
-  • Added `is_expired`  — computed property; True when expires_at is past.
 
-Everything else is exactly as before.
-"""
 
 import uuid
 import os
@@ -108,7 +100,7 @@ class File(models.Model):
     def scan_status_display(self):
         return self.get_scan_status_display()
 
-    # ── NEW: expiry helper ────────────────────────────────────────────────────
+    # ── expiry helper ────────────────────────────────────────────────────
     @property
     def is_expired(self) -> bool:
         """
@@ -121,7 +113,7 @@ class File(models.Model):
         without waiting for the task to run.
         """
         return bool(self.expires_at and self.expires_at <= timezone.now())
-    # ─────────────────────────────────────────────────────────────────────────
+    
 
     # ── Toggle favourite ──────────────────────────────────────────────────────
 
@@ -166,7 +158,7 @@ class File(models.Model):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Folder model — unchanged
+# Folder model 
 # ─────────────────────────────────────────────────────────────────────────────
 
 class Folder(models.Model):

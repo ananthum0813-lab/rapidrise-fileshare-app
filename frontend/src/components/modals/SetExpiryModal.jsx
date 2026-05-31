@@ -68,8 +68,20 @@ function getFileIcon(mime) {
 
 
 export default function SetExpiryModal({ file, onClose, onUpdated }) {
-  // Pre-select 'never' (safest default — user must opt in to deletion)
-  const [selected, setSelected] = useState('never')
+  // Pre-select 'never'
+  const [selected, setSelected] = useState(() => {
+  if (!file.expires_at) return 'never'
+  const diffMs = new Date(file.expires_at).getTime() - Date.now()
+  if (diffMs <= 0) return 'never'
+  const diffMin = diffMs / 60_000
+  if (diffMin <= 2)  return '1_minute'
+  const diffH = diffMin / 60
+  if (diffH <= 2)    return '1_hour'
+  const diffD = diffH / 24
+  if (diffD <= 2)    return '1_day'
+  if (diffD <= 10)   return '7_days'
+  return '30_days'
+})
   const [saving,   setSaving]   = useState(false)
   const [error,    setError]    = useState(null)
   const [success,  setSuccess]  = useState(false)
@@ -138,13 +150,7 @@ export default function SetExpiryModal({ file, onClose, onUpdated }) {
                   ? 'This file has already expired.'
                   : `Auto-deletes on ${expiresAtDate?.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`}
               </span>
-              <button
-                onClick={() => setSelected('never')}
-                className="ml-auto underline text-[10px] font-bold hover:opacity-70 transition-opacity whitespace-nowrap"
-                title="Remove expiry"
-              >
-                Remove
-              </button>
+              
             </div>
           )}
 

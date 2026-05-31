@@ -591,10 +591,6 @@ export default function Dashboard() {
               <h1 className="page-title leading-tight">
                 {user?.first_name ? `${user.first_name}'s Workspace` : 'My Workspace'}
               </h1>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 border border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block"></span>
-                Active
-              </span>
             </div>
             <p className="text-xs text-gray-400 mt-0.5 truncate">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}

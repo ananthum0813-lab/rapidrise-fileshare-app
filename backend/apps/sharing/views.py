@@ -1,7 +1,4 @@
-"""
-apps/sharing/views.py
-─────────────────────────────────────────────────────────────────────────────
-"""
+
 
 import io
 import os
@@ -98,7 +95,7 @@ class InboxPagination(PageNumberPagination):
     max_page_size         = 100
 
 
-# ─── private helpers ──────────────────────────────────────────────────────────
+#  private helpers 
 
 def _get_client_ip(request):
     xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
@@ -216,7 +213,7 @@ def _zip_stream_generator(files_queryset):
         yield chunk
 
 
-# ─── helper: count per-recipient active submissions ───────────────────────────
+#  helper: count per-recipient active submissions 
 
 _ACTIVE_STATUSES = [
     SubmissionInbox.Status.PENDING,
@@ -234,19 +231,8 @@ def _recipient_submission_count(recipient: RequestRecipient) -> int:
     ).count()
 
 
-# ─── OTP session token helpers ────────────────────────────────────────────────
-#
-# After a recipient successfully verifies their OTP, the server issues a
-# short-lived, cryptographically signed session token that binds the verified
-# identity to a specific browser session.  The token is:
-#   • Signed with Django's SECRET_KEY via django.core.signing
-#   • Scoped to the recipient's UUID so it cannot be reused for a different link
-#   • Valid for exactly OTP_SESSION_MINUTES (same window as the DB session)
-#
-# Every upload request MUST present this token in the X-Upload-Session header.
-# Checking only the DB flag (otp_verified / verified_until) is NOT sufficient —
-# that flag is shared across all browsers/devices, so a second browser that
-# knows the upload URL could otherwise upload freely once anyone has verified.
+# Signed OTP session token (X-Upload-Session header) scoped to recipient UUID —
+# prevents other sessions from uploading once anyone has verified.
 
 _SESSION_SIGNING_SALT = 'fileshare-upload-session-v1'
 
@@ -281,7 +267,7 @@ def _validate_session_token(token: str, recipient_id: str) -> bool:
         return False
 
 
-# ─── All-files endpoint ───────────────────────────────────────────────────────
+#  All-files endpoint 
 
 class AllFilesView(APIView):
     permission_classes = [IsAuthenticated]
@@ -297,7 +283,7 @@ class AllFilesView(APIView):
         })
 
 
-# ─── File Duplicate Detection ─────────────────────────────────────────────────
+# File Duplicate Detection 
 
 class CheckDuplicateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -315,7 +301,7 @@ class CheckDuplicateView(APIView):
         )
 
 
-# ─── Single-file Share ────────────────────────────────────────────────────────
+#  Single-file Share 
 
 class CreateShareView(APIView):
     permission_classes = [IsAuthenticated]
@@ -432,7 +418,7 @@ class GlobalShareAnalyticsView(APIView):
         })
 
 
-# ─── Multi-file ZIP Share ─────────────────────────────────────────────────────
+#  Multi-file ZIP Share 
 
 class CreateZipShareView(APIView):
     permission_classes = [IsAuthenticated]
@@ -577,7 +563,7 @@ class PublicZipShareDownloadView(APIView):
         return response
 
 
-# ─── Public single-file share ─────────────────────────────────────────────────
+#  Public single-file share 
 
 class PublicShareInfoView(APIView):
     permission_classes = [AllowAny]
@@ -632,7 +618,7 @@ class PublicShareDownloadView(APIView):
         return response
 
 
-# ─── File Requests ────────────────────────────────────────────────────────────
+#  File Requests 
 
 class FileRequestListView(APIView):
     permission_classes = [IsAuthenticated]
@@ -702,7 +688,7 @@ class FileRequestDetailView(APIView):
         return success_response(message='File request closed.')
 
 
-# ─── Public per-recipient OTP endpoints ──────────────────────────────────────
+# Public per-recipient OTP endpoints 
 
 class SendOTPView(APIView):
     """
@@ -826,21 +812,6 @@ class VerifyOTPView(APIView):
         if not otp_input:
             raise ValidationError({'otp': 'OTP is required.'})
 
-        # ── REMOVED: the is_otp_verified short-circuit that was here ──────────
-        #
-        # The old code did:
-        #
-        #   if recipient.is_otp_verified:
-        #       return success_response(verified=True, ...)
-        #
-        # This was the bug: any browser that hit this endpoint *while* another
-        # browser's session was active would receive verified=True without
-        # submitting — or knowing — the OTP.  The short-circuit is gone.
-        #
-        # Each verification attempt must now go through the full OTP check
-        # and will receive a fresh, browser-scoped session_token on success.
-        # ─────────────────────────────────────────────────────────────────────
-
         success, error_msg = recipient.verify_otp(otp_input)
 
         if not success:
@@ -853,17 +824,15 @@ class VerifyOTPView(APIView):
 
         logger.info('OTP verified for recipient %s (request %s)', recipient.id, recipient.file_request_id)
 
-        # Issue a signed, time-stamped session token scoped to this recipient.
-        # The client must present this token (X-Upload-Session header) on every
-        # upload request.  Without it, uploads are rejected — even if the DB
-        # still shows otp_verified=True from a different browser's session.
+       # Signed session token tied to this recipient; required on every upload (X-Upload-Session).
+       # Guards against other browsers piggy-backing on a shared otp_verified flag.
         session_token = _issue_session_token(str(recipient.id))
 
         return success_response(
             data={
                 'verified':        True,
                 'session_minutes': OTP_SESSION_MINUTES,
-                'session_token':   session_token,   # ← new: client must store & re-send
+                'session_token':   session_token,   # client must store & re-send
             },
             message='Email verified successfully.',
         )
@@ -883,7 +852,7 @@ class ResendOTPView(APIView):
         return SendOTPView().post(request, token=token)
 
 
-# ─── Public per-recipient info ────────────────────────────────────────────────
+# Public per-recipient info
 
 class PublicRecipientInfoView(APIView):
     permission_classes = [AllowAny]
@@ -896,7 +865,7 @@ class PublicRecipientInfoView(APIView):
 
         req = recipient.file_request
 
-        # Per-recipient slot calculation (FIX: each recipient has their own quota)
+        # Per-recipient slot calculation ( each recipient has their own quota)
         recipient_submitted = _recipient_submission_count(recipient)
         remaining = max(0, req.max_files - recipient_submitted)
 
@@ -920,7 +889,7 @@ class PublicRecipientInfoView(APIView):
         return success_response(data=data)
 
 
-# ─── Public per-recipient upload ──────────────────────────────────────────────
+# Public per-recipient upload 
 
 class PublicRecipientUploadView(APIView):
     permission_classes = [AllowAny]
@@ -933,24 +902,9 @@ class PublicRecipientUploadView(APIView):
 
         req = recipient.file_request
 
-        # ── Session token gate (replaces the DB-only otp_verified check) ──────
-        #
-        # The client must present the signed session_token that was issued by
-        # VerifyOTPView upon successful OTP entry.  It arrives as a FormData
-        # field (not a custom header) to avoid CORS preflight issues.
-        # _validate_session_token() checks:
-        #   1. Valid signature  (cannot be forged without Django's SECRET_KEY)
-        #   2. Not expired      (OTP_SESSION_MINUTES hard limit)
-        #   3. Scoped to THIS recipient UUID (not reusable for another link)
-        #
-        # Checking only recipient.is_otp_verified (the old approach) is NOT
-        # sufficient because that DB flag is shared across all browsers/devices.
-        # A second browser that knows the upload URL could otherwise upload
-        # freely the moment anyone else has verified.
-        #
-        # The DB flag is still updated by verify_otp() for audit purposes, but
-        # it is no longer the gate for uploads.
-        # ─────────────────────────────────────────────────────────────────────
+        # Validate signed session token (FormData field, avoids CORS preflight).
+        # Checks signature, expiry, and recipient scope — DB flag alone isn't enough
+        # since it's shared across browsers and can't distinguish sessions.
         session_token = request.data.get('session_token', '').strip()
         if not _validate_session_token(session_token, str(recipient.id)):
             raise ValidationError({
@@ -1043,7 +997,7 @@ class PublicRecipientUploadView(APIView):
         )
 
 
-# ─── Public scan-status polling ───────────────────────────────────────────────
+# Public scan-status polling 
 
 class PublicUploadStatusView(APIView):
     permission_classes = [AllowAny]
@@ -1075,7 +1029,7 @@ class PublicUploadStatusView(APIView):
         return success_response(data={'files': files})
 
 
-# ─── Legacy shared-token upload ───────────────────────────────────────────────
+#  Legacy shared-token upload 
 
 class PublicFileRequestInfoView(APIView):
     permission_classes = [AllowAny]
@@ -1142,7 +1096,7 @@ class PublicFileRequestUploadView(APIView):
         )
 
 
-# ─── Submission Inbox ─────────────────────────────────────────────────────────
+# Submission Inbox 
 
 class SubmissionInboxListView(APIView):
     permission_classes = [IsAuthenticated]

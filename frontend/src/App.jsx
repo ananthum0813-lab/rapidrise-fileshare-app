@@ -91,7 +91,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Toaster 
-        position="top-right" 
+        position="top-center" 
         toastOptions={{
           duration: 5000,
           className: 'dark:bg-[#1a2234] dark:text-gray-100',
@@ -101,7 +101,12 @@ export default function App() {
             background: 'var(--bg-surface)',
             color: 'var(--text-primary)',
             border: '1px solid var(--border-default)',
-            boxShadow: 'var(--shadow-dropdown)',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            padding: '16px 24px',
+            fontSize: '15px',
+            fontWeight: '600',
+            borderRadius: '12px',
+            maxWidth: '500px'
           },
         }}
       />
