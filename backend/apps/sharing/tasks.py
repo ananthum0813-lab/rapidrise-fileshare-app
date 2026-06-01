@@ -60,8 +60,7 @@ DANGEROUS_SIGNATURES: list[tuple[int, bytes, str]] = [
     (0, b'#!/',                 'Script with shebang'),
     (0, b'#! /',                'Script with shebang'),
     (0, b'\xe9',                'MS-DOS COM executable'),
-    # ZIP magic (PK\x03\x04) intentionally excluded — .docx/.pptx/.xlsx are all ZIP-based.
-    # Office ZIP containers are handled by _check_office_macros instead.
+    # ZIP magic excluded — .docx/.pptx/.xlsx are ZIP-based; handled by _check_office_macros.
     (0, b'\x03\xf3\x0d\x0a',   'Python bytecode (.pyc)'),
     (0, b'\x16\x03',            'TLS/SSL record (unexpected binary)'),
     (0, b'\xff\xd8\xff',        'JPEG image'),
@@ -203,10 +202,7 @@ MALICIOUS_PATTERNS: list[tuple[re.Pattern, str]] = [
     ),
 ]
 
-# Tokens that are ALWAYS malicious regardless of context — block immediately.
-#   /JS, /JavaScript  → JavaScript execution inside a document reader
-#   /Launch           → opens an external program from a PDF
-#   /RichMedia        → Flash embed; dead legitimate use, still exploited
+# Always block — JS execution and external program launch have no legitimate use in doc readers.
 _PDF_ALWAYS_BAD: list[tuple[re.Pattern, str]] = [
     (re.compile(rb'/JS\b'),         'embedded JavaScript (/JS)'),
     (re.compile(rb'/JavaScript\b'), 'embedded JavaScript action (/JavaScript)'),
@@ -214,29 +210,16 @@ _PDF_ALWAYS_BAD: list[tuple[re.Pattern, str]] = [
     (re.compile(rb'/RichMedia\b'),  'RichMedia/Flash embed'),
 ]
 
-# Tokens that are only dangerous when combined with a JS/execution trigger.
-#   /OpenAction alone → legitimate (scroll to page, set zoom) — malicious only with /JS
-#   /AA alone         → form field validation is normal — malicious only with /JS
-# These are checked as a combination: if /JS or /JavaScript is already found, these add context.
-# They are NOT standalone block triggers.
+# Only dangerous when combined with a JS trigger; /OpenAction and /AA alone are legitimate.
 _PDF_EXECUTION_TRIGGERS: list[tuple[re.Pattern, str]] = [
     (re.compile(rb'/OpenAction\b'), '/OpenAction'),
     (re.compile(rb'/AA\b'),         '/AA additional-actions'),
 ]
 
-# The following tokens are intentionally NOT checked:
-#   /URI          → every PDF with a hyperlink (email, LinkedIn, website) contains this
-#   /EmbeddedFile → legitimate in portfolio, compliance, and multi-part document PDFs
-#   /XFA          → legitimate in tax forms, HR documents, fillable PDFs
-#   /SubmitForm   → legitimate in fillable/form PDFs
-
 # ── Public dispatcher ─────────────────────────────────────────────────────────
 
 def dispatch_scan(file_id: str) -> bool:
-    """
-    Queue a scan via Celery. Falls back to synchronous execution if broker is unavailable.
-    Returns True if queued async, False if ran synchronously.
-    """
+    """Queue a scan via Celery, falling back to sync if the broker is unavailable."""
     try:
         scan_uploaded_file.apply_async(args=[str(file_id)], countdown=1)
         logger.info('dispatch_scan: queued async scan file_id=%s', file_id)
@@ -257,8 +240,7 @@ def dispatch_scan(file_id: str) -> bool:
 
 def recover_stuck_files(older_than_minutes: int = 5) -> dict:
     """
-    Requeue every file stuck in SCANNING or PENDING status.
-    Safe to call directly from the Django shell.
+    Requeue files stuck in SCANNING or PENDING.
 
         >>> from apps.sharing.tasks import recover_stuck_files
         >>> recover_stuck_files()
@@ -442,15 +424,11 @@ def _check_double_extension(filename: str) -> str | None:
 
 
 def _check_magic_bytes(file_path: str, filename: str = ''):
-    """
-    Detects dangerous file signatures. Uses original filename for extension checks
-    so renamed temp files don't escape detection.
-    """
+    # Use original filename for extension check — temp paths lose the real extension.
     try:
         with open(file_path, 'rb') as f:
             header = f.read(16)
 
-        # Prefer the original filename extension over the temp file path
         name_for_ext = filename if filename else file_path
         ext = os.path.splitext(name_for_ext)[-1].lstrip('.').lower()
 
@@ -581,13 +559,9 @@ def _check_hash_blocklist(file_path: str, file_obj):
 
 def _check_archive_bomb(file_path: str):
     """
-    Detects zip bombs by checking file count, total uncompressed size, and
-    compression ratio. Also flags any single member exceeding 2 GB to catch
-    single-file zip bombs.
-
-    Office Open XML files (.docx, .pptx, .xlsx) are ZIP archives and can
-    legitimately contain thousands of internal XML parts and embedded assets,
-    so a higher member threshold is used for them.
+    Detects zip bombs via file count, total uncompressed size, and compression ratio.
+    Office Open XML files use a higher member threshold since they legitimately
+    contain many internal parts.
     """
     if not zipfile.is_zipfile(file_path):
         return None
@@ -596,9 +570,6 @@ def _check_archive_bomb(file_path: str):
         if not compressed:
             return None
 
-        # Office ZIP containers (.docx, .pptx, .xlsx) can have thousands of members
-        # legitimately (slide thumbnails, embedded images, XML relationships, etc.)
-        # Use a higher threshold for them; tighter limit for plain archives.
         _OFFICE_ZIP_SUFFIXES = ('.docx', '.xlsx', '.pptx', '.docm', '.xlsm', '.pptm',
                                 '.odt', '.ods', '.odp', '.epub')
         member_limit = 50000 if file_path.lower().endswith(_OFFICE_ZIP_SUFFIXES) else 10000
@@ -614,7 +585,6 @@ def _check_archive_bomb(file_path: str):
                 )
 
             for member in members:
-                # Single-member oversized file check (single-file zip bomb)
                 if member.file_size > 2 * 1024 * 1024 * 1024:
                     return (
                         f'This archive contains a single entry ("{member.filename}") that would '
@@ -659,11 +629,7 @@ def _check_malicious_patterns(file_path: str):
 
 
 def _check_entropy(file_path: str, filename: str = '') -> str | None:
-    """
-    High Shannon entropy indicates encryption or obfuscation — a common
-    characteristic of packed malware. Naturally compressed/encrypted formats
-    are skipped to avoid false positives.
-    """
+    """High Shannon entropy signals encryption/obfuscation. Naturally compressed formats are skipped."""
     SKIP = {
         'zip', 'gz', 'tar', 'bz2', '7z', 'rar',
         'jpg', 'jpeg', 'png', 'gif', 'webp',
@@ -672,8 +638,7 @@ def _check_entropy(file_path: str, filename: str = '') -> str | None:
         'odt', 'ods', 'odp',
     }
     try:
-        # Use original filename — temp paths (scan_abc.bin) lose the real extension,
-        # causing legitimate Office/PDF files to be incorrectly entropy-scanned.
+        # Use original filename — temp paths lose the real extension.
         name_for_ext = filename if filename else file_path
         ext = name_for_ext.rsplit('.', 1)[-1].lower()
         if ext in SKIP:
@@ -713,17 +678,13 @@ def _shannon_entropy(data: bytes) -> float:
 
 
 def _check_office_macros(file_path: str, filename: str = '') -> str | None:
-    """
-    Detect VBA macros and external template injection in Office Open XML files.
-    Uses stdlib zipfile — no oletools required.
-    """
+    """Detect VBA macros and external template injection in Office Open XML files."""
     if not zipfile.is_zipfile(file_path):
         return None
     try:
         with zipfile.ZipFile(file_path, 'r') as zf:
             names = [n.lower() for n in zf.namelist()]
 
-            # VBA macro container present in any Word/Excel/PowerPoint file
             macro_indicators = [
                 'vbaproject.bin',
                 'word/vbaproject.bin',
@@ -740,8 +701,6 @@ def _check_office_macros(file_path: str, filename: str = '') -> str | None:
                         'and are one of the most common malware delivery methods.'
                     )
 
-            # External template injection — rels files pointing to http(s) targets
-            # e.g. word/_rels/settings.xml.rels with Target="https://attacker.com/evil.dotm"
             for name in names:
                 if name.endswith('.rels'):
                     try:
@@ -764,23 +723,12 @@ def _check_office_macros(file_path: str, filename: str = '') -> str | None:
 
 def _check_pdf_actions(file_path: str, filename: str) -> str | None:
     """
-    Scan PDFs for dangerous action tokens.
+    Scan PDFs for dangerous action tokens. Reads both head and tail since
+    cross-reference tables (where actions are declared) live at the end of the file.
 
-    Reads both the head and tail because PDF cross-reference tables
-    (where actions are declared) are appended at the end of the file.
-
-    Blocking logic:
-      - /JS or /JavaScript alone → always block (JS in a doc reader = exploit)
-      - /Launch alone            → always block (opens external programs)
-      - /RichMedia alone         → always block (Flash; no legitimate use remains)
-      - /OpenAction or /AA       → only block when combined with JS tokens above
-        (alone they are used for legitimate page navigation / form validation)
-
-    NOT blocked regardless of presence:
-      - /URI        → every PDF with a hyperlink contains this (resumes, CVs, etc.)
-      - /EmbeddedFile → legitimate in portfolio and multi-part PDFs
-      - /XFA        → legitimate in tax forms and fillable HR documents
-      - /SubmitForm → legitimate in fillable forms
+    /JS, /JavaScript, /Launch, /RichMedia → always block.
+    /OpenAction, /AA → only block when combined with a JS token.
+    /URI, /EmbeddedFile, /XFA, /SubmitForm → not checked (legitimate use cases).
     """
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
     try:
@@ -800,13 +748,11 @@ def _check_pdf_actions(file_path: str, filename: str) -> str | None:
         with open(file_path, 'rb') as f:
             raw = f.read(MAX_SCAN_BYTES)
 
-        # Append tail when file exceeds head-read window (cross-ref tables live here)
         if file_size > MAX_SCAN_BYTES:
             with open(file_path, 'rb') as f:
                 f.seek(file_size - tail_size)
                 raw = raw + f.read(tail_size)
 
-        # Step 1: check always-bad tokens — block immediately on any match
         always_bad_found = []
         for pattern, desc in _PDF_ALWAYS_BAD:
             if pattern.search(raw):
@@ -820,8 +766,6 @@ def _check_pdf_actions(file_path: str, filename: str) -> str | None:
                 f'is opened in a PDF reader. This is a known malware delivery technique.'
             )
 
-        # Step 2: /OpenAction or /AA are only dangerous when combined with JS execution.
-        # A PDF with /OpenAction alone (e.g. open at a specific page/zoom) is legitimate.
         has_js = (
             re.search(rb'/JS\b', raw) or
             re.search(rb'/JavaScript\b', raw)
@@ -842,11 +786,7 @@ def _check_pdf_actions(file_path: str, filename: str) -> str | None:
 
 
 def _check_svg_scripts(file_path: str, filename: str) -> str | None:
-    """
-    SVG files are XML and can legally contain <script> tags, event handlers
-    (onload, onclick), and <foreignObject> embedding arbitrary HTML/JS.
-    These are used for stored XSS attacks when SVGs are served directly.
-    """
+    """Detect <script> tags, event handlers, and <foreignObject> in SVGs — vectors for stored XSS."""
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
     if ext != 'svg':
         return None
@@ -882,15 +822,7 @@ def _check_svg_scripts(file_path: str, filename: str) -> str | None:
 
 
 def _check_html_phishing(file_path: str, filename: str) -> str | None:
-    """
-    Detect phishing and credential-harvesting patterns in HTML files:
-    - Password input + external form action
-    - data: URI scripts (inline base64 JS)
-    - meta refresh redirect to external URL
-    - Hidden iframe pointing to external origin
-    - javascript: href sinks
-    - eval/atob obfuscation patterns
-    """
+    """Detect phishing patterns: credential harvesting, obfuscated scripts, hidden iframes, redirects."""
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
     if ext not in ('html', 'htm', 'xhtml', 'shtml'):
         return None
@@ -902,7 +834,6 @@ def _check_html_phishing(file_path: str, filename: str) -> str | None:
         logger.warning('_check_html_phishing read: %s', exc)
         return None
 
-    # Password field submitting to external URL — classic credential harvester
     if re.search(rb'(?i)<input[^>]+type\s*=\s*["\']?password["\']?', raw) and \
        re.search(rb'(?i)<form[^>]+action\s*=\s*["\']https?://', raw):
         return (
@@ -910,7 +841,6 @@ def _check_html_phishing(file_path: str, filename: str) -> str | None:
             'URL. This is the hallmark of a phishing page designed to steal login credentials.'
         )
 
-    # data: URI script source — embeds obfuscated payload bypassing URL filters
     if re.search(rb'(?i)<script[^>]+src\s*=\s*["\']data:', raw):
         return (
             'This HTML file loads a script from a data: URI. '
@@ -918,14 +848,12 @@ def _check_html_phishing(file_path: str, filename: str) -> str | None:
             'bypasses URL-based security filters.'
         )
 
-    # meta refresh redirect to external URL
     if re.search(rb'(?i)<meta[^>]+http-equiv\s*=\s*["\']?refresh["\']?[^>]+url\s*=\s*https?://', raw):
         return (
             'This HTML file automatically redirects visitors to an external URL '
             'via a meta refresh tag. This is a common phishing redirect technique.'
         )
 
-    # Hidden or zero-size iframe loading external content
     if re.search(
         rb'(?i)<iframe[^>]+(?:display\s*:\s*none|visibility\s*:\s*hidden|width\s*=\s*["\']?0)[^>]*src\s*=\s*["\']https?://',
         raw,
@@ -936,7 +864,6 @@ def _check_html_phishing(file_path: str, filename: str) -> str | None:
             'perform clickjacking attacks.'
         )
 
-    # javascript: href — direct JS execution via anchor clicks
     if re.search(rb'(?i)href\s*=\s*["\']javascript:', raw):
         return (
             'This HTML file contains a javascript: URI in a link. '
@@ -944,7 +871,6 @@ def _check_html_phishing(file_path: str, filename: str) -> str | None:
             'and is commonly used in phishing and XSS attacks.'
         )
 
-    # eval(atob(...)) or eval(decodeURIComponent(...)) — base64/encoded payload execution
     if re.search(rb'(?i)eval\s*\(\s*(?:atob|decodeURIComponent|unescape)\s*\(', raw):
         return (
             'This HTML file contains an obfuscated script that decodes and executes '
@@ -956,10 +882,7 @@ def _check_html_phishing(file_path: str, filename: str) -> str | None:
 
 
 def _check_content_type_mismatch(file_path: str, filename: str) -> str | None:
-    """
-    Pure magic-byte vs extension mismatch — no libmagic required.
-    Catches any direction: script renamed to image, image renamed to document, etc.
-    """
+    """Magic-byte vs extension mismatch check — no libmagic required."""
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
     allowed_families = _EXTENSION_CONTENT_MAP.get(ext)
     if not allowed_families:

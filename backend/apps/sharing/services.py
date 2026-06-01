@@ -197,10 +197,6 @@ def send_otp_email(
     Send a 6-digit OTP to the recipient so they can verify their identity
     before uploading files.
 
-    Security notes:
-    - Generic subject avoids leaking the platform name in spam filters.
-    - Body includes expiry time and "do not share" warning.
-    - Never logs the plaintext OTP.
     """
     from .models import OTP_EXPIRY_MINUTES
 
