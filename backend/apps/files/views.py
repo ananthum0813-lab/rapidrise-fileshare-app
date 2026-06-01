@@ -217,6 +217,11 @@ class FileUploadView(APIView):
         )['total'] or 0
         available  = settings.MAX_STORAGE_BYTES - used_bytes
 
+        if available <= 0:
+            raise ValidationError({
+                'files': 'Storage limit exceeded. Delete files or empty trash before uploading.'
+            })
+
         uploaded = []
         errors   = []
         batch_names: set[str] = set()
@@ -226,7 +231,7 @@ class FileUploadView(APIView):
                 errors.append(f'{f.name}: Exceeds max size ({settings.MAX_FILE_SIZE_MB} MB)')
                 continue
             if f.size > available:
-                errors.append(f'{f.name}: Not enough storage space')
+                errors.append(f'{f.name}: Storage limit exceeded — not enough storage space.')
                 continue
 
             mime_type = get_mime_type(f)

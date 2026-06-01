@@ -77,7 +77,7 @@ class File(models.Model):
     def __str__(self):
         return f'{self.original_name} ({self.owner.email})'
 
-    # ── Computed ──────────────────────────────────────────────────────────────
+    # Computed 
 
     @property
     def file_size_display(self):
@@ -100,7 +100,7 @@ class File(models.Model):
     def scan_status_display(self):
         return self.get_scan_status_display()
 
-    # ── expiry helper ────────────────────────────────────────────────────
+    #  expiry helper 
     @property
     def is_expired(self) -> bool:
         """

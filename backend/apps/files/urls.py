@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (
-    # ── File views ────────────────────────────────────────────────────────────
+    # File views 
     CheckDuplicateView,
     FileUploadView,
     FileListView,
@@ -9,13 +9,13 @@ from .views import (
     FileRenameView,
     StorageInfoView,
     SetExpiryView,
-    # ── Storage dashboard  ───────────────────────────────────────────────
+    # Storage dashboard  
     StorageDashboardView,
     LargestFilesView,
     RecentFilesView,
     FileTypeUsageView,
     TrashInfoView,
-    # ── Favourite / Trash / Batch ─────────────────────────────────────────────
+    # Favourite / Trash / Batch 
     ToggleFavoriteView,
     FavoritesListView,
     TrashListView,
@@ -24,7 +24,7 @@ from .views import (
     PermanentlyDeleteView,
     BatchDeleteView,
     BatchRestoreView,
-    # ── Folder views ──────────────────────────────────────────────────────────
+    # Folder views 
     FolderListCreateView,
     FolderDetailView,
     FolderAddFilesView,
@@ -33,17 +33,17 @@ from .views import (
 )
 
 urlpatterns = [
-    # ── Storage sub-routes (must come before bare 'storage/') ────────────────
+    #  Storage sub-routes (must come before bare 'storage/') 
     path('storage/dashboard/',  StorageDashboardView.as_view(), name='storage-dashboard'),
     path('storage/largest/',    LargestFilesView.as_view(),     name='storage-largest'),
     path('storage/recent/',     RecentFilesView.as_view(),      name='storage-recent'),
     path('storage/type-usage/', FileTypeUsageView.as_view(),    name='storage-type-usage'),
     path('storage/trash-info/', TrashInfoView.as_view(),        name='storage-trash-info'),
 
-    # ── Original storage info (kept for backward compat) ─────────────────────
+    # Original storage info (kept for backward compat) 
     path('storage/',            StorageInfoView.as_view(),      name='file-storage'),
 
-    # ── Utility (no pk) ───────────────────────────────────────────────────────
+    # Utility (no pk) 
     path('upload/',             FileUploadView.as_view(),       name='file-upload'),
     path('check-duplicate/',    CheckDuplicateView.as_view(),   name='file-check-duplicate'),
     path('favorites/',          FavoritesListView.as_view(),    name='file-favorites'),
@@ -53,7 +53,7 @@ urlpatterns = [
     path('batch-restore/',      BatchRestoreView.as_view(),     name='file-batch-restore'),
     path('',                    FileListView.as_view(),         name='file-list'),
 
-    # ── Per-file actions (require pk) ─────────────────────────────────────────
+    # Per-file actions (require pk) 
     path('<uuid:pk>/',                    FileDetailView.as_view(),        name='file-detail'),
     path('<uuid:pk>/download/',           FileDownloadView.as_view(),      name='file-download'),
     path('<uuid:pk>/rename/',             FileRenameView.as_view(),        name='file-rename'),
@@ -62,7 +62,7 @@ urlpatterns = [
     path('<uuid:pk>/delete-permanently/', PermanentlyDeleteView.as_view(), name='file-delete-permanently'),
     path('<uuid:pk>/set-expiry/',         SetExpiryView.as_view(),         name='file-set-expiry'),
 
-    # ── Folder routes ─────────────────────────────────────────────────────────
+    # Folder routes
     path('folders/',                            FolderListCreateView.as_view(),  name='folder-list'),
     path('folders/<uuid:pk>/',                  FolderDetailView.as_view(),      name='folder-detail'),
     path('folders/<uuid:pk>/add-files/',        FolderAddFilesView.as_view(),    name='folder-add-files'),

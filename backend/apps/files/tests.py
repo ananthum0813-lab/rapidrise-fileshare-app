@@ -2,6 +2,7 @@ import uuid
 import pytest
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from apps.files.models import File, Folder
@@ -165,7 +166,26 @@ def test_file_upload_with_expiry(auth_client):
     assert res.data['data']['uploaded'][0]['expires_at'] is not None
 
 
-# ──────────────────────────────────────────────
+@pytest.mark.django_db
+@override_settings(MAX_STORAGE_BYTES=1024 * 1024)
+def test_file_upload_rejects_when_quota_exceeded(auth_client, user):
+    existing = SimpleUploadedFile('existing.txt', b'a' * 600_000, content_type='text/plain')
+    File.objects.create(
+        owner=user,
+        original_name='existing.txt',
+        file=existing,
+        file_size=600_000,
+        mime_type='text/plain',
+    )
+
+    f = SimpleUploadedFile('upload.txt', b'b' * 500_000, content_type='text/plain')
+    res = auth_client.post(reverse('file-upload'), {'files': f}, format='multipart')
+
+    assert res.status_code == 400
+    assert 'storage' in res.data.get('message', '').lower() or 'not enough storage' in res.data.get('message', '').lower()
+
+
+# ──────────────────────────────────────────────────────────────
 # File Delete (soft)
 # ──────────────────────────────────────────────
 
