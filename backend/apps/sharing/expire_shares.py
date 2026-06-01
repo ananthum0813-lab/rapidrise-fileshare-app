@@ -9,9 +9,6 @@ Run manually:
 Or via cron (every hour):
     0 * * * * /path/to/venv/bin/python /path/to/manage.py expire_shares
 
-NOTE: The Celery beat task `sharing.expire_old_shares` does the same work
-automatically when celery-beat is running.  This command is useful for
-one-off runs, CI pipelines, or environments without celery-beat.
 """
 
 from django.core.management.base import BaseCommand
