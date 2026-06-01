@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+﻿import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { toast } from 'react-hot-toast'
@@ -465,7 +465,10 @@ export default function Storage() {
 
   // ── Derived values ───────────────────────────────────────────────────────────
 
-  const usedPct  = dash?.usage_percent ?? 0
+  const actualUsedPct = dash?.usage_percent ?? 0
+  const usedPct = Math.min(100, Math.max(0, actualUsedPct))
+  const storageFull = dash?.total_gb != null ? dash.used_bytes >= dash.total_gb * 1024 * 1024 * 1024 : usedPct >= 100
+  const overQuota = dash?.total_gb != null ? dash.used_bytes > (dash.total_gb * 1024 * 1024 * 1024) : false
   const overWarn = usedPct >= 80
   const overCrit = usedPct >= 95
 
@@ -537,7 +540,19 @@ export default function Storage() {
         )}
 
         {/* ── Storage warning ─────────────────────────────────────────────────── */}
-        {overWarn && (
+        {overQuota && (
+          <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 px-4 py-3 text-sm text-red-700 dark:text-red-400 flex items-center gap-3">
+            <i className="fas fa-triangle-exclamation text-base text-red-500" />
+            Storage limit exceeded. Delete files or empty trash to continue uploading.
+          </div>
+        )}
+        {!overQuota && storageFull && (
+          <div className="rounded-xl px-4 py-3 flex items-center gap-3 text-sm font-medium bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400">
+            <i className="fas fa-triangle-exclamation text-base text-red-500" />
+            Storage full — delete files or empty trash to free space.
+          </div>
+        )}
+        {!overQuota && !storageFull && overWarn && (
           <div className={`rounded-xl px-4 py-3 flex items-center gap-3 text-sm font-medium ${
             overCrit
               ? 'bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
@@ -545,7 +560,7 @@ export default function Storage() {
           }`}>
             <i className={`fas fa-triangle-exclamation text-base ${overCrit ? 'text-red-500' : 'text-amber-500'}`} />
             {overCrit
-              ? 'Critical: storage is almost full. Delete files or empty trash to free space.'
+              ? 'Storage above 95% — delete files or empty trash to free space.'
               : `Storage is ${fmtPct(usedPct)} full. Consider cleaning up to avoid disruptions.`}
           </div>
         )}

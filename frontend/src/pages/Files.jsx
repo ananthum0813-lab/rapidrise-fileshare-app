@@ -776,7 +776,11 @@ export default function Files() {
     dispatch(fetchFiles({ page: currentPage, search, ordering }))
   }
 
-  const usedPercentage = storage ? Math.round((storage.used_bytes / storage.total_bytes) * 100) : 0
+  const actualUsedPercentage = storage && storage.total_bytes > 0
+    ? Math.round((storage.used_bytes / storage.total_bytes) * 100)
+    : 0
+  const usedPercentage = Math.min(100, Math.max(0, actualUsedPercentage))
+  const storageOverQuota = storage?.total_bytes > 0 && storage.used_bytes > storage.total_bytes
 
   return (
     <div className="w-full">
@@ -807,6 +811,12 @@ export default function Files() {
 
         {error && <Alert type="error" message={error} className="mb-5 rounded-lg" />}
 
+        {storageOverQuota && (
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-3">
+            <i className="fas fa-triangle-exclamation text-red-500 mt-0.5" />
+            <div>Storage limit exceeded. Delete files or empty trash to resume uploading.</div>
+          </div>
+        )}
         {duplicateChecking && (
           <div className="mb-5 flex items-center gap-3 px-5 py-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
             <i className="fas fa-spinner fa-spin text-blue-500" />
