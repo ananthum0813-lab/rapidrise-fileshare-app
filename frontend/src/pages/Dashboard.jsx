@@ -510,7 +510,12 @@ export default function Dashboard() {
     }
   }
 
-  const usedPercentage = storage ? Math.round((storage.used_bytes / storage.total_bytes) * 100) : 0
+  const actualUsedPercentage = storage && storage.total_bytes > 0
+    ? Math.round((storage.used_bytes / storage.total_bytes) * 100)
+    : 0
+  const storageFull = storage?.total_bytes > 0 && storage.used_bytes >= storage.total_bytes
+  const usedPercentage = Math.min(100, Math.max(0, actualUsedPercentage))
+  const overQuota = storage?.total_bytes > 0 && storage.used_bytes > storage.total_bytes
   const recentFiles    = files.slice(0, 5)
 
   const activeShares = (() => {
@@ -803,6 +808,12 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+          {overQuota && (
+            <div className="mt-4 rounded-xl bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400 flex items-center gap-2">
+              <i className="fas fa-triangle-exclamation text-red-500" />
+              Storage limit exceeded. Delete files or empty trash to resume uploading.
+            </div>
+          )}
 
           <div className="mt-3 space-y-2">
             <div className="flex items-center justify-between">
@@ -895,15 +906,19 @@ export default function Dashboard() {
             </Link>
 
             <div className={`mt-2 flex items-start gap-2 rounded-xl px-3 py-2.5 ${
-              usedPercentage >= 80 ? 'bg-red-50' : usedPercentage >= 50 ? 'bg-amber-50' : 'bg-emerald-50'
+              storageFull ? 'bg-red-50' : usedPercentage >= 80 ? 'bg-red-50' : usedPercentage >= 50 ? 'bg-amber-50' : 'bg-emerald-50'
             }`}>
-              <i className={`fas ${usedPercentage >= 80 ? 'fa-triangle-exclamation text-red-500' : 'fa-circle-check text-emerald-500'} text-xs mt-0.5 shrink-0`} />
+              <i className={`fas ${storageFull || usedPercentage >= 80 ? 'fa-triangle-exclamation text-red-500' : 'fa-circle-check text-emerald-500'} text-xs mt-0.5 shrink-0`} />
               <p className="text-[11px] text-gray-600 leading-relaxed">
-                {usedPercentage >= 80
-                  ? 'Storage almost full — delete files to free space.'
-                  : usedPercentage >= 50
-                    ? 'Over halfway used. Consider cleaning up.'
-                    : `Healthy — ${100 - usedPercentage}% still available.`}
+                {storageFull
+                  ? 'Storage full — delete files to free space.'
+                  : actualUsedPercentage > 95
+                    ? 'Storage above 95% — delete files to free space.'
+                    : usedPercentage >= 80
+                      ? 'Storage almost full — delete files to free space.'
+                      : usedPercentage >= 50
+                        ? 'Over halfway used. Consider cleaning up.'
+                        : `Healthy — ${100 - usedPercentage}% still available.`}
                 {(storageDash?.trash_count ?? 0) > 0 && (
                   <> <Link to="/trash" className="text-brand-600 font-semibold hover:underline">{storageDash.trash_count} in trash.</Link></>
                 )}
