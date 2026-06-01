@@ -1101,7 +1101,7 @@ function RequestsPanel() {
               </div>
               <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 rounded-xl border border-amber-100 text-xs text-amber-700">
                 <i className="fas fa-virus-slash mt-0.5 flex-shrink-0"></i>
-                <span>All uploaded files are <strong>automatically scanned for viruses</strong> before they appear in your inbox. Infected files are quarantined and flagged immediately.</span>
+                <span>All uploaded files are <strong>automatically scanned for security</strong> before they appear in your inbox. Infected files are quarantined and flagged immediately.</span>
               </div>
               <div className="flex items-start gap-2 px-3 py-2.5 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-700">
                 <i className="fas fa-key mt-0.5 flex-shrink-0"></i>
@@ -1187,7 +1187,7 @@ function RequestsPanel() {
                 <div className="flex items-start gap-3 px-4 py-3 bg-emerald-50 rounded-xl border border-emerald-100">
                   <i className="fas fa-check-circle text-emerald-500 mt-0.5 flex-shrink-0"></i>
                   <p className="text-xs text-emerald-700 leading-relaxed">
-                    <strong>{recipientEmails.length} private upload link{recipientEmails.length !== 1 ? 's' : ''}</strong> will be sent by email. Each recipient must verify via OTP before uploading. All uploads are virus-scanned before delivery.
+                    <strong>{recipientEmails.length} private upload link{recipientEmails.length !== 1 ? 's' : ''}</strong> will be sent by email. Each recipient must verify via OTP before uploading. All uploads are security-scanned before delivery.
                   </p>
                 </div>
               )}
@@ -1424,14 +1424,12 @@ function InboxPanel() {
   useEffect(() => {
     if (pollRef.current) clearInterval(pollRef.current)
 
-    if (hasScanning) {
-      pollRef.current = setInterval(() => {
-        dispatch(fetchInbox({ page: currentPage, status: activeStatus }))
-      }, SCAN_POLL_INTERVAL)
-    }
+    pollRef.current = setInterval(() => {
+      dispatch(fetchInbox({ page: currentPage, status: activeStatus }))
+    }, SCAN_POLL_INTERVAL)
 
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [hasScanning, dispatch, currentPage, activeStatus])
+  }, [dispatch, currentPage, activeStatus])
 
   const handleReview = async () => {
     if (!reviewModal) return
