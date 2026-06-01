@@ -1,5 +1,3 @@
-
-
 import io
 import os
 import zipfile
@@ -697,11 +695,6 @@ class SendOTPView(APIView):
     Generates a fresh OTP and emails it to the recipient.
     Called automatically when the public upload page loads, and on resend.
 
-    Behaviour:
-    - If OTP already sent and still fresh (within cooldown): return wait_seconds
-      without generating a new code so the previous one stays valid.
-    - If cooldown elapsed: generate a new OTP and send it.
-    - Respects hourly send cap (OTP_MAX_SENDS_HOUR).
     """
     permission_classes = [AllowAny]
 
@@ -774,31 +767,6 @@ class VerifyOTPView(APIView):
     Body: { "otp": "483291" }
 
     Verifies the submitted OTP.
-
-    Security design
-    ───────────────
-    Checking only the DB flag (otp_verified / verified_until) is NOT enough:
-    those fields are shared across all browsers/devices.  A second browser that
-    learns the upload URL could call this endpoint at any time and — if the
-    old short-circuit were in place — receive a verified=True response without
-    knowing the OTP at all.
-
-    Instead, every successful verification now issues a signed, time-stamped
-    session_token (via django.core.signing).  The token encodes:
-      • The recipient's UUID  → scope to this specific upload link
-      • A server timestamp    → enforces the OTP_SESSION_MINUTES expiry
-
-    The token is returned to the client, stored in React state (never in
-    localStorage so it lives only for the current tab), and sent back as the
-    X-Upload-Session header on every subsequent upload request.  The upload
-    endpoint validates the token server-side before accepting any files.
-
-    Because the token is signed with Django's SECRET_KEY and scoped to one
-    recipient, a different browser cannot forge or reuse it — even if it knows
-    the upload URL and that someone else already verified.
-
-    On success: sets otp_verified=True in DB, opens the 30-min window, and
-    destroys the stored hash (single-use OTP).  Returns session_token.
     """
     permission_classes = [AllowAny]
 
@@ -819,13 +787,9 @@ class VerifyOTPView(APIView):
                 'VerifyOTPView: failed attempt for recipient %s (attempt %s)',
                 recipient.id, recipient.otp_attempts,
             )
-            # Generic message to prevent enumeration
             raise ValidationError({'otp': error_msg or 'Invalid or expired OTP.'})
 
         logger.info('OTP verified for recipient %s (request %s)', recipient.id, recipient.file_request_id)
-
-       # Signed session token tied to this recipient; required on every upload (X-Upload-Session).
-       # Guards against other browsers piggy-backing on a shared otp_verified flag.
         session_token = _issue_session_token(str(recipient.id))
 
         return success_response(
@@ -841,9 +805,6 @@ class VerifyOTPView(APIView):
 class ResendOTPView(APIView):
     """
     POST /api/sharing/requests/upload/<token>/resend-otp/
-
-    Convenience alias for SendOTPView — generates a new OTP and emails it.
-    Shares the same rate-limiting logic.
     """
     permission_classes = [AllowAny]
 
@@ -938,6 +899,13 @@ class PublicRecipientUploadView(APIView):
                 )
             })
 
+        used_bytes = File.objects.filter(owner=req.owner, is_deleted=False).aggregate(
+            total=Sum('file_size')
+        )['total'] or 0
+        available = settings.MAX_STORAGE_BYTES - used_bytes
+        if available <= 0:
+            raise ValidationError({'files': 'Storage limit exceeded. Delete files or empty trash before uploading.'})
+
         ip      = _get_client_ip(request)
         created = []
         errors  = []
@@ -946,6 +914,14 @@ class PublicRecipientUploadView(APIView):
             validation_errors, mime = _validate_file(f, req.allowed_extensions or None)
             if validation_errors:
                 errors.append({'file': f.name, 'errors': validation_errors})
+                continue
+            if f.size > available:
+                errors.append({
+                    'file': f.name,
+                    'errors': [
+                        'Storage limit exceeded — not enough storage space for this file.'
+                    ],
+                })
                 continue
             try:
                 clean_name  = sanitize_filename(f.name)
@@ -1213,11 +1189,7 @@ class RemoveInboxItemView(APIView):
 class SaveToStorageView(APIView):
     """
     POST /api/sharing/inbox/<pk>/save-to-storage/
-    Body: { "filename": "optional new name.ext" }
 
-    Copies a complete + safe inbox submission into the owner's permanent
-    file storage — identical to a normal upload but skips re-scanning since
-    the file was already scanned on ingest.
     """
     permission_classes = [IsAuthenticated]
 

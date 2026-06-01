@@ -1,16 +1,3 @@
-"""
-apps/sharing/services.py
-─────────────────────────────────────────────────────────────────────────────
-Business-logic helpers used by views.py.
-
-Keeps views thin by centralising:
-  • share creation + email dispatch
-  • file-request creation + per-recipient link dispatch
-  • OTP email rendering + send
-  • analytics recording
-  • public-token validation
-"""
-
 import logging
 from datetime import timedelta
 
@@ -29,13 +16,13 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-# ─── helpers ──────────────────────────────────────────────────────────────────
+# helpers 
 
 FRONTEND_URL = getattr(settings, 'FRONTEND_URL', 'https://app.example.com')
 FROM_EMAIL   = getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com')
 
 
-# ─── Single-file shares ───────────────────────────────────────────────────────
+# Single-file shares 
 
 def _send_share_email(share: FileShare, shared_by, message: str = '') -> None:
     """Send a single-file share notification email to the recipient."""
@@ -99,7 +86,7 @@ def create_shares(
     return shares
 
 
-# ─── File requests ────────────────────────────────────────────────────────────
+# File requests 
 
 def _send_upload_request_email(
     recipient: RequestRecipient,
@@ -198,7 +185,7 @@ def create_file_request(
     return req
 
 
-# ─── OTP email ────────────────────────────────────────────────────────────────
+# OTP email 
 
 def send_otp_email(
     recipient_email: str,
@@ -251,7 +238,7 @@ def send_otp_email(
         raise
 
 
-# ─── Public-token validation ──────────────────────────────────────────────────
+#  Public-token validation 
 
 def get_valid_share(token: str) -> FileShare:
     """
@@ -311,7 +298,7 @@ def get_valid_recipient(token: str) -> RequestRecipient:
     return recipient
 
 
-# ─── Analytics ────────────────────────────────────────────────────────────────
+# Analytics 
 
 def record_analytics_event(
     share: FileShare,
@@ -337,7 +324,7 @@ def record_analytics_event(
         )
 
 
-# ─── Submission inbox ─────────────────────────────────────────────────────────
+# Submission inbox 
 
 def create_submission(
     owner,

@@ -414,7 +414,7 @@ class SubmissionInbox(models.Model):
     submitted_at     = models.DateTimeField(default=timezone.now, db_index=True)
     updated_at       = models.DateTimeField(auto_now=True)
 
-    # ── Save-to-storage tracking ──────────────────────────────────────────────
+    # Save-to-storage tracking 
     saved_to_storage = models.BooleanField(default=False)
     saved_filename   = models.CharField(max_length=500, blank=True, default='')
 
