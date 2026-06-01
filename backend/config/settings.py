@@ -13,7 +13,7 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 
-# ── Apps ───────────────────────────────────────────────────────────────────────
+# Apps 
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -37,8 +37,7 @@ INSTALLED_APPS = [
 ]
 
 
-# ── Middleware ─────────────────────────────────────────────────────────────────
-
+# Middleware 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -55,7 +54,7 @@ ROOT_URLCONF = 'config.urls'
 WSGI_APPLICATION = 'config.wsgi.application'
 
 
-# ── Templates ──────────────────────────────────────────────────────────────────
+# Templates 
 
 TEMPLATES = [
     {
@@ -74,7 +73,7 @@ TEMPLATES = [
 ]
 
 
-# ── Database ───────────────────────────────────────────────────────────────────
+# Database 
 
 if os.getenv('USE_MYSQL', 'False') == 'True':
     DATABASES = {
@@ -100,7 +99,7 @@ else:
     }
 
 
-# ── Auth ───────────────────────────────────────────────────────────────────────
+# Auth 
 
 AUTH_USER_MODEL = 'authentication.User'
 
@@ -112,8 +111,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
-# ── Internationalisation ───────────────────────────────────────────────────────
-
+# Internationalisation
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
@@ -121,7 +119,7 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-# ── Static & Media ─────────────────────────────────────────────────────────────
+# Static & Media 
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
@@ -131,7 +129,7 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 
-# ── REST Framework ─────────────────────────────────────────────────────────────
+# REST Framework 
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -152,7 +150,7 @@ REST_FRAMEWORK = {
 }
 
 
-# ── JWT ────────────────────────────────────────────────────────────────────────
+# JWT 
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
@@ -164,7 +162,7 @@ SIMPLE_JWT = {
 }
 
 
-# ── CORS ───────────────────────────────────────────────────────────────────────
+# CORS 
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
@@ -176,7 +174,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 
 
-# ── Email ──────────────────────────────────────────────────────────────────────
+# Email 
 
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
@@ -202,13 +200,13 @@ MAX_STORAGE_GB = int(os.getenv('MAX_STORAGE_GB', '1'))
 MAX_STORAGE_BYTES = MAX_STORAGE_GB * 1024 * 1024 * 1024
  
 # Password reset token expiry
-PASSWORD_RESET_EXPIRY_HOURS = 24
+PASSWORD_RESET_EXPIRY_HOURS = 5/ 60
  
 # Frontend URL for share links in emails
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
  
 # Share link expiry times (in hours)
-MIN_SHARE_EXPIRY_HOURS = 1
+MIN_SHARE_EXPIRY_HOURS = 5
 MAX_SHARE_EXPIRY_HOURS = 30 * 24  # 30 days
  
 
@@ -259,12 +257,10 @@ CELERY_RESULT_SERIALIZER = 'json'
 # Timezone — must match TIME_ZONE
 CELERY_TIMEZONE = 'UTC'
  
-# ── Celery Beat scheduler ──────────────────────────────────────────────────────
-# Uses the database (django_celery_beat) so schedules survive restarts
-# and can be inspected / modified in the Django admin.
+# Celery Beat scheduler 
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
  
-# ── Optional reliability settings ─────────────────────────────────────────────
+# Optional reliability settings 
 CELERY_TASK_ACKS_LATE             = True   # acknowledge only after task finishes
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1      # fair distribution across workers
 CELERY_TASK_TRACK_STARTED         = True   # enables STARTED state in Flower / admin
