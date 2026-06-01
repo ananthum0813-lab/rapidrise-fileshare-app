@@ -65,15 +65,14 @@ def send_password_reset_email(email: str) -> None:
 
     try:
         body = (
-            f'Hi {user.first_name},\n\n'
-            f'You requested a password reset for your VShare account.\n\n'
-            f'Reset Link:\n'
-            f'{reset_link}\n\n'
-            f'This link expires in '
-            f'{settings.PASSWORD_RESET_EXPIRY_HOURS} hour(s).\n\n'
-            f'If you did not request this, you can safely ignore this email.\n'
-        )
-
+    f'Hi {user.first_name},\n\n'
+    f'You requested a password reset for your VShare account.\n\n'
+    f'Reset Link:\n'
+    f'{reset_link}\n\n'
+    f'This link expires in '
+    f'{int(settings.PASSWORD_RESET_EXPIRY_HOURS * 60)} minute(s).\n\n'
+    f'If you did not request this, you can safely ignore this email.\n'
+)
         send_mail(
             subject='Reset Your VShare Password',
             message=body,

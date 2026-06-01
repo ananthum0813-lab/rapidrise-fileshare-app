@@ -1,6 +1,7 @@
 import re
 import string
 from datetime import date
+from dateutil.relativedelta import relativedelta
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
@@ -18,14 +19,14 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def validate_first_name(self, value):
         value = value.strip()
-        if not re.match(r"^[A-Za-z\s'\-]{2,}$", value):
-            raise serializers.ValidationError('Enter a valid first name (letters only, min 2 characters).')
+        if not re.match(r"^[A-Za-z\s'\-]{2,50}$", value):
+            raise serializers.ValidationError('Enter a valid first name (letters only, 2–50 characters).')
         return value
 
     def validate_last_name(self, value):
         value = value.strip()
-        if not re.match(r"^[A-Za-z\s'\-]{1,}$", value):
-            raise serializers.ValidationError('Enter a valid last name (letters only, min 1 character).')
+        if not re.match(r"^[A-Za-z\s'\-]{1,50}$", value):
+            raise serializers.ValidationError('Enter a valid last name (letters only, 1–50 characters).')
         return value
 
     def validate_email(self, value):
@@ -37,7 +38,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate_date_of_birth(self, value):
         if value > date.today():
             raise serializers.ValidationError('Date of birth cannot be in the future.')
-        age = (date.today() - value).days // 365
+        age = relativedelta(date.today(), value).years
         if age < 13:
             raise serializers.ValidationError('You must be at least 13 years old to register.')
         return value
@@ -102,6 +103,9 @@ class ChangePasswordSerializer(serializers.Serializer):
 
     def validate_new_password(self, value):
         validate_password(value)
+        # Reuse check against current password
+        if self.context['request'].user.check_password(value):
+            raise serializers.ValidationError('New password must be different from your current password.')
         return value
 
     def validate(self, attrs):
@@ -115,6 +119,8 @@ class ChangePasswordSerializer(serializers.Serializer):
         user = self.context['request'].user
         user.set_password(self.validated_data['new_password'])
         user.save(update_fields=['password', 'updated_at'])
+        # Invalidate any outstanding reset tokens so old reset links cannot be used
+        PasswordResetToken.objects.filter(user=user, is_used=False).update(is_used=True)
         return user
 
 
@@ -142,6 +148,10 @@ class ResetPasswordSerializer(serializers.Serializer):
 
     def validate_new_password(self, value):
         validate_password(value)
+        # Reuse check against current password
+        token_obj = self.context.get('reset_token')
+        if token_obj and token_obj.user.check_password(value):
+            raise serializers.ValidationError('New password must be different from your current password.')
         return value
 
     def validate(self, attrs):
@@ -156,4 +166,6 @@ class ResetPasswordSerializer(serializers.Serializer):
         user.save(update_fields=['password', 'updated_at'])
         token_obj.is_used = True
         token_obj.save(update_fields=['is_used'])
+        # Invalidate all other outstanding reset tokens for this user
+        PasswordResetToken.objects.filter(user=user, is_used=False).update(is_used=True)
         return user
