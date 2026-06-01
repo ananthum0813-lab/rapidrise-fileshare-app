@@ -1533,14 +1533,14 @@ function InboxPanel() {
 
       {/* Status filter tabs — horizontally scrollable on mobile */}
       <div
-        className="flex gap-1.5 overflow-x-auto pb-1"
+        className="flex flex-wrap gap-1.5 overflow-x-auto pb-1"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {statusTabs.map((t) => (
           <button
             key={t.id}
             onClick={() => { setActiveStatus(t.id); setCurrentPage(1) }}
-            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
               activeStatus === t.id
                 ? 'bg-indigo-600 text-white border-indigo-600'
                 : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
