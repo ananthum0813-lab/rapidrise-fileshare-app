@@ -1,8 +1,3 @@
-/**
- * store/foldersSlice.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Redux slice for the Folders feature.
- */
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import {
   getFolders,

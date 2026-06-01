@@ -100,10 +100,10 @@ export const fetchStorage = createAsyncThunk(
       const storage = data.data
       if (storage.total_bytes > 0) {
         const usagePercent = (storage.used_bytes / storage.total_bytes) * 100
-        if (usagePercent >= 100) {
-          toast.error('Storage is completely full. Delete files or empty trash immediately to resume uploading.', { id: 'storage-full', duration: 8000 })
+        if (storage.used_bytes >= storage.total_bytes) {
+          toast.error('Storage full. Delete files or empty trash immediately to resume uploading.', { id: 'storage-full', duration: 8000 })
         } else if (usagePercent >= 95) {
-          toast.error('Storage almost full (95%). Delete files or empty trash to continue uploading.', { id: 'storage-warning-critical' })
+          toast.error('Storage above 95%. Delete files or empty trash to continue uploading.', { id: 'storage-warning-critical' })
         } else if (usagePercent >= 90) {
           toast("You're using 90% of your storage capacity.", { id: 'storage-warning-90', icon: '⚠️', duration: 6000 })
         } else if (usagePercent >= 80) {
