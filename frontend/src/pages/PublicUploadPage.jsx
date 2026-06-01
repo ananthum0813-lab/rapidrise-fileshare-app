@@ -10,23 +10,6 @@
  *  2. Automatically trigger OTP send to recipient email.
  *  3. Show OTP verification screen.
  *  4. After verified, show upload UI.
- *
- * Session token security
- * ──────────────────────
- * On successful OTP verification the server returns a signed `session_token`
- * (see VerifyOTPView).  We store it in React state (tab-scoped — not
- * localStorage) and attach it as the `session_token` FormData field on every
- * upload.  The upload endpoint validates the token server-side:
- *   • Valid Django signature  →  cannot be forged
- *   • Not expired             →  OTP_SESSION_MINUTES hard limit
- *   • Scoped to this recipient UUID  →  not reusable for another link
- *
- * This means a second browser that knows the upload URL CANNOT upload even
- * if someone else has already verified — it has no session token.
- *
- * Slot logic (per-recipient, not shared pool):
- *   effectiveSlotsLeft = serverSlotsAtLoad - sessionUploadCount
- *   Slots are per-recipient — max_files applies to each recipient independently.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
@@ -767,8 +750,8 @@ export default function PublicUploadPage() {
                 <i className="fas fa-cloud-arrow-up text-brand-500"></i>
                 {done ? 'Upload More Files' : 'Upload Your Files'}
               </h2>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {effectiveSlotsLeft} slot{effectiveSlotsLeft !== 1 ? 's' : ''} remaining &middot; All files are scanned for viruses before delivery.
+                <p className="text-xs text-gray-400 mt-0.5">
+                {effectiveSlotsLeft} slot{effectiveSlotsLeft !== 1 ? 's' : ''} remaining &middot; All files are scanned for security before delivery.
               </p>
             </div>
 
@@ -841,7 +824,7 @@ export default function PublicUploadPage() {
 
               <p className="text-center text-[11px] text-gray-400 flex items-center justify-center gap-1.5">
                 <i className="fas fa-shield-halved text-emerald-400"></i>
-                All files are automatically scanned for viruses before delivery.
+                All files are automatically scanned for security before delivery.
               </p>
             </div>
           </div>

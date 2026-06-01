@@ -2,15 +2,6 @@
  * PublicZipSharePage.jsx
  * -----------------------------------------------------------------------------
  * Route: /zip-share/:token   (no auth required)
- *
- * Page recipients see when a ZIP bundle has been shared with them.
- * Flow:
- *  1. Load ? GET /api/sharing/public/zip/<token>/  to validate + fetch file list
- *  2. Show ZIP name, file list, expiry, message
- *  3. Download button ? GET /api/sharing/public/zip/<token>/download/  (blob)
- *
- * Add this route to your App router:
- *   <Route path="/zip-share/:token" element={<PublicZipSharePage />} />
  */
 
 import { useEffect, useState } from 'react'
