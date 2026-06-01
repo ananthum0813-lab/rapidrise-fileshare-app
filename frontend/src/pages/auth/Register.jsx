@@ -26,7 +26,7 @@ export default function Register() {
   const password = watch('password')
 
   useEffect(() => { dispatch(clearError()) }, [dispatch])
-  
+
   useEffect(() => {
     if (isAuthenticated) navigate('/dashboard', { replace: true })
   }, [isAuthenticated, navigate])
@@ -34,8 +34,6 @@ export default function Register() {
   useEffect(() => {
     if (error && typeof error === 'string') toast.error(error, { id: 'register-error' })
   }, [error])
-
-
 
   const onSubmit = async (formData) => {
     const result = await dispatch(register(formData))
@@ -66,33 +64,34 @@ export default function Register() {
     >
 
       {/* ── Left Panel ─────────────────────────────────────────────────────── */}
-      <div className="hidden lg:flex lg:w-[45%] xl:w-[40%] relative overflow-hidden flex-col justify-between p-12" style={{ background: 'var(--surface-featured)', borderRight: '1px solid var(--border-subtle)' }}>
-
+      <div
+        className="hidden lg:flex lg:w-[45%] xl:w-[40%] relative overflow-hidden flex-col p-12"
+        style={{ background: 'var(--surface-featured)', borderRight: '1px solid var(--border-subtle)' }}
+      >
         {/* Decorative background elements */}
         <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
-          <div className="absolute -top-[20%] -right-[10%] w-[70%] h-[70%] rounded-full opacity-20 blur-[100px]" style={{ background: 'var(--accent-primary)' }}></div>
-          <div className="absolute -bottom-[20%] -left-[10%] w-[60%] h-[60%] rounded-full opacity-20 blur-[100px]" style={{ background: 'var(--accent-secondary)' }}></div>
-          <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(91,91,214,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(91,91,214,0.03) 1px, transparent 1px)', backgroundSize: '32px 32px' }}></div>
+          <div className="absolute -top-[20%] -right-[10%] w-[70%] h-[70%] rounded-full opacity-20 blur-[100px]" style={{ background: 'var(--accent-primary)' }} />
+          <div className="absolute -bottom-[20%] -left-[10%] w-[60%] h-[60%] rounded-full opacity-20 blur-[100px]" style={{ background: 'var(--accent-secondary)' }} />
+          <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(91,91,214,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(91,91,214,0.03) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
         </div>
 
-        {/* ── Brand header ── */}
+        {/* Brand header */}
         <div className="relative z-10 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg" style={{ background: 'linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%)' }}>
             <i className="fas fa-cloud-arrow-up text-white text-lg" />
           </div>
           <div>
-            <h2 className="text-xl font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-              VShare
-            </h2>
-            <p className="text-xs font-semibold uppercase tracking-wider mt-0.5" style={{ color: 'var(--accent-primary)' }}>
-              Secure Workspace
-            </p>
+            <h2 className="text-xl font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>VShare</h2>
+            <p className="text-xs font-semibold uppercase tracking-wider mt-0.5" style={{ color: 'var(--accent-primary)' }}>Secure Workspace</p>
           </div>
         </div>
 
-        {/* ── Center content ── */}
-        <div className="relative z-10 my-auto max-w-md">
-          <h1 className="text-4xl lg:text-5xl font-black leading-tight tracking-tight mb-6" style={{ color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+        {/* Center content — mt-10 keeps it close to brand header */}
+        <div className="relative z-10 mt-10 max-w-md">
+          <h1
+            className="text-4xl lg:text-5xl font-black leading-tight tracking-tight mb-4"
+            style={{ color: 'var(--text-primary)', letterSpacing: '-0.02em' }}
+          >
             Create your<br />
             <span style={{
               background: 'linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%)',
@@ -103,18 +102,18 @@ export default function Register() {
               secure workspace.
             </span>
           </h1>
-          <p className="text-[15px] font-medium leading-relaxed mb-10" style={{ color: 'var(--text-secondary)' }}>
+          <p className="text-[15px] font-medium leading-relaxed mb-7" style={{ color: 'var(--text-secondary)' }}>
             Upload, organize and share files with a fast and modern experience. Build your workflow today.
           </p>
 
           {/* Feature cards */}
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3">
             {[
-              { icon: 'fa-mobile-screen',  title: 'Access anywhere',        sub: 'Works on every device'           },
-              { icon: 'fa-link',           title: 'Expiring share links',   sub: 'Set it, share it, forget it'     },
-              { icon: 'fa-cloud-arrow-up', title: 'Fast uploads',           sub: 'No storage limits on free plan'  },
+              { icon: 'fa-mobile-screen',  title: 'Access anywhere',       sub: 'Works on every device'           },
+              { icon: 'fa-link',           title: 'Expiring share links',  sub: 'Set it, share it, forget it'     },
+              { icon: 'fa-cloud-arrow-up', title: 'Fast uploads',          sub: 'Store and access files anytime'  },
             ].map((item) => (
-              <div key={item.title} className="widget-card flex items-center gap-4 px-5 py-4 cursor-default group transition-all duration-300 hover:-translate-y-1">
+              <div key={item.title} className="widget-card flex items-center gap-4 px-5 py-3.5 cursor-default group transition-all duration-300 hover:-translate-y-1">
                 <div className="widget-icon group-hover:scale-110 transition-transform duration-300">
                   <i className={`fas ${item.icon}`} />
                 </div>
@@ -127,51 +126,52 @@ export default function Register() {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="relative z-10 flex items-center gap-3 text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
+        {/* Footer — pushed to bottom with mt-auto */}
+        <div className="relative z-10 mt-auto flex items-center gap-3 text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
           <span>© {new Date().getFullYear()} VShare</span>
-          <span className="w-1 h-1 rounded-full bg-current opacity-40"></span>
+          <span className="w-1 h-1 rounded-full bg-current opacity-40" />
           <span>All rights reserved</span>
         </div>
       </div>
 
       {/* ── Right Panel ────────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col relative shadow-2xl lg:shadow-none z-20" style={{ backgroundColor: 'var(--bg-surface)' }}>
+
         {/* Top accent bar */}
         <div className="absolute top-0 left-0 right-0 h-1 z-10" style={{ background: 'linear-gradient(90deg, var(--accent-primary), var(--accent-secondary), var(--accent-highlight))' }} />
 
-        {/* Theme Toggle Top Right */}
+        {/* Theme toggle */}
         <div className="absolute top-6 right-6 lg:top-8 lg:right-8 z-30">
           <ThemeToggle />
         </div>
 
-        {/* Scrollable form content */}
-        <div className="relative z-10 flex flex-col items-center px-6 sm:px-12 pb-12 pt-8 lg:pt-16 overflow-y-auto flex-1">
+        {/* Form content — centered vertically, no overflow scroll needed */}
+        <div className="relative z-10 flex flex-col items-center justify-center px-6 sm:px-12 py-6 flex-1">
           <div className="w-full max-w-[420px] animate-fade-in">
 
-            {/* Mobile Logo */}
-            <div className="flex lg:hidden items-center gap-3 mb-10 mt-4">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg" style={{ background: 'linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%)' }}>
-                <i className="fas fa-cloud-arrow-up text-white text-lg" />
+            {/* Mobile logo */}
+            <div className="flex lg:hidden items-center gap-3 mb-6">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg" style={{ background: 'linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%)' }}>
+                <i className="fas fa-cloud-arrow-up text-white text-base" />
               </div>
-              <span className="text-2xl font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>VShare</span>
+              <span className="text-xl font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>VShare</span>
             </div>
 
             {/* Heading */}
-            <div className="mb-8">
-              <h1 className="text-[28px] font-extrabold tracking-tight mb-2" style={{ color: 'var(--text-primary)' }}>
+            <div className="mb-5">
+              <h1 className="text-[24px] font-extrabold tracking-tight mb-1" style={{ color: 'var(--text-primary)' }}>
                 Create your account
               </h1>
-              <p className="text-[14px] font-medium" style={{ color: 'var(--text-muted)' }}>
+              <p className="text-[13px] font-medium" style={{ color: 'var(--text-muted)' }}>
                 Start sharing files securely in minutes.
               </p>
             </div>
 
-            {/* ── Form ── */}
-            <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+            {/* Form */}
+            <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-3">
 
               {/* Name row */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <FieldGroup label="First name" required error={errors.first_name?.message}>
                   <input
                     type="text" placeholder="Jane" autoComplete="given-name"
@@ -246,7 +246,7 @@ export default function Register() {
               <button
                 type="submit"
                 disabled={loading}
-                className="btn-primary w-full mt-2 py-3.5 rounded-xl text-[15px] font-bold tracking-wide flex items-center justify-center gap-2.5 shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5"
+                className="btn-primary w-full py-3 rounded-xl text-[14px] font-bold tracking-wide flex items-center justify-center gap-2.5 shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5"
               >
                 {loading ? (
                   <><i className="fas fa-circle-notch fa-spin text-sm" /> Creating account…</>
@@ -257,7 +257,7 @@ export default function Register() {
             </form>
 
             {/* Divider */}
-            <div className="flex items-center gap-4 my-8">
+            <div className="flex items-center gap-4 my-4">
               <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border-subtle)' }} />
               <span className="text-[11px] font-bold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>
                 Have an account?
@@ -268,14 +268,14 @@ export default function Register() {
             {/* Sign in CTA */}
             <Link
               to="/login"
-              className="btn-secondary w-full py-3.5 rounded-xl text-[14px] font-bold flex items-center justify-center gap-2.5 transition-all hover:-translate-y-0.5"
+              className="btn-secondary w-full py-3 rounded-xl text-[14px] font-bold flex items-center justify-center gap-2.5 transition-all hover:-translate-y-0.5"
             >
               <i className="fas fa-arrow-right-to-bracket text-sm" style={{ color: 'var(--accent-primary)' }} />
               Sign in instead
             </Link>
 
             {/* Trust badges */}
-            <div className="flex items-center justify-center gap-6 mt-8">
+            <div className="flex items-center justify-center gap-6 mt-4">
               {[
                 { icon: 'fa-shield-halved', label: 'Encrypted' },
                 { icon: 'fa-lock',          label: 'Private'   },
@@ -323,14 +323,14 @@ function EyeToggle({ show, onToggle }) {
 }
 
 function inputCls(fieldError) {
-  return `field w-full pl-11 pr-4 py-3 text-[14px] ${fieldError ? 'field-error' : ''}`
+  return `field w-full pl-11 pr-4 py-2.5 text-[14px] ${fieldError ? 'field-error' : ''}`
 }
 
 function FieldGroup({ label, required, hint, error, children }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       <label
-        className="block text-[12px] font-bold uppercase tracking-wider"
+        className="block text-[11px] font-bold uppercase tracking-wider"
         style={{ color: 'var(--text-secondary)' }}
       >
         {label}
@@ -342,10 +342,10 @@ function FieldGroup({ label, required, hint, error, children }) {
         {children}
       </div>
       {hint && !error && (
-        <p className="text-[12px] font-medium mt-1" style={{ color: 'var(--text-muted)' }}>{hint}</p>
+        <p className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>{hint}</p>
       )}
       {error && (
-        <p className="field-msg flex items-center gap-1.5 font-medium mt-1">
+        <p className="field-msg flex items-center gap-1.5 font-medium">
           <i className="fas fa-circle-exclamation text-[11px]" />
           {error}
         </p>
