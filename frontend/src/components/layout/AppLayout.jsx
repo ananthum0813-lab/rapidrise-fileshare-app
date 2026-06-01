@@ -38,7 +38,8 @@ export default function AppLayout() {
   const fileCount = useSelector((s) => s.files.storage?.file_count ?? 0)
   const usedBytes = useSelector((s) => s.files.storage?.used_bytes ?? 0)
   const totalBytes = useSelector((s) => s.files.storage?.total_bytes ?? 1)
-  const usagePercent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0
+  const usagePercent = totalBytes > 0 ? Math.min(100, Math.max(0, (usedBytes / totalBytes) * 100)) : 0
+  const storageFull = totalBytes > 0 && usedBytes >= totalBytes
   const [signingOut, setSigningOut] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -185,12 +186,14 @@ export default function AppLayout() {
 
       {/* Main content */}
       <main className="min-w-0 flex-1 overflow-y-auto flex flex-col">
-        {usagePercent >= 95 && (
+        {(usagePercent >= 95 || storageFull) && (
           <div className="flex-shrink-0 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-500/30 p-3 sm:px-6 flex items-center justify-between shadow-sm z-10">
             <div className="flex items-center gap-3">
               <i className="fas fa-triangle-exclamation text-red-500 dark:text-red-400 text-lg" />
               <div>
-                <p className="text-sm font-semibold text-red-800 dark:text-red-300 leading-tight">Storage Almost Full</p>
+                <p className="text-sm font-semibold text-red-800 dark:text-red-300 leading-tight">
+                  {storageFull ? 'Storage Full' : 'Storage above 95%'}
+                </p>
                 <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">
                   You have used {usagePercent.toFixed(1)}% of your storage. Please delete files or empty your trash.
                 </p>
