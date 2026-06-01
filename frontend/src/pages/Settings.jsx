@@ -10,6 +10,13 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 
+const nameRules = {
+  pattern: {
+    value: /^[A-Za-z\s'-]+$/,
+    message: 'Only letters are allowed',
+  },
+}
+
 export default function Settings() {
   const { user, loading } = useSelector((s) => s.auth)
   const dispatch = useDispatch()
@@ -106,7 +113,6 @@ export default function Settings() {
     <div className="w-full">
       <div className="mx-auto max-w-4xl">
         
-        {/* Header */}
         <header className="mb-8">
           <h2 className="page-title">Account Settings</h2>
           <p className="text-gray-500 mt-1 flex items-center gap-2 text-sm">
@@ -120,7 +126,6 @@ export default function Settings() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Left Column: Profile Card */}
           <div className="lg:col-span-2 space-y-6">
             <div className="card rounded-lg p-8 shadow-sm">
               <div className="flex justify-between items-center mb-8">
@@ -139,9 +144,8 @@ export default function Settings() {
 
               {!editingProfile ? (
                 <div className="flex flex-col md:flex-row gap-8 items-start">
-                  <div className="relative group">
+                  <div className="relative">
                     <img src={avatarUrl} className="w-24 h-24 rounded-full border-4 border-brand-50 shadow-inner" alt="User" />
-                    <div className="absolute -bottom-2 -right-2 bg-green-500 w-6 h-6 border-4 border-white rounded-full"></div>
                   </div>
                   
                   <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-12">
@@ -168,8 +172,8 @@ export default function Settings() {
               ) : (
                 <form onSubmit={handleProfileSubmit(onProfileSubmit)} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input label="First Name" {...profileField('first_name')} error={profileErrors.first_name?.message} className="bg-gray-50" />
-                    <Input label="Last Name" {...profileField('last_name')} error={profileErrors.last_name?.message} className="bg-gray-50" />
+                    <Input label="First Name" {...profileField('first_name', nameRules)} error={profileErrors.first_name?.message} className="bg-gray-50" />
+                    <Input label="Last Name" {...profileField('last_name', nameRules)} error={profileErrors.last_name?.message} className="bg-gray-50" />
                   </div>
                   <Input label="Birth Date" type="date" {...profileField('date_of_birth')} error={profileErrors.date_of_birth?.message} className="bg-gray-50" onClick={(e) => e.target.showPicker && e.target.showPicker()} />
                   
@@ -185,7 +189,6 @@ export default function Settings() {
               )}
             </div>
 
-            {/* Change Password Card */}
             <div className="card rounded-lg p-8 shadow-sm">
               <h3 className="text-xl font-bold text-gray-800 mb-8 flex items-center gap-2">
                 <i className="fas fa-lock text-orange-400"></i> Security & Password
@@ -235,9 +238,7 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Right Column: Information & Actions */}
           <div className="space-y-6">
-            {/* Appearance */}
             <div className="card p-6">
               <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1 flex items-center gap-2">
                 <i className="fas fa-palette text-brand-500 dark:text-indigo-300"></i>
@@ -262,7 +263,6 @@ export default function Settings() {
                 Delete Account
               </Button>
             </div>
-           
           </div>
 
         </div>
